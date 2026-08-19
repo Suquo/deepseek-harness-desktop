@@ -79,9 +79,32 @@ route on purpose: that route is the session-model route, live in
 `settings.yaml` and rewritten by the web Models page. A validator whose vision
 guarantee rode it would inherit every edit made to it.
 
-`maxDepth: 0` stops the validator delegating further — a child joins its
-parent's preset, so it would otherwise reach the same delegation tools and
-could spawn its own children back on the session model.
+**The validator is a leaf, and the reason is not the one first written down
+here.** A child joins its parent's preset (`composeFrom`), so the validator holds
+every delegation row this composition mounts. `maxDepth: 1` is the cap on *this*
+row — the smallest value admitting the depth-1 spawn the persona mandates,
+derived rather than guessed; it shipped as `0`, which refused every attempt of
+the first live run (issue #18). But a cap binds only starts made *through the row
+that carries it*, so it reaches neither the sibling `subagent` / `subagent_fork`
+rows nor `ralph` / `workflow`, which request no cap at all.
+
+What a grandchild through those rows would be was stated wrongly here and in the
+preset's own comment, and the correction is worth keeping visible: **not a child
+back on the session model.** Upstream resolves a child's route from its *calling*
+agent's live options (`resolveChildAgentOptions`,
+`packages/subagent/subagent/src/child-agent.ts`), and the caller for a start made
+inside the validator is the validator — which runs on the pinned vision route. An
+uncapped grandchild therefore recurses and spends on the paid route; it does not
+go blind. The blind-child hole was never reachable one level down (issue #20).
+
+The row closes it a layer up instead. A `toolFilter` deny list withdraws every
+delegation-starting tool from the child, so the validator cannot start one at any
+depth, on any route, through any row — containment and simplicity, on the premise
+that a validation pass is a question with an answer rather than an orchestrator.
+The filter is applied inside the child's creation window, after the preset join,
+and names only tools that rows in this file register and leave enabled: an
+unregistered name throws there and would break every validator spawn, so the list
+is derived from the composition itself rather than hand-kept.
 
 **What the guarantee is bounded by.** `agent-presets.default: parametria` is a
 fallback, not a lock: a session the operator points at another preset has no
@@ -210,6 +233,8 @@ root chain again.
 | Fence | What it holds |
 |---|---|
 | `tests/preset-drift.test.mjs` | Exhaustive **two-direction** diff against the pinned upstream `standard` preset. Rows added, dropped, or reconfigured must appear in a closed `DECLARED_DELTA` with a stated reason; shared rows must keep the same plugin name, `disabled` expression, group shape, and `isolate` realm. Also holds the validator row's pin and the empty skill root. |
+| `tests/validator-depth.test.mjs` | The validator row's `maxDepth`, **derived** from the pinned upstream's own depth arithmetic rather than asserted as a literal: it imports and executes `delegationDepthOf` / `assertSubagentMaxDepth` from the submodule and requires the cap to be exactly the depth the mandated child occupies. |
+| `tests/validator-leaf.test.mjs` | The validator row's `toolFilter` deny list, **derived** from this composition's own rows: every enabled row is classified against upstream source (does its package register a model-facing tool *and* reach a child-start seam?) and the deny list must equal that set. Also that every denied name is one an enabled row actually registers — an unregistered name would throw in the child's creation window and break every validator spawn, not the build. |
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. |
