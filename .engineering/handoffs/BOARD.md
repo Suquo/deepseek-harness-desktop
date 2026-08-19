@@ -10,7 +10,13 @@
 
 ## Now
 
-**FLEET BOOTSTRAPPED (2026-08-19, cjjmaster; operator appointed the RM in-session and will run `/loop /repo-manager`).**
+**AA-GENERATION BOOTED (2026-08-19, cjjmaster, `/loop /repo-manager` — first chartered RM generation, continuing in the bootstrap session's context).**
+
+- **Boot reconciliation:** gh default repo initially resolved to the anywhere-labs PARENT (fixed: `gh repo set-default Suquo/deepseek-harness-desktop`); parent repo is highly active (~20 open PRs, 2.0.x bug wave) — Lane C watch data. Fork had issues DISABLED + master 2 ahead unpushed.
+- **Owner rulings (2026-08-19, in-session, recorded):** (1) Issues ENABLED on the fork + seed queue FILED (#1 vision routing · #2 Parametria profile · #3 CI · #4 upstream watch; labels `parametria-harness`/`ci`/`upstream` created). (2) **STANDING PUSH AUTHORITY to origin granted** — bootstrap commits pushed (`e84f95abf8`); never push to the anywhere-labs `upstream` remote. (3) **PRODUCT PRIORITIES: cost + speed per definition are the TOP-LINE metrics; per-step build telemetry is valuable; model-swap cost/performance comparison is high value** — telemetry/metering surfaces are first-class in the harness plan.
+- **Harness-customization research in flight:** skill-needs report LANDED (22 harness pain points W1–W22, incl. the vision-blind validator W1, image-context accumulation W3, dual-skill-root divergence W21, hardcoded Pinecone key hazard); extension-surface report running with a scope addition for metering/telemetry (token-meter, session-stats, session-telemetry, per-model cost). Synthesis → `.engineering/research/` next tick, then issue updates.
+
+**FLEET BOOTSTRAPPED (2026-08-19, cjjmaster; operator appointed the RM in-session and ran `/loop /repo-manager`).**
 
 - Engineering scaffold committed (`e74eaca3fb`): `.engineering/` (config, ADR ledger `H-NNNN`, H-0001 fork strategy) — then this fleet layer (charters, board, launchers, AGENTS.md fleet table).
 - **App verified running from source**: `corepack yarn install` + `corepack yarn dev` → Electron shell up, Host Web UI serving on ephemeral loopback (verified HTTP 200). Environment lesson recorded: Electron stdout doesn't flush through pipes — verify liveness by process + port, not log tail.
