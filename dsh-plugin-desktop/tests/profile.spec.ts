@@ -60,14 +60,17 @@ afterEach(() => {
 
 describe('desktop profile composition', {
   // Windows budget sized from measurement, not from the file's wall-clock duration.
-  // Every prepareDesktopProfile call relinks the ~527-package junction closure into a
-  // fresh temp home (healProfilesModuleFallback, ~280-500ms here; loadProfile is 4-10ms
-  // by comparison), so the costliest test — which prepares three profiles — measures
-  // 1.8-2.1s both isolated and under full-suite load. The former 10s budget therefore
-  // only held under ~5x, and PR #10 went red on a 0.6s test that stalled at least 17x
-  // under external machine load. 30s survives that observed stall class while still
-  // failing a genuine hang loudly: the whole file runs in ~9s.
-  timeout: process.platform === 'win32' ? 30_000 : 5_000,
+  // Each prepareDesktopProfile call against a fresh temp home relinks a ~527-package
+  // junction closure (upstream healProfilesModuleFallback, 280-500ms here; loadProfile
+  // is 4-10ms by comparison), so the costliest test — three prepared homes — measures
+  // 1.7-2.1s isolated and under full-suite load alike. Suite concurrency is thus not
+  // the lever: parallelism adds ~10%, external machine load is what bites. The former
+  // 10s budget tolerated only ~5x, and PR #10 reded a 0.57-0.72s test killed at 10s —
+  // a stall of at least 14x. 45s puts this file at 22x: clear of that lower bound, yet
+  // under the ~34x the afterEach cleanup already tolerates (0.29s worst against the
+  // default 10s hookTimeout), so no second budget has to move. A genuine hang still
+  // fails loudly — the whole file runs in 9-13s quiet.
+  timeout: process.platform === 'win32' ? 45_000 : 5_000,
 }, () => {
   it('reads packaged Cordis skills from the physical unpacked preset root', () => {
     const home = temporaryHome()
