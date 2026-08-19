@@ -209,9 +209,12 @@ describe('the vision-pinned validator row', () => {
   it('withdraws delegation from the child rather than only budgeting it', () => {
     // Presence only, for the same reason as the cap above: the LIST is derived
     // from this composition's own rows in `validator-leaf.test.mjs`, which owns
-    // that claim whole. Deletion is what this catches — with the key gone,
-    // that file's derived comparison has nothing to compare and the child
-    // silently regains every delegation row the preset mounts (issue #20).
+    // that claim whole. Redundancy rather than sole coverage, stated precisely
+    // because the opposite is easy to write: deleting the key does NOT go quiet
+    // there — that file fails by name on `declares a per-child tool filter` and
+    // throws on three more. What this line adds is a failure in the fence that
+    // reads the row's SHAPE, next to the `maxDepth` presence check it pairs
+    // with, so the row's two withdrawal claims are checked side by side.
     assert.ok(
       Object.hasOwn(row.config, 'toolFilter'),
       'the validator row must state a per-child tool filter; omitting it leaves the validator holding '

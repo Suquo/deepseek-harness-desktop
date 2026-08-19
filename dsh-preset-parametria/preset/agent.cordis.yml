@@ -307,8 +307,9 @@
     #    exactly what a child may restrict: `view()` exempts only the child's
     #    OWN layer (`core/tools/src/index.ts:1152-1192`), which is what keeps
     #    the delegation runtime's own reporting tools out of the filter.
-    #    Upstream fences that shape directly (`core/tools/tests/scoped.spec.ts`,
-    #    "filters tools the child inherits from an ancestor scope").
+    #    Upstream fences that shape directly, in a case named "filters tools
+    #    the child inherits from an ancestor scope, not only global ones"
+    #    (`core/tools/tests/scoped.spec.ts`).
     # 2. A name that is not registered is REJECTED, not ignored:
     #    `tools.restrict()` throws on an unknown global name
     #    (`core/tools/src/index.ts:1088-1092`). That throw lands inside the
@@ -323,13 +324,21 @@
     #    would silently disappear from the child. A deny-list states exactly
     #    the capability being withdrawn.
     #
+    # Audited and NOT denied, so the omission reads as a decision: the
+    # `tool-subagent-control` rows above (`send_message`, `interrupt_agent`,
+    # `list_agents`). They register tools but reach no child-START seam — they
+    # act on children a caller already owns, and a one-shot leaf owns none.
+    #
     # `tests/validator-leaf.test.mjs` derives this list rather than restating
     # it: it classifies every enabled row against the pinned upstream source
     # (does the package both register a model-facing tool AND reach a child-
-    # start seam?) and requires the deny list to equal that set exactly, with
-    # each name resolved from the row's own `toolName` or from the upstream
-    # declaration it defaults to. A delegation row added later and left
-    # undenied fails there; so does a denied name this preset does not register.
+    # start seam?) and requires the deny list to equal that set exactly. Each
+    # name comes from the nearest DECLARATION, in three steps — the row's own
+    # `toolName`, else the package's `toolName` schema default, else the single
+    # fixed name in its `defineTool` registration (which is how `ralph`, whose
+    # package has no `toolName` config at all, resolves). A delegation row added
+    # later and left undenied fails there; so does a denied name this preset
+    # does not register.
     - id: tool-subagent-validator
       name: '@deepseek-ai/dsh-tool-subagent'
       config:

@@ -34,10 +34,15 @@
  * `validator-depth.test.mjs`, which imports and EXECUTES upstream's own depth
  * functions, nothing here calls upstream code. `tools.restrict()` and the
  * `toolFilter` load-time check live in `core/tools/src/index.ts` and
- * `tool-subagent/src/index.ts`, both of which import `@deepseek-ai/cordis` and
- * `@deepseek-ai/schemastery` — the submodule's own pnpm workspace, which this
- * package does not install (`depth.ts` was importable precisely because its
- * only import is type-only). What is grounded instead is every INPUT to those
+ * `tool-subagent/src/index.ts`, and both carry VALUE imports from the
+ * submodule's own pnpm workspace, which this package does not install
+ * (`@deepseek-ai/schemastery` in each; `@deepseek-ai/cordis`,
+ * `@deepseek-ai/dsh-scope`, `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-session`
+ * in the registry; `@deepseek-ai/dsh-tools` and `@deepseek-ai/dsh-subagent` in
+ * the tool). The distinction is the whole reason `depth.ts` IS importable —
+ * its only import is type-only, so stripping erases it; `tool-subagent`'s own
+ * `@deepseek-ai/cordis` import is type-only too and is not what blocks that
+ * file. What is grounded instead is every INPUT to those
  * functions: the classification, the tool names, and the provider capability
  * are all read out of the pinned upstream's source text with
  * declaration-anchored patterns that fail loud rather than silently matching
@@ -97,7 +102,13 @@ function upstreamPackageIndex() {
  */
 function sourceTextOf(dir) {
   const src = join(dir, 'src')
-  if (!existsSync(src)) return ''
+  // Never an empty corpus: an empty string fails both classification regexes,
+  // so a package whose sources moved would be classified "does not delegate"
+  // with no signal at all — the silent-partial-derivation failure this fence
+  // exists to be free of.
+  if (!existsSync(src)) {
+    throw new Error(`upstream package at ${dir} has no src/ directory; the delegation classification cannot read it`)
+  }
   const parts = []
   const walk = (current) => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
@@ -111,16 +122,31 @@ function sourceTextOf(dir) {
 }
 
 /**
+ * The one row `name` that is not a package: the Loader's own group marker.
+ * Enumerated rather than inferred, so an unrecognized non-package name fails
+ * loud instead of silently dropping out of the classification.
+ */
+const NON_PACKAGE_ROW_NAMES = new Set(['cordis:group'])
+
+/**
  * The package a row's plugin name refers to. A row may name a subpath export
  * (`.../dsh-tool-subagent-control/list-agents`); the package is the scope and
  * the name after it.
  * @param pluginName - the row's `name` field.
- * @returns the bare package name, or undefined for a non-package row (`cordis:group`).
+ * @returns the bare package name, or undefined for a known non-package row.
+ * @throws when the name is neither a scoped package nor a known non-package row.
  */
 function packageNameOf(pluginName) {
-  if (!pluginName.startsWith('@')) return undefined
+  if (NON_PACKAGE_ROW_NAMES.has(pluginName)) return undefined
   const [scope, name] = pluginName.split('/')
-  return name === undefined ? undefined : `${scope}/${name}`
+  if (!pluginName.startsWith('@') || name === undefined) {
+    throw new Error(
+      `preset row name "${pluginName}" is neither a scoped package nor a known non-package row — `
+      + 'the delegation classification cannot decide it, and a row it cannot decide must not pass unclassified. '
+      + `Add it to NON_PACKAGE_ROW_NAMES with a reason, or ground its source.`,
+    )
+  }
+  return `${scope}/${name}`
 }
 
 const packages = upstreamPackageIndex()
@@ -203,7 +229,12 @@ describe('the validator delegate is a leaf', () => {
     // Upstream rejects a filter naming neither side AT LOAD
     // (`tool-subagent/src/index.ts:274-276`); this reproduces that rule rather
     // than calling it — see the divergence disclosure in the file header.
-    assert.ok(Array.isArray(filter.deny) && filter.deny.length > 0, 'a `toolFilter` that names neither `allow` nor `deny` is rejected when the row applies')
+    assert.ok(
+      Array.isArray(filter.deny) && filter.deny.length > 0,
+      'the filter must carry a non-empty `deny`. Stricter than upstream on purpose: upstream rejects only a '
+      + 'filter naming NEITHER side, so `deny: []` would load and withdraw nothing — a filter present and inert '
+      + 'is the shape this fence exists to refuse.',
+    )
     assert.equal(
       filter.allow, undefined,
       'this filter must stay a deny list: an `allow` list is a CLOSED enumeration of everything the '
@@ -266,6 +297,11 @@ describe('the validator delegate is a leaf', () => {
     // row, its name is unregistered and restrict() throws. The deny list cannot
     // be conditional, so this composition must not contain the shape that would
     // require it.
+    //
+    // Guarded against a vacuous pass first: an empty derivation would satisfy
+    // the loop with zero iterations, and this case must not lean on a sibling
+    // case failing to notice that.
+    assert.ok(delegating.length > 0, 'the delegation classification derived NO rows; every case here would pass vacuously')
     for (const entry of delegating) {
       assert.ok(
         !(entry.row.disabled instanceof LoaderExpression),
