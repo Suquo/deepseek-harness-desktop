@@ -142,7 +142,29 @@ async function createWebServer() {
   }
 }
 
-describe('desktop pnpm and community market integration', () => {
+describe('desktop pnpm and community market integration', {
+  // Windows budget sized from measurement. This file's one test spends almost all
+  // of its time on the `await import()` below: instrumented over four runs that
+  // single dynamic import of dsh-community-market's ~8.2k-line src graph costs
+  // 664-733ms of a 709-977ms test, because the graph is transformed and linked
+  // inside the test body rather than by the spec file's own import phase. The
+  // route work, mkdtemp and rm that follow are 1-4ms each.
+  //
+  // Two measured costs stack here. Warm, the test is 709-977ms across seven
+  // observations. Cold — the first vitest invocation after a build, before that
+  // src graph is in the page cache — it measured 4302ms, i.e. 86% of the former
+  // 5s default with no external load at all; that is a ~3.4s one-time premium,
+  // and on CI every run is a cold run. 14x (the load-stall floor observed for
+  // this host in PR #10 and re-observed at 8.7x here) on the 977ms warm worst is
+  // 13.7s; adding the 3.4s cold premium gives 17.1s, so 20s is the first round
+  // number clear of both. Deferred deliberately: 20s does NOT cover a 14x stall
+  // landing on top of a cold graph — that would need ~60s for a test whose warm
+  // cost is 0.7s, which would hide real regressions rather than tolerate load.
+  //
+  // No ceiling constraint: this file declares no hooks, so its cleanup runs in the
+  // test's own `finally` under this same budget. Exactly one number moves.
+  timeout: process.platform === 'win32' ? 20_000 : 5_000,
+}, () => {
   it('executes a market uninstall route through the managed desktop pnpm boundary', async () => {
     const marketModuleUrl = new URL('../../dsh-community-market/src/index.js', import.meta.url).href
     const market = await import(marketModuleUrl) as CommunityMarketModule

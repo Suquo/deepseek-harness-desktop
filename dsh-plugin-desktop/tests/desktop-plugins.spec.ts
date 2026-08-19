@@ -112,7 +112,23 @@ function errorCode(cause: unknown): string | undefined {
   return cause instanceof DesktopPluginsError ? cause.code : undefined
 }
 
-describe('desktop direct bundle management', () => {
+describe('desktop direct bundle management', {
+  // Windows budget sized from measurement. Eleven of these thirteen tests run in
+  // 24-44ms; the two that call prepareDesktopProfile measure 725-1144ms, because
+  // that call relinks the same ~527-package junction closure profile.spec.ts pays
+  // for (upstream healProfilesModuleFallback). Suite concurrency is not the lever —
+  // the same two tests measure 733-1144ms isolated and 725-892ms under full-suite
+  // load. External machine load is: in one full-suite run here both closure tests
+  // were killed at the former 5s default during a load event that stretched
+  // profile.spec.ts's worst test from 2.29s to 19.89s — an 8.7x stall, measured on
+  // the survivor because its 45s budget held. PR #10 saw the same class at >=14x.
+  // 14x on the 1144ms worst needs 16.0s, so 20s is the first round number clear of
+  // the observed floor, at 17.5x. The ceiling is the afterEach above: its rmSync of
+  // the same closure is bounded in (100, 200]ms against the untouched 10s
+  // hookTimeout, i.e. >=50x, so it stays the looser budget and only one number has
+  // to move. A genuine hang still fails loudly — the file runs 2.9-3.0s quiet.
+  timeout: process.platform === 'win32' ? 20_000 : 5_000,
+}, () => {
   it('lists each direct bundle once and keeps only explicit product bundles immutable', async () => {
     const root = temporaryRoot()
     const options = bootstrap(root)
