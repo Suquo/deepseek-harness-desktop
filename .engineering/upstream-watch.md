@@ -24,11 +24,14 @@ Neither remote is ever pushed to. `git push upstream` is forbidden by AGENTS.md.
 ## The watch script
 
 ```
-node scripts/upstream-watch.mjs             # human-readable report
-node scripts/upstream-watch.mjs --json      # machine-readable, same facts
-node scripts/upstream-watch.mjs --offline   # local facts only, no network
-node scripts/upstream-watch.mjs --help      # the script's own header
+corepack yarn upstream:watch                # human-readable report
+corepack yarn upstream:watch --json         # machine-readable, same facts
+corepack yarn upstream:watch --offline      # local facts only, no network
+corepack yarn upstream:watch --help         # the script's own header
 ```
+
+The root script is `node scripts/upstream-watch.mjs`; invoking the file directly is
+equivalent.
 
 It reports releases/commits behind on both sides, the `patches/` inventory (which
 patches are pinned to the harness version, what files each one targets, whether each
@@ -79,8 +82,7 @@ Two more:
   headline numbers (releases behind, overlay commits behind) in the RM's memory
   iteration entry. The obligation is carried by
   [`handoffs/repo-manager-charter.md`](handoffs/repo-manager-charter.md) as the daily
-  watch tick; a root `package.json` `upstream:watch` entry to shorten the invocation
-  rides **issue #12**.
+  watch tick.
 - **Harness releases behind > 0** ⇒ the RM spawns a Lane C generation for a *trial*
   pin bump (below). New harness releases are the event this whole protocol exists for.
 - **Overlay commits behind** is expected to be large and to grow; the parent repo is
@@ -104,14 +106,29 @@ decision is "inherit" or "adapt".
    submodule + `git add deepseek-harness` from the parent). This updates which commit
    we point at; it never edits upstream files, which stays forbidden.
 2. Update `upstream.json`: `commit`, `sourceVersion`, `runtimePackageVersion`.
-3. Move the whole **bump surface** the script enumerated — at `0.1.0-rc.7` that is
-   **166** entries: 96 exact `@deepseek-ai/dsh*` dependency pins in
-   `dsh-plugin-desktop/package.json`, 61 dev+peer pins in
-   `dsh-community-market/package.json`, and 9 root `resolutions` selectors. Note the
+3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
+   **This paragraph is the authoritative statement of what that surface holds; the
+   rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
+   restating the arithmetic.** At `0.1.0-rc.7` it is **166** entries:
+
+   | Where | Entries | Enforced by |
+   |---|---|---|
+   | `dsh-plugin-desktop/package.json` `dependencies` | 96 | `pinSurface` |
+   | `dsh-community-market/package.json` `devDependencies` | 32 | `pinSurface` |
+   | `dsh-community-market/package.json` `peerDependencies` | 29 | `pinSurface` |
+   | root `package.json` `resolutions` selectors | 9 | `patchedPackages` |
+   | **total** | **166** | |
+
+   The middle two are the "61 dev+peer" the script prints as one line. Both enforcing
+   lists live in `scripts/verify-layout.mjs` and hold package **names**, not counts,
+   so they are version-independent and move only when upstream's package set moves.
+   Note the
    script counts against whatever `upstream.json` currently says, so after step 2 it
    counts entries already moved to the **new** version: it starts near zero and is
    done when it reaches the full surface. The independent check is that the old
-   version string no longer appears in any manifest.
+   version string no longer appears in any manifest — and since **issue #12**,
+   `check:layout` enforces it (below), so a half-moved surface fails the gate rather
+   than relying on this step being done carefully.
 4. Rename the harness-versioned patch files to the new version and repoint the
    matching `resolutions` entries. **The pair moves together**
    (`handoffs/resolver-charter.md`, ENVIRONMENT).
@@ -119,17 +136,41 @@ decision is "inherit" or "adapt".
    re-validate every patch (next section).
 6. `corepack yarn check` in the foreground.
 
-`check:layout` is the drift guard that catches a half-done bump: it asserts the
+`check:layout` is the drift guard that catches a half-done bump. It asserts the
 submodule index SHA, the submodule's checked-out HEAD, a clean submodule worktree, the
-submodule's origin URL, the submodule's `package.json` version, and every
-`@deepseek-ai/dsh*` dependency of `dsh-plugin-desktop` against `upstream.json`.
+submodule's origin URL, and the submodule's `package.json` version against
+`upstream.json` — and, since **issue #12**, the whole bump surface:
 
-**Known blind spot** (`scripts/verify-layout.mjs` ~L133): that last assertion covers
-`dsh-plugin-desktop.dependencies` only. `dsh-community-market`'s 61 dev+peer pins at
-the same version are **not** guarded — a bump could leave them behind and
-`check:layout` would still pass. Widening the guard is tracked on **issue #12**; until
-that lands, step 3 is a manual obligation and the watch script's bump-surface count is
-what makes it checkable.
+- every `@deepseek-ai/dsh*` entry in **every** workspace manifest, across all four
+  dependency fields, carries `runtimePackageVersion`;
+- the surface itself is snapshotted as the sorted package **names** per manifest and
+  field (`pinSurface`), so an entry appearing, disappearing, or being swapped for
+  another at the same count fails too — without that, the version assertion would
+  pass vacuously over a field that had lost its entries, and a rename inside a
+  release would read as no change at all;
+- each root `resolutions` selector naming the family is checked as one unit with its
+  patch: selector range (exact or caret), `patch:` locator version, patch **filename**
+  version, and the file's existence;
+- which packages carry which selector shapes is snapshotted version-independently, so
+  a half-updated selector set (the hazard the checklist below names) fails;
+- and no workspace manifest may declare `resolutions` at all — Yarn honours them in
+  the root only, so a workspace-level block is a silent no-op, and it would sit
+  outside the guard while the watch script still counted it.
+
+**A hold-back trips this guard, by design.** Option 3 of the decision tree below pins
+a package back through `resolutions`, which presents either as a selector naming the
+old version or as a target that is not one of our patches — both fail `check:layout`.
+That is deliberate: a hold-back is a durable claim, and durable claims need a
+retirement condition (resolver-charter standard 9), so it should cost an explicit
+reviewed change rather than a manifest line nobody revisits. **Where a hold-back gets
+declared so the guard can admit one is an open RM ruling** (raised on #12); until it
+lands, the first hold-back will need the guard widened in the same PR that makes it.
+
+The guard selects by package **identity**, never by "range equals the current pin":
+`scripts/upstream-watch.mjs` enumerates by version because it builds a forward
+worklist, but a fence written that way would skip exactly the entries a half-done bump
+left on the old version. `pinSurface` and `patchedPackages` in
+`scripts/verify-layout.mjs` are the enforced copy of the [step 3 table](#bump-surface).
 
 ## Patch re-validation checklist
 
@@ -145,7 +186,10 @@ For each patch:
       lockfile locator is the proof. The watch script counts both.
 - [ ] **Every selector moved.** Some packages carry both an exact (`npm:X`) and a caret
       (`npm:^X`) selector, some only one. A half-updated selector set silently leaves
-      part of the tree unpatched — and `yarn install` will not complain.
+      part of the tree unpatched — and `yarn install` will not complain. Since #12
+      `check:layout` fences the shape set, so a dropped or added selector fails the
+      gate; it still cannot tell you the patch reached the tree, which is what the
+      lockfile locator above is for.
 - [ ] **The hunk still means what it meant.** Read the patched region at the new
       version. Zero-context hunks (`@@ -840 +840,2 @@`) relocate quietly.
 - [ ] **The covered behavior is re-tested at the new pin**, by the test that covers it
@@ -217,9 +261,13 @@ The pin-bump PR that moves the pin updates them in the same PR — that is the o
 exception to "a pin-bump PR changes nothing else", because leaving them behind makes
 this document lie about the tree it describes:
 
-- the **166 / 96 / 61 / 9** bump-surface numbers (re-read them off the script);
+- the [bump-surface table](#bump-surface) in step 3 (re-read the numbers off the
+  script). Only that table states them; nothing reads this document, so it is kept in
+  step by this list and nothing else. Its two enforcing lists in
+  `scripts/verify-layout.mjs` need no edit for a version change — they hold names —
+  but a real change to upstream's package set moves them, and the gate holds them
+  against the **tree**, so a stale one fails `check:layout` loudly;
 - the **per-patch table**, including its "as of `0.1.0-rc.7`" heading and any patch
-  whose target file or hunk count changed;
-- the **`scripts/verify-layout.mjs` ~L133 blind spot** — delete this whole caveat if
-  the guard has since been widened to cover every workspace.
+  whose target file or hunk count changed. A patch added or dropped also moves
+  `patchedPackages` in `scripts/verify-layout.mjs`.
 
