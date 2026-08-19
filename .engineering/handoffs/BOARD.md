@@ -30,7 +30,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-7 on #5 as re-scoped** (in-UI cost surface; OpenRouter actual-cost grounding first, price table as fallback; branch `pm/issue-5-cost-surface`). Disjointness vs Lane D: new files beside theirs OK, shared client-plugin files = freeze. #1 pending-live; #6/#7 owner-gated; #23/#24 low.
+- **Lane B (parametria-harness, `pm/*`)**: **FROZEN-SEQUENCED — gen-7 on #5** (join script landed @ `3588cb6eea`, 90/90 green; rulings posted: live rates · compat mode pristine · dsh-plugin-desktop client home). Resumes AFTER Lane D merges #26 (index.ts wiring collision — second lander rebases). Real run cost measured: $0.5661.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: **BUSY — gen-1 (maiden run) on #26** (Suquo rebrand: logo + wordmark at in-app DeepSeek logo sites; branch `dg/issue-26-suquo-rebrand`). In-fence = client visual surfaces; freezes out-of-fence remainder (icons/packaging/app name) for RM re-scope.
 
@@ -49,7 +49,6 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Owner items (batched, non-blocking)
 
 - **ONE step left on #3 — the fork Actions tab enable-workflows click (UI-only, operator-only).** Branch protection is DONE per the in-session ruling (2026-08-19): ruleset `master-required-checks` (21051431) active — required checks `check` + `desktop-windows`, deletion + force-push blocked, admin bypass always (no wedge while events are dormant). API shows Actions enabled and the workflow active, yet push/PR events fire zero runs — the fork opt-in banner is the remaining explanation and only the UI clears it. #3 closes on the first real PR-event rollup.
-- **Price table seeds** (#5): per-model $/Mtok (uncached-input / cacheRead / cacheWrite / output) for the models you want costed.
 - **Skill-root canonicalization** (#7): OK to make the preset-local copy in this repo canonical and retire/sync-target `~/.claude/skills` + `~/.agents/skills` copies? (Coordinates with your sync-skills fleet flow.)
 - **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` (also reads `OPENAI_API_KEY` from other skills' `.env`s). Recommend rotating the Pinecone key and moving it to `scripts/.env`. Flagging only — the skill folder is outside this repo's fleet surface.
 - **SK-2 landing surface**: node-catalog regeneration belongs to the Parametria app (suquo-systems-rust fleet) — file it there?
