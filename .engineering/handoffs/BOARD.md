@@ -35,9 +35,9 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — no generation, no branches.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 → #5 → #6, #7 and #9 available). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE.
+- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-1 (type `resolver-general`) on #3** (CI workflow; branch `claude/issue-3-ci`). Expected-touch: `.github/workflows/**`, root package.json test script, the pinned string in `dsh-plugin-desktop/tests/package.spec.ts` (#9 item 2 rides), CI docs note.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 pending-live → #5 → #6; #7 and #9 available, #5/#6/#7 gated on owner items). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — RM-spawned gen-1 (type `resolver-upstream`) on #4** (watch script + pin-bump eval protocol; branch `up/issue-4-upstream-watch`). Expected-touch: `scripts/upstream-watch.mjs` + `.engineering/upstream-watch.md` (both new). Disjointness vs Lane A verified at spawn.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
 ## Second run harvested (weaker model, 2026-08-19)
