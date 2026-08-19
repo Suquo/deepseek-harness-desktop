@@ -28,6 +28,29 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - Commit before major changes of direction and keep the submodule pin update separate from desktop behavior changes.
 - Keep the repository topology and package-manager split consistent with the [owning Agent Note](.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-yarn-workspace.md).
 
+## Continuous integration
+
+`.github/workflows/ci.yml` is inherited from the pinned upstream and is this fork's CI. It runs on pull requests to `master`, pushes to `master`, and `workflow_dispatch`. Jobs:
+
+| Job | Runner | What it runs |
+|---|---|---|
+| `changes` | ubuntu-latest | Classifies the diff through `scripts/classify-ci-changes.mjs`; a documentation-only diff skips every product job |
+| `check` | ubuntu-latest | `yarn check` — the complete headless gate |
+| `desktop-windows` | windows-latest | `yarn check`, then `dist:win` and `dist:win-portable` reusing its build |
+| `desktop-macos` | macos-latest | `yarn check`, then the unsigned `dist:mac-smoke`. No signing secrets reach CI |
+| `upstream-command-windows` | windows-latest | `yarn check:layout` and `yarn upstream:version` — the `upstream:*` portable-shell scripts must resolve the submodule's own toolchain on Windows |
+
+The gate therefore runs on both a Linux and a Windows runner. Windows is the primary development platform, so a Windows-only regression is caught by `desktop-windows` rather than by `check`.
+
+**Every job that runs the gate must check out the submodule (`submodules: recursive`).** The gate reads the pinned upstream checkout, so a job without it fails at the gate's first step:
+
+- `scripts/verify-layout.mjs` — which is `check:layout`, the first command in `yarn check` — reads `deepseek-harness/package.json` (L20), then asserts the checked-out commit, working-tree cleanliness, and `origin` URL against `upstream.json` (L115-131).
+- `dsh-preset-parametria`'s drift tests read upstream fixtures such as `deepseek-harness/apps/cli/config/agent-presets/standard/agent.cordis.yml` and `deepseek-harness/packages/bundle/base/cordis.patch.yml`.
+
+The workflow's job shape is fenced by `dsh-plugin-desktop/tests/package.spec.ts` (the `runs the full gate once before reusing native packaging outputs on Windows` and `skips product packaging only for documentation-only changes` cases). Editing the workflow means moving those assertions in the same change.
+
+CI is headless throughout — no job launches the GUI, per the headless-safety rule above. `master` currently carries no branch protection or ruleset, so CI results are advisory rather than blocking; until required status checks are configured, the resolver charter's rule stands that "required CI" means the full local gate pasted in the pull-request body.
+
 ## Fleet roles (Suquo fork — charter + live-board succession model)
 
 This fork is maintained by a standing multi-agent workflow adopted from the suquo-systems-rust fleet. Each role has a **stable charter** (rules that rarely change) and derives its **live state** from `.engineering/handoffs/BOARD.md` plus live GitHub at session start — a fresh session needs no hand-written prompt.

@@ -52,12 +52,11 @@ for (const name of ['dsh-community-fabric', 'dsh-community-market', 'dsh-preset-
     fail(`the root check script must run the ${name} gate`)
   }
 }
-// NOTE (tracked on issue #9, item 2): AGENTS.md documents `corepack yarn test`
-// as the unit-test command, but the root `test` and `typecheck` scripts are
-// pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`, so the
-// root chain and that pinned string have to move in one change. Until they do,
-// `dsh-preset-parametria` is reached by `corepack yarn check` only, and the
-// guard above is what keeps that true.
+// The root `test` and `typecheck` chains are pinned by exact string in
+// `dsh-plugin-desktop/tests/package.spec.ts`, so a workspace can only join
+// either chain in a change that moves the pinned string with it.
+// `dsh-preset-parametria` joined the `test` chain that way; it has no
+// `typecheck` script, so the `typecheck` chain is complete as pinned.
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the
