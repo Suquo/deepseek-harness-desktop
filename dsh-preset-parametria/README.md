@@ -41,7 +41,7 @@ yarn workspace dsh-preset-parametria install:profile --force    # overwrite loca
 Then pick **Parametria** in the desktop profile picker (selecting a profile
 restarts the app), or run `dsh --profile parametria`.
 
-## The four things it guarantees
+## The five things it guarantees
 
 ### 1. A validator that can actually see
 
@@ -189,9 +189,56 @@ narrowest one available: it asks the user per command, and it leaves
 `approval: ask` standing for everything after. The persona states it as the only
 route and is fenced against growing a "switch the session instead" sentence.
 
-**A cost worth naming:** `$PWD\.uv-cache` is real litter in whatever workspace
-the run happens in — typically a user repository, which this package does not
-gitignore for them.
+**A cost worth naming:** `$PWD\.uv-cache` is a real directory in whatever
+workspace the run happens in — typically a user repository. Section 5 is the
+other half of that trade: this repository now ignores it, and the fence there
+derives the ignore list from the persona so the next workspace directory the
+persona names cannot arrive unignored.
+
+### 5. A run whose artifacts land in one ignored directory
+
+The same relocation move as section 4, applied to output instead of caches.
+
+Where a run's files land is decided by an argument the model types, and nothing
+in composition governs a CLI argument: `screenshot-definition.py` hands its
+positional path straight to Playwright without normalising it, and
+`convex-parametria.mjs decompile-definition` defaults to a POSIX `/tmp/spec.json`
+that lands at `C:\tmp\spec.json` here. The skill's own examples are all absolute
+`C:/tmp/...` paths — and `C:\tmp` is exactly the arbitrary absolute path
+`workspace-write` denies. So a run faces a two-sided trap: follow the skill and
+escalate, or improvise bare filenames that land in the workspace root. Runs
+improvised, and the workspace root was this repository — which is how
+`cabinet-*.png`, `spec.json`, and a later run's `gen-*.js` generators became
+untracked litter beside real work.
+
+The persona therefore names one artifact root for all three producers —
+screenshots, spec dumps, and the generator scripts the model writes itself,
+which no CLI argument or environment variable can reach:
+
+    .parametria-evidence/$env:DSH_SESSION_ID/
+
+Three properties this shape is chosen for:
+
+- **The workspace is the only root writable in every mode**, so the same run
+  directory serves the confined commands and the one escalated capture. No
+  escalation is spent on a filename.
+- **`DSH_SESSION_ID` is already injected into every shell call** by
+  `dsh-shell-env` (`shell-env/src/index.ts`), so run-scoping costs no new
+  runtime surface. Note the registry is plugin-facing — `register()` takes a
+  contributor resolving `DSH_*` values *per execution* — which is the seam a
+  future evidence plugin would use; it is the YAML surface that cannot set
+  arbitrary variables.
+- **The orchestrator resolves the directory once and passes absolute paths
+  down.** A delegate runs under its own session id (verified in export
+  `dsh-session-60658537`, whose child header carries a different `id` with
+  `parentSession` set), so a path a validator expands for itself is not the path
+  the capture wrote to.
+
+What this does not do: it instructs rather than enforces. A model that ignores
+the persona still litters — the `.gitignore` entries keep that out of the
+tracked surface, which is containment, not prevention. Enforcement would need
+the run's evidence to travel through a desktop-owned surface instead of a shell
+argument; that option is recorded on issue #9 and is a separate slice.
 
 ## What this deliberately does not ship
 
@@ -206,10 +253,16 @@ genuinely deferred:
   answerer beside the desktop's own (upstream: compose one terminal answerer per
   deployment). Both need a desktop-owned plugin — Increment 3 of the harness
   research (`parametria-tools`), not profile composition. Issue #9, item 1.
-- **Screenshot plumbing** — the skill drives Playwright through the shell today
-  and writes the PNG to a workspace-relative path of its own choosing. Where run
-  evidence *lands* is a different mechanism from what the run is *allowed to
-  do*; it is not composition, so it is not in this package. Issue #9, item 1.
+- **An enforced evidence surface** — section 5 ships the *convention* (one
+  ignored run directory, stated by the persona and fenced against the
+  `.gitignore`), which is as far as composition reaches: the output path is a
+  CLI argument the model types. Making it structural — a desktop plugin
+  contributing a `DSH_*` evidence directory through `ctx.shellEnv.register`,
+  with evidence landing beside the session transcript in upstream's reserved
+  `sessionDir` — is recorded as a follow-up option on issue #9, together with
+  the retention question it owes. The complementary skill-side fix (its examples
+  document `C:/tmp/...`, which this host denies) is an SK-class change outside
+  this repository.
 - **The skill itself** — the mount seam ships, the skill does not; issue #7
   owns the migration, for the shadowing reason given above.
 
@@ -237,6 +290,7 @@ root chain again.
 | `tests/validator-leaf.test.mjs` | The validator row's `toolFilter` deny list, **derived** from this composition's own rows: every enabled row is classified against upstream source (does its package register a model-facing tool *and* reach a child-start seam?) and the deny list must equal that set. Also that every denied name is one an enabled row actually registers — an unregistered name would throw in the child's creation window and break every validator spawn, not the build. |
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
+| `tests/evidence-hygiene.test.mjs` | The workspace directories the persona tells a run to create, **derived** from the persona text rather than restated, each asserted ignored via `git check-ignore` against the repository root — so a persona that names a new scratch directory fails until `.gitignore` covers it. Includes a counter-assertion that a tracked file is still reported unignored, so a catch-all ignore rule cannot make the fence vacuous. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. |
 
 Every drift fence reads the pinned upstream checkout, so
@@ -251,3 +305,6 @@ Every drift fence reads the pinned upstream checkout, so
 - **#7** — skill-root consolidation. Fills the preset-local `skills/` directory.
 - **#5** — per-run cost and per-step timing. Reads the `sessionStats` and
   `tokenUsage` projections this profile's `dsh-web-app` bundle already mounts.
+- **#9** — the PR #8 follow-ups. Closed by section 5: item 2 landed in PR #10,
+  item 3 was settled by a live mount observation, and item 1 shipped in two
+  halves — the sandbox half in PR #21 (section 4) and the evidence half here.

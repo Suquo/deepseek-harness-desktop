@@ -14,3 +14,16 @@ dsh-plugin-desktop/lib/
 dsh-community-market/lib/
 
 .env.yarn
+
+# Parametria run artifacts (issue #9). The `parametria` agent preset's persona
+# instructs every run to keep its screenshots, spec dumps and generator scripts
+# in `.parametria-evidence/<session id>/`, and its uv cache in `.uv-cache/` —
+# both resolved against the session workspace, which IS this repository whenever
+# a run is driven from here (all three harvested runs were). These entries are
+# not decoration: without them the persona's own instructions dirty the tracked
+# surface, which is exactly what the untracked `cabinet-*.png` litter was.
+# `dsh-preset-parametria/tests/evidence-hygiene.test.mjs` DERIVES this list from
+# the persona text, so a persona that names a new workspace directory fails the
+# gate until that directory is ignored here.
+.parametria-evidence/
+.uv-cache/

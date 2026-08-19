@@ -48,7 +48,8 @@ const DECLARED_DELTA = {
   reconfigured: {
     persona:
       'the run states its own shape: load the skill, delegate visual checks to '
-      + 'subagent_validator rather than subagent, and meet the two sandbox facts this '
+      + 'subagent_validator rather than subagent, keep every artifact under the workspace-local '
+      + '`.parametria-evidence/` run directory, and meet the two sandbox facts this '
       + 'host has (workspace-local uv cache; per-call escalation for the screenshot script)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
@@ -128,6 +129,43 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
       persona, /select the .* permission preset|switch the session|for the whole session/,
       'the persona must not route the run toward a session-wide widening: the full-access preset also '
       + 'switches approval prompts off, which is the state the per-call escalation exists to avoid',
+    )
+    // The evidence half of issue #9 item 1. Where a run's files land is decided
+    // by an argument the model types, and the skill's own examples type an
+    // absolute `C:/tmp/...` that `workspace-write` denies — so a run either
+    // escalates or improvises bare filenames into the workspace root, which is
+    // the litter the issue was filed for. Nothing in composition governs a CLI
+    // argument, so this reaches the run as persona text or not at all.
+    //
+    // Anchored on the whole path, including the run-scoping segment. A bare
+    // /\.parametria-evidence/ would stay green if the run directory lost its
+    // per-run segment, and one shared directory across runs is how a validator
+    // reads the previous run's screenshot and passes the current one.
+    assert.ok(
+      persona.includes('`.parametria-evidence/$env:DSH_SESSION_ID/`'),
+      'the persona must name the run-scoped artifact directory verbatim: the workspace is the only '
+      + 'root writable in every sandbox mode, and DSH_SESSION_ID is the run-scoping token already '
+      + 'injected into every shell call',
+    )
+    // The delegate half, and the reason it is not optional: a subagent runs
+    // under its OWN session id (verified in export dsh-session-60658537, whose
+    // child header reads a different `id` with `parentSession` set), so a
+    // delegate that expands $env:DSH_SESSION_ID for itself resolves a directory
+    // the parent never wrote to. The instruction that closes that gap is
+    // passing absolute paths down, so the instruction is what gets pinned.
+    assert.ok(
+      persona.includes('pass ABSOLUTE paths built from it to every command and to every `subagent_validator` prompt'),
+      'the persona must instruct passing absolute paths to the delegate: a child resolves a different '
+      + 'session id, so a path it derives itself is not the path the capture wrote to',
+    )
+    // The persona MENTIONS `C:/tmp` in both this paragraph and the uv one, so a
+    // keyword assertion cannot tell "ignore that location" from an endorsement
+    // — and an endorsement is the skill's own documented behaviour leaking back
+    // in. The overriding sentence is therefore matched whole.
+    assert.ok(
+      persona.includes('The skill\'s own examples write to `C:/tmp/...`; ignore that location.'),
+      'the persona must override the skill\'s documented output location explicitly: a loaded skill\'s '
+      + 'text competes with this persona, and `C:\\tmp` is denied under workspace-write',
     )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
