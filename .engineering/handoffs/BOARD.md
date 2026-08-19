@@ -26,7 +26,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged). Remaining queue (#1 pending-live, #5/#6/#7 owner-gated, #9 items 1+3).
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned gen-3 on #18** (validator maxDepth fix; branch `pm/issue-18-validator-maxdepth`). Expected-touch: preset agent.cordis.yml + preset tests. #1 stays pending-live behind it; #9 down to item 1.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
