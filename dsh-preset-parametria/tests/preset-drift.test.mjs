@@ -98,19 +98,23 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     assert.deepEqual(shared, upstreamShared)
   })
 
-  it('keeps every shared row pointing at the same plugin, with the same disable expression', () => {
+  it('keeps every shared row identical to upstream outside its config', () => {
+    // Compare the WHOLE row minus `config`, rather than enumerating
+    // name/disabled/group/isolate. An enumerated list is a CLOSED key set: an
+    // upstream row that gains a new top-level key — `when:`, `optional:`, some
+    // future loader field — would drift in silently, because nothing looks at
+    // the keys nobody thought to name. `config` is excluded here only because
+    // the two assertions above own it.
     for (const [id, row] of ours) {
       const other = upstream.get(id)
       if (other === undefined) continue
-      assert.equal(row.name, other.name, `row ${id} names a different plugin than upstream`)
+      const { config: _ourConfig, ...ourRest } = row
+      const { config: _upstreamConfig, ...upstreamRest } = other
       assert.ok(
-        sameValue(row.disabled, other.disabled),
-        `row ${id} has a different \`disabled\` expression than upstream`,
-      )
-      assert.equal(row.group, other.group, `row ${id} changed between a group and a plain row`)
-      assert.ok(
-        sameValue(row.isolate, other.isolate),
-        `row ${id} has a different \`isolate\` realm than upstream`,
+        sameValue(ourRest, upstreamRest),
+        `row ${id} differs from upstream outside its config:\n`
+        + `  ours:     ${JSON.stringify(ourRest)}\n`
+        + `  upstream: ${JSON.stringify(upstreamRest)}`,
       )
     }
   })

@@ -113,9 +113,10 @@ composition row anyway.
 
 ## What this deliberately does not ship
 
-Issue #2 also names a *"permission preset, and any evidence/screenshot plumbing
-the skill's playwright scripts need"*. Neither appears in the patch layer, and
-that is a decision rather than an omission:
+The originating issue also names a *"permission preset, and any
+evidence/screenshot plumbing the skill's playwright scripts need"*. Neither
+appears in the patch layer, and that is a decision rather than an omission.
+**Issue #9 is the tracking surface** for the ones that are genuinely deferred:
 
 - **Permission preset** — `dsh-base` already composes `dsh-permission-presets`
   with `read-only` / `workspace-write` / `danger-full-access`, and
@@ -127,10 +128,10 @@ that is a decision rather than an omission:
 - **Command-level policy for node / uv / playwright** — allowing or denying
   specific commands is a `tools/pre-execute` interception, not a config field.
   It needs a desktop-owned plugin, which is Increment 3 of the harness research
-  (`parametria-tools`), not profile composition.
+  (`parametria-tools`), not profile composition. Issue #9, item 1.
 - **Screenshot plumbing** — the skill drives Playwright through the shell
   today. Replacing that with a harness-managed screenshot tool with a readiness
-  probe is the same Increment 3 follow-up.
+  probe is the same Increment 3 follow-up. Issue #9, item 1.
 - **The skill itself** — the mount seam ships, the skill does not; issue #7
   owns the migration, for the shadowing reason given above.
 
@@ -147,7 +148,8 @@ installer.
 
 The root `corepack yarn test` does **not** reach this workspace yet: that
 script is pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`,
-which is outside this change's scope. Adding it there is a follow-up.
+so the root chain and that pinned string have to move in one change. Tracked as
+issue #9, item 2.
 
 | Fence | What it holds |
 |---|---|

@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { after, describe, it } from 'node:test'
-import { PACKAGE_ROOT } from './helpers.mjs'
+import { PACKAGE_ROOT, indexRows, readComposition } from './helpers.mjs'
 import {
   InstallError,
   RECEIPT_NAME,
@@ -36,6 +36,33 @@ after(() => {
 
 const PRESET_YML = '.agent-presets/parametria/agent.cordis.yml'
 const PROFILE_PATCH = 'profiles/parametria/cordis.patch.yml'
+
+/** Absolute destination of one managed file inside a Harness home. */
+const destination = (home, managedPath) => join(home, ...managedPath.split('/'))
+
+/**
+ * Assert an installed file is byte-identical to the source artifact the
+ * installer claims to copy.
+ *
+ * This is the identity assertion, not a substring probe. A regex like
+ * `/parametria-vision/` passes on any file that merely mentions the route —
+ * including the operator's own edit, or a half-written copy — so it cannot
+ * distinguish "the packaged artifact landed" from "something with that text
+ * is there". Hashing the whole file states the claim the installer actually
+ * makes, and names the file when it fails.
+ * @param home - the Harness home installed into.
+ * @param managedPath - the managed path, as `managedFiles()` keys it.
+ */
+function assertInstalledMatchesSource(home, managedPath) {
+  const expected = managedFiles(PACKAGE_ROOT).get(managedPath)
+  assert.ok(expected !== undefined, `${managedPath} is not a managed file`)
+  const actual = readFileSync(destination(home, managedPath))
+  assert.equal(
+    createHash('sha256').update(actual).digest('hex'),
+    createHash('sha256').update(expected).digest('hex'),
+    `${managedPath} on disk differs from the packaged artifact`,
+  )
+}
 
 describe('the managed file set', () => {
   const files = managedFiles(PACKAGE_ROOT)
@@ -78,8 +105,20 @@ describe('a first install', () => {
   })
 
   it('lands the preset where the user preset root is scanned', () => {
-    const installed = readFileSync(join(home, '.agent-presets', 'parametria', 'agent.cordis.yml'), 'utf8')
-    assert.match(installed, /toolName: subagent_validator/)
+    assertInstalledMatchesSource(home, PRESET_YML)
+  })
+
+  it('lands a preset whose validator row still parses as the declaration it is', () => {
+    // Parsed back from the INSTALLED copy, so this holds the artifact the
+    // harness will actually read rather than the one in the repository.
+    const installed = indexRows(readComposition(destination(home, PRESET_YML)))
+    const row = installed.get('delegation/tool-subagent-validator')
+    assert.equal(row.name, '@deepseek-ai/dsh-tool-subagent')
+    assert.equal(row.config.toolName, 'subagent_validator')
+    assert.deepEqual(row.config.agentOptions, {
+      provider: 'parametria-vision',
+      model: 'google/gemini-3.6-flash',
+    })
   })
 
   it('records a receipt beside the profile, where no discovery scan reaches it', () => {
@@ -113,7 +152,7 @@ describe('a re-install', () => {
     writeFileSync(receiptPath, JSON.stringify(receipt, undefined, 2) + '\n')
     const result = install({ home })
     assert.deepEqual(result.written, [PROFILE_PATCH])
-    assert.match(readFileSync(path, 'utf8'), /parametria-vision/)
+    assertInstalledMatchesSource(home, PROFILE_PATCH)
   })
 })
 
@@ -150,7 +189,7 @@ describe('a locally modified file', () => {
     const home = editedHome()
     const result = install({ home, force: true })
     assert.ok(result.written.includes(PROFILE_PATCH))
-    assert.match(readFileSync(join(home, 'profiles', 'parametria', 'cordis.patch.yml'), 'utf8'), /parametria-vision/)
+    assertInstalledMatchesSource(home, PROFILE_PATCH)
     // With the claim re-taken, an ordinary re-install is a no-op again.
     assert.deepEqual(install({ home }).written, [])
   })

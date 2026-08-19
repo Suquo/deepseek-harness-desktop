@@ -15,16 +15,42 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { PACKAGE_ROOT, openrouterCatalogEntry, readComposition } from './helpers.mjs'
+import { PACKAGE_ROOT, indexRows, openrouterCatalogEntry, readComposition } from './helpers.mjs'
 
 const MODEL_ID = 'google/gemini-3.6-flash'
 const patchPath = join(PACKAGE_ROOT, 'profile', 'cordis.patch.yml')
 const patchText = readFileSync(patchPath, 'utf8')
-const route = readComposition(patchPath)
+const providers = readComposition(patchPath)
   .find(entry => entry?.id === 'llm-pi-ai')
-  .config.providers['parametria-vision']
+  .config.providers
+const route = providers['parametria-vision']
 const model = route.models.find(entry => entry.id === MODEL_ID)
 const catalog = openrouterCatalogEntry(MODEL_ID)
+const validator = indexRows(readComposition(join(PACKAGE_ROOT, 'preset', 'agent.cordis.yml')))
+  .get('delegation/tool-subagent-validator')
+
+describe('the preset and the profile agree on the route', () => {
+  // The coupling is a plain string match across two files in two different
+  // planes — the preset's `agentOptions.provider` (agent plane) and the
+  // profile patch's `providers` dict key (host plane). Nothing in either file
+  // references the other, so a one-sided rename produces
+  // `LlmError('UNKNOWN_PROVIDER')` at request time rather than at composition
+  // time. These assertions state the invariant where it can be checked.
+  it('pins the validator to a route this profile actually declares', () => {
+    assert.ok(
+      Object.hasOwn(providers, validator.config.agentOptions.provider),
+      `the validator pins route "${validator.config.agentOptions.provider}", `
+      + `which the profile patch does not declare (declared: ${Object.keys(providers).join(', ')})`,
+    )
+  })
+
+  it('pins the validator to a model that route actually serves', () => {
+    assert.ok(
+      route.models.some(entry => entry.id === validator.config.agentOptions.model),
+      `the validator pins model "${validator.config.agentOptions.model}", which the route does not list`,
+    )
+  })
+})
 
 describe('the parametria-vision route', () => {
   it('is serviceable: a hand-declared route needs api, baseURL, and a non-empty models list', () => {

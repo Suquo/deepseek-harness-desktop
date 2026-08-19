@@ -98,11 +98,35 @@ export function sameValue(left, right) {
 }
 
 /**
- * Compose bundle patch layers the way `composeEntries` does, so a fence can
- * ask what a row's config actually is at the moment the profile's own patch
- * layer runs. Each layer is a list of `PatchOptions`: an `insert` adds rows,
- * an id-targeted entry REPLACES the named row's whole config. Later layers
- * win, which is exactly the semantics the profile patch then inherits.
+ * Compose bundle patch layers so a fence can ask what a row's config actually
+ * is at the moment the profile's own patch layer runs. Each layer is a list of
+ * `PatchOptions`: an `insert` adds rows, an id-targeted entry REPLACES the
+ * named row's whole config, and later layers win.
+ *
+ * DIVERGENCE RISK — read this before trusting a green from any fence built on
+ * it. This is a REIMPLEMENTATION of upstream's patch algorithm, not a call
+ * into it. The source of truth is `applyEntryPatches`, reached through
+ * `composeEntries` in `@deepseek-ai/dsh-app-boot`
+ * (`deepseek-harness/packages/boot/app-boot/src/profile.ts`), and upstream is
+ * explicit that composition, flag derivation, and config dumps all run through
+ * that one call precisely so they cannot drift from what boots.
+ *
+ * This copy handles only the two entry shapes the shipped `dsh-base` and
+ * `dsh-web-app` bundles actually use — an `insert` list and an id-targeted
+ * config replacement — and ignores everything else, including `disabled`
+ * toggles and any patch operation a future upstream adds. It can therefore
+ * disagree with a real boot in the direction that matters: a fence here could
+ * report a bundle row as unchanged while the real composition changed it.
+ *
+ * It is used anyway because importing app-boot would make a
+ * configuration-only package depend on the runtime it configures, and because
+ * the claims resting on it are narrow — which bundle rows exist, and what
+ * config they carry before the profile layer. Two things keep it honest:
+ * `profile-patch.test.mjs` asserts the profile patch inserts nothing and
+ * targets only rows these bundles provide, and the composition was
+ * cross-checked against a real `prepareDesktopProfile` + `composeEntries` run
+ * (140 rows, zero patch warnings — evidence in PR #8). If a fence built on
+ * this ever contradicts a real boot, the real boot is right.
  * @param paths - bundle patch files, in `dsh.profile.bundles` order.
  * @returns a Map of row id to the row as composed.
  */
