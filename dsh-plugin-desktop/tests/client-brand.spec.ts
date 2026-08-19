@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import {
+  HERO_HEADLINE_TEXT,
   SUQUO_BRAND_NAME,
   SUQUO_MARK_PATHS,
   SUQUO_MARK_VIEW_BOX,
@@ -54,6 +55,30 @@ describe('Suquo Systems brand lockup', () => {
     const maskRules = [...css.matchAll(/\{[^}]*mask: url\([^}]*\}/g)]
     expect(maskRules).toHaveLength(3)
     for (const [rule] of maskRules) expect(rule).toContain('background-color: currentColor')
+
+    // Nothing may pin a foreground colour: both themes are served by inheriting upstream's.
+    expect(css).not.toMatch(/[^-]color:(?! currentColor)/)
+  })
+
+  it('replaces the empty-state headline without leaving the upstream string readable', () => {
+    const css = suquoBrandStyles()
+
+    // display:none, not a visual hide: the superseded string must leave the accessibility tree.
+    expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_headline \.pXSMma_headlineText \{ display: none; \}/)
+    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; order: 2; white-space: nowrap; }`)
+
+    // Generated content is last in DOM order, so every remaining grid item is ordered explicitly.
+    expect(css).toMatch(/\.pXSMma_headline \.pXSMma_fishHitbox \{ order: 1; \}/)
+    expect(css).toMatch(/\.pXSMma_headline \.pXSMma_previewBadge \{ order: 3; \}/)
+  })
+
+  it('still finds the superseded upstream headline in the pinned conversation bundle', () => {
+    const bundle = readFileSync(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'), 'utf8')
+
+    // A pin that renames, retranslates, or drops this entry must fail here rather than ship the
+    // replacement over changed copy.
+    expect(bundle).toContain('Into the Unknown')
+    expect(bundle).not.toContain(HERO_HEADLINE_TEXT)
   })
 
   it('keeps the inlined mark identical to the committed asset', () => {

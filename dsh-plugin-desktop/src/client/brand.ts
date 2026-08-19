@@ -13,6 +13,16 @@
 /** Visible brand name rendered beside the mark. */
 export const SUQUO_BRAND_NAME = 'Suquo Systems'
 
+/**
+ * Empty-state headline this product shows in place of the upstream one.
+ *
+ * Upstream authors the headline as the `hero.headline` entry of the conversation package's own
+ * locale namespace. The locale registry is single-occupant — `LocaleRuntime.register` throws on a
+ * duplicate (namespace, locale) pair — so a desktop client plugin cannot re-register that
+ * namespace, and the substitution happens in the stylesheet with the marks.
+ */
+export const HERO_HEADLINE_TEXT = 'Parametric Definitions'
+
 /** Source view box of the Suquo Systems mark. */
 export const SUQUO_MARK_VIEW_BOX = '0 0 493.36 256.34'
 
@@ -46,7 +56,13 @@ export function suquoMarkDataUri(): string {
  */
 export const UPSTREAM_BRAND_CLASSES = {
   '@deepseek-ai/dsh-client-ui-sidebar': ['hHd-Xa_logoRow', 'hHd-Xa_brand', 'hHd-Xa_wide', 'hHd-Xa_railFish'],
-  '@deepseek-ai/dsh-client-ui-conversation': ['pXSMma_fishHitbox', 'pXSMma_fish'],
+  '@deepseek-ai/dsh-client-ui-conversation': [
+    'pXSMma_fishHitbox',
+    'pXSMma_fish',
+    'pXSMma_headline',
+    'pXSMma_headlineText',
+    'pXSMma_previewBadge',
+  ],
 } as const satisfies Record<string, readonly string[]>
 
 /**
@@ -56,13 +72,22 @@ export const UPSTREAM_BRAND_CLASSES = {
  * rail, and the empty-state hero headline. Each upstream mark is an `aria-hidden` decorative
  * `<svg>`, so hiding it and repainting the box costs no accessible name; the sidebar lockup keeps
  * its own `aria-label`.
+ *
+ * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
+ * hidden, so the superseded string leaves the accessibility tree instead of being announced
+ * alongside the replacement, and the three remaining grid items carry explicit `order` because
+ * the generated content is last in DOM order.
+ *
+ * No rule sets `color`: mark, wordmark, and headline inherit the foreground upstream already
+ * resolved for the surrounding surface, which is what keeps them legible under whichever theme is
+ * active.
  * @returns the stylesheet text appended to the advanced-shell styles.
  */
 export function suquoBrandStyles(): string {
   const mark = suquoMarkDataUri()
   const maskShorthand = (uri: string) => `-webkit-mask: url("${uri}") no-repeat center / contain; mask: url("${uri}") no-repeat center / contain;`
   return `
-.dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand { display: inline-flex; align-items: center; gap: 8px; color: var(--dsw-alias-text-1); }
+.dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand { display: inline-flex; align-items: center; gap: 8px; }
 .dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand > svg { display: none; }
 .dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand::before { content: ""; flex: none; width: 40px; height: 21px; background-color: currentColor; ${maskShorthand(mark)} }
 .dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand.hHd-Xa_wide::after { content: "${SUQUO_BRAND_NAME}"; flex: none; font-size: 15px; font-weight: 600; line-height: 1; white-space: nowrap; letter-spacing: 0.01em; }
@@ -70,5 +95,9 @@ export function suquoBrandStyles(): string {
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background-color: currentColor; ${maskShorthand(mark)} }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish > * { display: none; }
+.dshDesktopConversationSurface .pXSMma_headline .pXSMma_headlineText { display: none; }
+.dshDesktopConversationSurface .pXSMma_headline .pXSMma_fishHitbox { order: 1; }
+.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; order: 2; white-space: nowrap; }
+.dshDesktopConversationSurface .pXSMma_headline .pXSMma_previewBadge { order: 3; }
 `
 }
