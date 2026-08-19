@@ -31,3 +31,4 @@ Per-change loop: `corepack yarn build` / `corepack yarn typecheck` / `corepack y
 - Methodology: `~/Documents/.context/ENGINEERING.md`
 - Engineering config: [`./config.yml`](./config.yml)
 - Upstream pin: [`../upstream.json`](../upstream.json) + `deepseek-harness/` submodule
+- Upstream watch cadence + pin-bump eval protocol (Lane C): [`./upstream-watch.md`](./upstream-watch.md)
