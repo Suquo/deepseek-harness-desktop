@@ -47,13 +47,23 @@ function personaWorkspaceDirs(text) {
 }
 
 /**
- * Ask git whether a path inside the directory would be ignored.
+ * Ask git whether the ignore RULES cover a path.
+ *
+ * `--no-index` is load-bearing, not tidiness. Without it `check-ignore`
+ * consults the index first and reports any TRACKED path as not-ignored no
+ * matter what the rules say — which silently disarms the counter-assertion
+ * below, since its whole job is to notice a rule broad enough to swallow a
+ * tracked file. (Measured: with a catch-all `*` added to `.gitignore`, the
+ * index-aware form still answered "not ignored" for a tracked `package.json`,
+ * so the guard passed while the repository was entirely ignored.) The question
+ * worth asking is about the rules, so the rules are what gets asked.
+ *
  * @param path - repository-relative path to test.
- * @returns true when git ignores it.
+ * @returns true when the ignore rules match it.
  */
 function isIgnored(path) {
   try {
-    execFileSync('git', ['-C', REPO_ROOT, 'check-ignore', '--quiet', '--', path], { stdio: 'ignore' })
+    execFileSync('git', ['-C', REPO_ROOT, 'check-ignore', '--quiet', '--no-index', '--', path], { stdio: 'ignore' })
     return true
   } catch (error) {
     // Exit 1 is the documented "not ignored" answer. Anything else (128 for a
@@ -87,12 +97,14 @@ describe('persona workspace directories vs this repository\'s .gitignore', () =>
     )
   })
 
-  it('still distinguishes ignored from tracked, so the check itself can fail', () => {
-    // Without this, a `.gitignore` that had grown a catch-all `*` would satisfy
-    // the assertion above while ignoring the entire repository.
+  it('still reports an ordinary source file as unignored, so the check can fail', () => {
+    // Without this, a `.gitignore` that had grown a catch-all would satisfy the
+    // assertion above by ignoring the entire repository rather than by covering
+    // the persona's directories.
     assert.equal(
       isIgnored('dsh-preset-parametria/package.json'), false,
-      'git check-ignore reports a tracked file as ignored — the ignore rules have grown a catch-all',
+      'the ignore rules match an ordinary source file — they have grown broad enough to hide real work, '
+      + 'which makes the assertion above pass for the wrong reason',
     )
   })
 })
