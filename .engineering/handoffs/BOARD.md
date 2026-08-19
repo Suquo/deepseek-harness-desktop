@@ -55,6 +55,8 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Owner items (batched, non-blocking)
 
+- **Branch protection on master (#3, re-scoped)**: CI already exists and runs green (inherited `ci.yml`, both OS legs — verified by live dispatch), but nothing is REQUIRED: PR #8 merged with an empty check rollup. RM recommendation: a ruleset requiring `check` + `desktop-windows` on PRs to master, with bypass so direct docs/status pushes (RM + operator) keep working. Approve and the RM applies it; #3 closes then.
+
 - **Vision model/route for the validator pin** (#1): must be a `dsh-llm-pi-ai` route (deepseek adapter has no modality config). Name the provider + model to pin.
 - **Price table seeds** (#5): per-model $/Mtok (uncached-input / cacheRead / cacheWrite / output) for the models you want costed.
 - **Skill-root canonicalization** (#7): OK to make the preset-local copy in this repo canonical and retire/sync-target `~/.claude/skills` + `~/.agents/skills` copies? (Coordinates with your sync-skills fleet flow.)
