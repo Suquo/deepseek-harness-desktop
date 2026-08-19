@@ -33,16 +33,31 @@ const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
 const persona = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml'))).get('persona').config.text
 
 /**
- * Workspace directories the persona instructs a run to create, in the two
- * spellings it uses: a `$PWD`-anchored assignment (`"$PWD\.uv-cache"`) and a
- * bare workspace-relative path (`.parametria-evidence/`). Both forms are
- * dot-prefixed, which is what keeps `C:/tmp/...` — named in the persona only to
- * be refused — out of the set.
+ * DOT-PREFIXED workspace directories the persona instructs a run to create.
+ *
+ * Scope, stated exactly because the sentences elsewhere that describe this
+ * fence must not promise more than it does: this recognises a leading-dot name
+ * that is either `$PWD`-anchored (`"$PWD\.uv-cache"`, either separator) or
+ * written as a workspace-relative path (`.parametria-evidence/`). The dot is
+ * what makes the extraction possible at all — it separates a directory from
+ * ordinary prose, and it keeps `C:/tmp/...` and `/tmp/...`, named in the
+ * persona only to be refused, out of the set.
+ *
+ * What it therefore does NOT catch, so nobody reads this fence as universal: a
+ * directory without the leading dot (`parametria-gen/`). Both conventions this
+ * profile uses are dot-prefixed, and a non-dot name is indistinguishable from
+ * an ordinary word in prose without a parser this fence has no reason to grow.
+ * A persona adding a non-dot scratch directory is a case a human reviewer has
+ * to catch; every other spelling below is covered.
  */
 function personaWorkspaceDirs(text) {
   const dirs = new Set()
-  for (const [, name] of text.matchAll(/\$PWD\\(\.[A-Za-z0-9][A-Za-z0-9._-]*)/g)) dirs.add(name)
-  for (const [, name] of text.matchAll(/(?<![\w./\\])(\.[a-z][A-Za-z0-9._-]*)\//g)) dirs.add(name)
+  // `$PWD\.name` or `$PWD/.name`, and `${PWD}` likewise.
+  for (const [, name] of text.matchAll(/\$\{?PWD\}?[\\/](\.[A-Za-z0-9][A-Za-z0-9._-]*)/g)) dirs.add(name)
+  // A leading-dot path segment followed by a separator, in either spelling, and
+  // not preceded by another path character (which would make it a suffix or a
+  // nested reference rather than a workspace-root directory).
+  for (const [, name] of text.matchAll(/(?<![\w$:.])\.([A-Za-z][A-Za-z0-9._-]*)[\\/]/g)) dirs.add(`.${name}`)
   return [...dirs].sort()
 }
 
@@ -58,18 +73,29 @@ function personaWorkspaceDirs(text) {
  * so the guard passed while the repository was entirely ignored.) The question
  * worth asking is about the rules, so the rules are what gets asked.
  *
+ * `core.excludesFile=` is emptied for the same reason: `check-ignore` honours
+ * the developer's GLOBAL ignore file, so someone with `.uv-cache/` in their
+ * personal excludes would see this fence green while THIS repository's
+ * `.gitignore` — the file the failure message tells them to edit, and the only
+ * one their colleagues get — lacked the entry.
+ *
  * @param path - repository-relative path to test.
- * @returns true when the ignore rules match it.
+ * @returns the ignore rule source and pattern when the rules match, else null.
  */
-function isIgnored(path) {
+function ignoreRule(path) {
   try {
-    execFileSync('git', ['-C', REPO_ROOT, 'check-ignore', '--quiet', '--no-index', '--', path], { stdio: 'ignore' })
-    return true
+    const out = execFileSync(
+      'git',
+      ['-c', 'core.excludesFile=', '-C', REPO_ROOT, 'check-ignore', '--no-index', '--verbose', '--', path],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+    )
+    const [source, line, pattern] = out.trim().split(':')
+    return { source, line, pattern }
   } catch (error) {
     // Exit 1 is the documented "not ignored" answer. Anything else (128 for a
     // broken invocation, ENOENT for a missing git) is a broken fence rather
     // than a passing one, so it is re-thrown instead of read as a result.
-    if (error.status === 1) return false
+    if (error.status === 1) return null
     throw error
   }
 }
@@ -88,23 +114,41 @@ describe('persona workspace directories vs this repository\'s .gitignore', () =>
     )
   })
 
-  it('ignores every one of them, so a run cannot dirty the tracked surface', () => {
-    const unignored = dirs.filter(dir => !isIgnored(`${dir}/probe`))
+  it('ignores every one of them, from this repository\'s own .gitignore', () => {
+    const unignored = dirs.filter(dir => ignoreRule(`${dir}/probe`) === null)
     assert.deepEqual(
       unignored, [],
       'the persona instructs runs to create these directories in the session workspace, and this '
       + 'repository is that workspace whenever a run is driven from here — add them to .gitignore',
     )
+    // Which FILE grants the ignore is part of the claim: a rule inherited from
+    // `.git/info/exclude` covers one checkout and travels to nobody.
+    for (const dir of dirs) {
+      assert.equal(
+        ignoreRule(`${dir}/probe`).source, '.gitignore',
+        `${dir} is ignored by something other than the repository's own .gitignore, so the rule does `
+        + 'not travel with the repository',
+      )
+    }
   })
 
-  it('still reports an ordinary source file as unignored, so the check can fail', () => {
+  it('still reports ordinary tracked paths as unignored, so the check can fail', () => {
     // Without this, a `.gitignore` that had grown a catch-all would satisfy the
     // assertion above by ignoring the entire repository rather than by covering
     // the persona's directories.
-    assert.equal(
-      isIgnored('dsh-preset-parametria/package.json'), false,
-      'the ignore rules match an ordinary source file — they have grown broad enough to hide real work, '
-      + 'which makes the assertion above pass for the wrong reason',
-    )
+    //
+    // TWO controls, and the dot-prefixed one is not decoration: every path the
+    // assertion above tests begins with a dot, so a `.*` rule — far likelier
+    // than a bare `*`, and the exact shape someone reaches for when tidying
+    // away dot-directories — would satisfy it while leaving a plain-named
+    // artifact directory exposed. A control that shares the shape of the paths
+    // under test is the only one that catches that.
+    for (const control of ['dsh-preset-parametria/package.json', '.github/workflows/ci.yml']) {
+      assert.equal(
+        ignoreRule(control), null,
+        `the ignore rules match ${control} — they have grown broad enough to hide tracked work, `
+        + 'which makes the assertion above pass for the wrong reason',
+      )
+    }
   })
 })
