@@ -92,9 +92,23 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     // persona text or not at all — which makes their presence a fence, not a
     // style preference. The live run rediscovered both by trial (two denied uv
     // cache locations, then a denied Playwright driver spawn).
-    assert.match(persona, /UV_CACHE_DIR/, 'the persona must name the workspace-local uv cache the sandbox allows')
-    assert.match(persona, /sandbox_permissions/, 'the persona must name the per-call escalation the screenshot script needs')
-    assert.match(persona, /parametria-capture/, 'the persona must name the permission preset the profile adds')
+    //
+    // Matched as the WHOLE instruction rather than by keyword. A bare
+    // /UV_CACHE_DIR/ still matches a persona that misspells the variable or
+    // relocates the cache back outside the workspace — both of which reinstate
+    // the exact denial this text exists to prevent, while the fence stays
+    // green. The assignment is what the model has to emit, so the assignment is
+    // what gets pinned.
+    assert.ok(
+      persona.includes('$env:UV_CACHE_DIR = "$PWD\\.uv-cache"'),
+      'the persona must state the workspace-local uv cache assignment verbatim: '
+      + 'the default cache and any absolute path outside the session workspace are denied under workspace-write',
+    )
+    assert.match(
+      persona, /\bsandbox_permissions\b/,
+      'the persona must name the per-call escalation by its parameter name — it is the narrowest path past the '
+      + 'one refusal that has no relocation answer',
+    )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
 

@@ -15,6 +15,7 @@ import { describe, it } from 'node:test'
 import {
   PACKAGE_ROOT,
   composeBundles,
+  indexRows,
   readComposition,
   sameValue,
   webProfileBundlePatches,
@@ -161,6 +162,23 @@ describe('the `permission` restatement', () => {
       approval: 'ask',
     }))
     assert.notEqual(ourPresets['parametria-capture'].approval, 'never')
+  })
+
+  it('is the same preset name the persona tells the run to ask for', () => {
+    // The two halves of this fix live in different files: the profile patch
+    // declares the entry, the preset's persona tells the model to ask the user
+    // for it by name. Renaming either alone leaves a persona pointing at a
+    // preset that does not exist — a dead instruction the model would follow
+    // into an unknown-preset error, and nothing else here would notice.
+    const persona = indexRows(readComposition(join(PACKAGE_ROOT, 'preset', 'agent.cordis.yml')))
+      .get('persona').config.text
+    const added = Object.keys(ourPresets).filter(name => !Object.hasOwn(bundlePresets, name))
+    for (const name of added) {
+      assert.ok(
+        persona.includes(`\`${name}\` permission preset`),
+        `the profile adds the preset "${name}" but the persona never names it, so the run cannot ask for it`,
+      )
+    }
   })
 
   it('does not become the default: exactly one entry matches the composed pair', () => {
