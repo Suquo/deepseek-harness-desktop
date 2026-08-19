@@ -269,9 +269,37 @@ for (const [selector, target] of Object.entries(resolutions)) {
 
 const revalidation = patches.filter(patch => patch.tracksHarnessPin)
 
+// ----------------------------------------------------------------- bump surface
+//
+// Every manifest entry pinned EXACTLY to the current runtimePackageVersion has to
+// move in the same commit as the pin, or the tree is half-bumped. Enumerating them
+// turns "bump the pin" into a countable worklist instead of a search.
+
+const version = upstreamJson.runtimePackageVersion
+const manifests = ['package.json', ...(workspace.workspaces ?? []).map(name => `${name}/package.json`)]
+
+const bumpSurface = manifests.map(path => {
+  const manifest = readJson(path)
+  const fields = {}
+  for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
+    const pinned = Object.entries(manifest[field] ?? {})
+      .filter(([, range]) => range === version)
+      .map(([name]) => name)
+    if (pinned.length > 0) fields[field] = pinned.length
+  }
+  const pinnedResolutions = Object.entries(manifest.resolutions ?? {})
+    .filter(([selector, target]) => selector.includes(version) || target.includes(version))
+    .length
+  if (pinnedResolutions > 0) fields.resolutions = pinnedResolutions
+  const total = Object.values(fields).reduce((sum, count) => sum + count, 0)
+  return { path, fields, total }
+}).filter(entry => entry.total > 0)
+
+const bumpSurfaceTotal = bumpSurface.reduce((sum, entry) => sum + entry.total, 0)
+
 // ---------------------------------------------------------------------- render
 
-const report = { generatedAt: new Date().toISOString(), offline, harness, overlay, patches, warnings }
+const report = { generatedAt: new Date().toISOString(), offline, harness, overlay, patches, bumpSurface, warnings }
 
 if (asJson) {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
@@ -311,6 +339,11 @@ for (const patch of patches) {
     say(`                HASH-NAMED TARGET: ${patch.hashNamedTargets.join(', ')} — filename will change across releases`)
   }
   say(`                resolutions: ${patch.wiredResolutions.length}   yarn.lock patch: locators: ${patch.lockLocators}`)
+}
+say('')
+say(`BUMP SURFACE  ${bumpSurfaceTotal} manifest entries pinned exactly to ${upstreamJson.runtimePackageVersion} — all move in the pin-bump commit`)
+for (const entry of bumpSurface) {
+  say(`  ${entry.path}  ${Object.entries(entry.fields).map(([field, count]) => `${field}: ${count}`).join('   ')}`)
 }
 say('')
 if (warnings.length > 0) {
