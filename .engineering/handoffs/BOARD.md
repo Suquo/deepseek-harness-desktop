@@ -32,7 +32,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-6 delivered the #9 evidence half (PR #25 merged; #9 CLOSED). Remaining queue: #1 pending-live, #5/#6/#7 owner-gated, #23/#24 (filed follow-ups, low priority).
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
-- **Lane D (design, `dg/*`, RM-spawned)**: FREE.
+- **Lane D (design, `dg/*`, RM-spawned)**: **BUSY — gen-1 (maiden run) on #26** (Suquo rebrand: logo + wordmark at in-app DeepSeek logo sites; branch `dg/issue-26-suquo-rebrand`). In-fence = client visual surfaces; freezes out-of-fence remainder (icons/packaging/app name) for RM re-scope.
 
 ## Second run harvested (weaker model, 2026-08-19)
 
