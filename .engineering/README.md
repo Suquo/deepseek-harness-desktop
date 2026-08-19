@@ -15,6 +15,7 @@ This fork is being turned into the **Suquo Systems Parametria harness** — a cu
 | `reports/` | Implementation reports — what shipped and how |
 | `quick/` | Combined plan+impl+report files for `engineer-quick` runs |
 | `adrs/` | Architecture Decision Records, numbered `H-NNNN` — durable architectural truths. See [`adrs/README.md`](adrs/README.md) |
+| `handoffs/` | Fleet operating model: stable role charters (Repo Manager, lane resolvers) + `BOARD.md`, the RM-maintained live fleet state. See the fleet table in [`../AGENTS.md`](../AGENTS.md) |
 
 ## Tracker
 

@@ -28,6 +28,24 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - Commit before major changes of direction and keep the submodule pin update separate from desktop behavior changes.
 - Keep the repository topology and package-manager split consistent with the [owning Agent Note](.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-yarn-workspace.md).
 
+## Fleet roles (Suquo fork — charter + live-board succession model)
+
+This fork is maintained by a standing multi-agent workflow adopted from the suquo-systems-rust fleet. Each role has a **stable charter** (rules that rarely change) and derives its **live state** from `.engineering/handoffs/BOARD.md` plus live GitHub at session start — a fresh session needs no hand-written prompt.
+
+| Role | Launch (in a fresh session) | Charter | Cardinality |
+|---|---|---|---|
+| **Repo Manager** — reviews, verdicts, merges, maintains docs/BOARD.md, owns the standing upstream-tracking goal | `/loop /repo-manager` | `.engineering/handoffs/repo-manager-charter.md` | exactly one |
+| **Lane A Resolver (general)** — one issue at a time, end-to-end; `claude/` branches, ports 3400+ | `/loop /resolver` | `.engineering/handoffs/resolver-charter.md` | exactly one per lane |
+| **Lane B Resolver (Parametria harness)** — `parametria-harness` issues first, RM-assigned general issues otherwise; `pm/` branches, ports 3500+ | `/loop /resolver-parametria` | `.engineering/handoffs/resolver-parametria-charter.md` | exactly one per lane |
+| **Lane C Resolver (upstream-sync)** — submodule pin bumps, yarn `patches/` re-validation, anywhere-labs merge tracking; `up/` branches, ports 3600+ | RM-spawned agent only | `resolver-charter.md` + lane deltas at spawn | exactly one |
+| **Lane D Resolver (design)** — strictly frontend design (client-plugin CSS/layout/visual/theming; no Host behavior, no packaging); `dg/` branches, ports 3700+ | RM-spawned agent only | `resolver-charter.md` + lane deltas at spawn | exactly one |
+
+The `/loop` wrapper (self-paced, no interval) establishes autonomous ticking for the standing roles. Succession: a generation at its context ceiling drives to a durable state, notifies the operator, and stops — relaunch is one slash command in a fresh session. Durable state lives in pushed commits, GitHub issues/comments, and BOARD.md — never in session context. A Workspace Manager reviewer role is not yet established here.
+
+Fleet roles operate on GitHub at `Suquo/deepseek-harness-desktop` (branches, PRs, issues) — the chartered exception to the home-directory local-only git default. Never push to the `upstream` (anywhere-labs) remote.
+
+If you are reading this WITHOUT having been launched via one of the commands above, you are not one of these roles — do not claim queue items, post verdicts, or merge.
+
 ## Architectural Decisions (Suquo fork)
 
 This fork is maintained by Suquo as the base for the **Suquo Systems Parametria harness**. Durable fork-level decisions are recorded as ADRs in [`.engineering/adrs/`](.engineering/adrs/README.md) (numbered `H-NNNN`; upstream's own decision notes stay in `.agents/notes/` and are not edited here). The engineering loop is wired at both ends:
