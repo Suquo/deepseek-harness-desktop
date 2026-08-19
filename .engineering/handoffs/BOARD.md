@@ -10,9 +10,9 @@
 
 ## Now
 
-**AA-GENERATION SUCCESSION (2026-08-19 ~13:10 CEST): planned handoff so the successor session picks up the NEW named lane agents.** `.claude/agents/{resolver-general,resolver-parametria,resolver-upstream,resolver-design}.md` were committed this generation (`1667b63794`) but agent registries load at SESSION START — this session cannot spawn them (environment lesson, now recorded). Operator wants lane generations visible with clickable transcripts (ruling), which the named types provide.
+**AB-GENERATION BOOTED (2026-08-19 ~afternoon, cjjmaster, `/loop /repo-manager` — fresh session per the AA succession plan).** Boot verification clean: no open PRs, issues #1–#7 open and matching the board, #2 carries gen-1's claim + settled plan. **Lane B gen-2 SPAWNED under named agent type `resolver-parametria`** with the AA takeover brief (continue #2, adopt existing worktree + branch, rulings in force: `google/gemini-3.6-flash` via pi-ai route `input: [text, image]`; apiKeyEnv read-only-discover or document+flag). Brief consumed — removed from this section.
 
-**FIRST ACTION FOR THE SUCCESSOR RM — spawn Lane B gen-2 as agent type `resolver-parametria` with this takeover brief:** TAKEOVER on issue #2, continue (don't restart): claim + plan-settled comments on #2 (read `gh issue view 2 --comments`); branch `pm/issue-2-parametria-profile` pushed (empty); worktree EXISTS at `C:\Users\chidi\.pm-resolver-worktrees\issue-2` with install COMPLETE (verify, adopt); gen-1 stopped cleanly mid-investigation (locating pi-ai catalog for the openrouter gemini route) — re-derive from the research pack. Rulings in force: validator model `google/gemini-3.6-flash` via pi-ai route with `input: [text, image]`; apiKeyEnv discovered read-only or documented + flagged, never a freeze. Expected-touch: new preset dir at repo root + root package.json + .engineering docs; NEVER submodule/patches/upstream.json; dsh-plugin-desktop source = freeze-exit. Gate `corepack yarn check` foreground, tail in PR body, `Closes #2` bare. Post a one-line gen-2 takeover comment on #2.
+**AA-GENERATION SUCCESSION (2026-08-19 ~13:10 CEST): planned handoff so the successor session picks up the NEW named lane agents.** `.claude/agents/{resolver-general,resolver-parametria,resolver-upstream,resolver-design}.md` were committed this generation (`1667b63794`) but agent registries load at SESSION START — this session cannot spawn them (environment lesson, now recorded). Operator wants lane generations visible with clickable transcripts (ruling), which the named types provide.
 
 **AA-GENERATION BOOTED (2026-08-19, cjjmaster, `/loop /repo-manager` — first chartered RM generation, continuing in the bootstrap session's context).**
 
@@ -32,9 +32,9 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **RM**: AA generation LIVE (`/loop /repo-manager`, this session, cjjmaster).
+- **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — no generation, no branches.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned agent-mode gen-1 on #2** (branch `pm/issue-2-parametria-profile`), spawned 2026-08-19 after the operator's build green-light. Expected-touch: new preset dir at repo root + root package.json + .engineering docs. #7 rides; #1 seam wired placeholder-only.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned gen-2 (agent type `resolver-parametria`) TAKEOVER on #2** (branch `pm/issue-2-parametria-profile`, worktree `~/.pm-resolver-worktrees/issue-2` inherited from gen-1), spawned 2026-08-19 by the AB RM. Expected-touch: new preset dir at repo root + root package.json + .engineering docs. #7 rides; #1 seam wired placeholder-only.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
