@@ -10,6 +10,8 @@
 
 ## Now
 
+**PR #21 MERGED (2026-08-19 ~21:30): #9 item 1 delivered persona-only per owner ruling** — workspace-local UV_CACHE_DIR + per-call playwright escalation; the danger-full-access preset row REJECTED (acknowledgement dialog is key-gated; owner keeps it), rationale fenced in the preset tests. #9 stays open on the evidence half (separate plugin-shaped slice).
+
 **PR #19 MERGED (2026-08-19 ~20:15): #18 delivered — validator maxDepth 0→1 (the live-run blocker on the vision route).** Grounded at upstream source (absolute child-depth cap; README: 0 forbids delegation); fence executes upstream's own depth functions. New: **#20** (sibling-row depth hole, disclosed in review). **#1 now closes on the owner's NEXT profile run** — the validator should spawn and answer through parametria-vision/gemini-3.6-flash. Harvest of run 1 fully recorded (#1/#6/#9 comments).
 
 **PR #17 MERGED (2026-08-19 ~19:01, admin bypass): #16 delivered — every marginal win32 test budget re-sized from measurement.** Final band: market 20s/1.37x · desktop-plugins 20s/1.50x · lifecycle-events 15s/1.80x · electron-runtime 10s/1.80x — none marginal, none inflated; POSIX arms untouched. The 14.9x stall class is now measured directly (caught live), not inferred. Resolver's 15s-over-RM's-presumptive-20s accepted on measurement (different cost class). Lane A FREE; worktree registry EMPTY.
@@ -28,7 +30,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned gen-4 on #9 item 1** (sandbox policy for node/uv/playwright; branch `pm/issue-9-sandbox-policy`; non-closing PR). Expected-touch: dsh-preset-parametria/** + .engineering docs. #20 queued behind it; #1 pending-live on the owner's next run.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-4 delivered #9 item 1 (PR #21 merged, persona-only per ruling). #9 open on the evidence half alone; #20 claimable next; #1 pending-live on the owner's next run.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
