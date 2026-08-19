@@ -27,3 +27,13 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - Keep graphical application launch explicit. Builds, typechecks, unit tests, and Loader smokes must remain headless-safe.
 - Commit before major changes of direction and keep the submodule pin update separate from desktop behavior changes.
 - Keep the repository topology and package-manager split consistent with the [owning Agent Note](.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-yarn-workspace.md).
+
+## Architectural Decisions (Suquo fork)
+
+This fork is maintained by Suquo as the base for the **Suquo Systems Parametria harness**. Durable fork-level decisions are recorded as ADRs in [`.engineering/adrs/`](.engineering/adrs/README.md) (numbered `H-NNNN`; upstream's own decision notes stay in `.agents/notes/` and are not edited here). The engineering loop is wired at both ends:
+
+- **`engineer-plan`** reads relevant ADRs and lists them in each plan's `§ Constraints` section. Plans that contradict an accepted ADR must surface the conflict explicitly.
+- **`engineer-implement`** and **`engineer-quick`** include a mandatory `## Architectural Decisions Surfaced` section in their report. Decisions that pass the 3-criteria gate (hard to reverse / surprising without context / real trade-off) become new ADRs before the run is marked complete.
+- **`improve-codebase-architecture`** and **`grill-with-docs`** read ADRs to avoid re-litigating decided questions.
+
+The pinned-upstream rule above ("never edit `deepseek-harness/` from a desktop branch") is exactly the shape of decision this folder records — see [H-0001](.engineering/adrs/H-0001-fork-strategy-parametria-harness-overlay.md) for the fork strategy. Transient implementation notes belong in `.engineering/plans/` and `.engineering/reports/` — those are work artifacts, not decisions. Engineering config (tracker, validation matrix, release contract) lives in [`.engineering/config.yml`](.engineering/config.yml).

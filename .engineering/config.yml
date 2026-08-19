@@ -1,0 +1,42 @@
+# deepseek-harness-desktop engineering loop config
+# Read by ~/.claude/skills/engineer-* skills.
+# See Documents/.context/ENGINEERING.md for the methodology and schema.
+# Conventions mirrored from suquo-systems-rust/.engineering (config shape,
+# adrs/ ledger with prefixed numbering, plans/PRDs/reports/quick layout).
+
+tracker: github
+
+github:
+  repo: Suquo/deepseek-harness-desktop
+  default_labels: [feature]
+  default_milestone: ~
+
+# Outer Yarn 4 workspace (AGENTS.md: always invoke through Corepack).
+# The pinned deepseek-harness/ submodule keeps its own pnpm workspace and is
+# never edited from desktop branches — upstream ops go through the root
+# upstream:* scripts only.
+validation:
+  build: corepack yarn build
+  typecheck: corepack yarn typecheck
+  lint: ~ # no lint script in this workspace
+  test: corepack yarn test
+  e2e: ~ # no e2e suite; packaging smokes live in the release contract below
+
+# Full headless gate (layout check + fabric + market + desktop plugin check,
+# which includes build, typecheck, tests, runtime-closure, CLI, Loader,
+# profile-boot, and license verifications). Run before release claims or
+# submodule-pin changes; heavier than the per-change validation loop above.
+release_contract:
+  static:
+    - corepack yarn check
+  packaged:
+    - corepack yarn dist:win # NSIS installer (Windows x64)
+    - corepack yarn dist:win-portable
+    # macOS: corepack yarn dist:mac / dist:mac-smoke (run on a mac)
+
+threshold:
+  quick_max_files: 3
+  quick_max_lines: 50
+
+paths:
+  decisions_dir: .engineering/adrs # ADRs, numbered H-NNNN — see adrs/README.md
