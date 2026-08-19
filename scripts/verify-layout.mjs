@@ -52,11 +52,26 @@ for (const name of ['dsh-community-fabric', 'dsh-community-market', 'dsh-preset-
     fail(`the root check script must run the ${name} gate`)
   }
 }
-// The root `test` and `typecheck` chains are pinned by exact string in
-// `dsh-plugin-desktop/tests/package.spec.ts`, so a workspace can only join
-// either chain in a change that moves the pinned string with it.
-// `dsh-preset-parametria` joined the `test` chain that way; it has no
-// `typecheck` script, so the `typecheck` chain is complete as pinned.
+// The same, one level down: a workspace whose own gate runs under the root
+// `check` can still define unit tests that `corepack yarn test` never reaches,
+// which is how `dsh-preset-parametria` shipped 64 fences the documented
+// unit-test command silently skipped. Both root chains are pinned by exact
+// string in `dsh-plugin-desktop/tests/package.spec.ts`, so a workspace joins
+// one only in a change that moves the pinned string with it — these guards
+// are what force that change to happen.
+for (const [name, manifest] of [
+  ['dsh-community-fabric', fabric],
+  ['dsh-community-market', market],
+  ['dsh-preset-parametria', preset],
+  ['dsh-plugin-desktop', plugin],
+]) {
+  for (const chain of ['test', 'typecheck']) {
+    if (manifest.scripts?.[chain] === undefined) continue
+    if (!workspace.scripts[chain].includes(`yarn workspace ${name} ${chain}`)) {
+      fail(`the root ${chain} script must run the ${name} ${chain}`)
+    }
+  }
+}
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the

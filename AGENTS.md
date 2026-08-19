@@ -34,7 +34,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 
 | Job | Runner | What it runs |
 |---|---|---|
-| `changes` | ubuntu-latest | Classifies the diff through `scripts/classify-ci-changes.mjs`; a documentation-only diff skips every product job |
+| `changes` | ubuntu-latest | Classifies the diff through `scripts/classify-ci-changes.mjs` into a `product` output the other jobs read |
 | `check` | ubuntu-latest | `yarn check` — the complete headless gate |
 | `desktop-windows` | windows-latest | `yarn check`, then `dist:win` and `dist:win-portable` reusing its build |
 | `desktop-macos` | macos-latest | `yarn check`, then the unsigned `dist:mac-smoke`. No signing secrets reach CI |
@@ -42,12 +42,14 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 
 The gate therefore runs on both a Linux and a Windows runner. Windows is the primary development platform, so a Windows-only regression is caught by `desktop-windows` rather than by `check`.
 
+The two jobs skip documentation-only diffs by different mechanisms, and the difference matters if these are ever made required checks: `check` has **no** job-level `if`, so it always runs and always reports — its steps are individually gated, and a documentation-only diff reduces it to a single announcing step. The three packaging jobs carry a job-level `if`, so a documentation-only diff leaves them *skipped* rather than passed.
+
 **Every job that runs the gate must check out the submodule (`submodules: recursive`).** The gate reads the pinned upstream checkout, so a job without it fails at the gate's first step:
 
-- `scripts/verify-layout.mjs` — which is `check:layout`, the first command in `yarn check` — reads `deepseek-harness/package.json` (L20), then asserts the checked-out commit, working-tree cleanliness, and `origin` URL against `upstream.json` (L115-131).
+- `scripts/verify-layout.mjs` — which is `check:layout`, the first command in `yarn check` — reads `deepseek-harness/package.json`, then asserts the submodule index entry, the checked-out commit, working-tree cleanliness, the `origin` URL, and the upstream package version against `upstream.json`.
 - `dsh-preset-parametria`'s drift tests read upstream fixtures such as `deepseek-harness/apps/cli/config/agent-presets/standard/agent.cordis.yml` and `deepseek-harness/packages/bundle/base/cordis.patch.yml`.
 
-The workflow's job shape is fenced by `dsh-plugin-desktop/tests/package.spec.ts` (the `runs the full gate once before reusing native packaging outputs on Windows` and `skips product packaging only for documentation-only changes` cases). Editing the workflow means moving those assertions in the same change.
+Only *part* of the workflow is fenced. `dsh-plugin-desktop/tests/package.spec.ts` pins the packaging jobs' shape (`runs the full gate once before reusing native packaging outputs on Windows`) and the documentation-only classifier's behaviour (`skips product packaging only for documentation-only changes`), so edits there must move those assertions in the same change. Nothing asserts the existence of the `check` job, any runner choice, or any `submodules: recursive` line — the submodule rule above is enforced only by the gate failing on a runner that omits it, not by a test.
 
 CI is headless throughout — no job launches the GUI, per the headless-safety rule above. `master` currently carries no branch protection or ruleset, so CI results are advisory rather than blocking; until required status checks are configured, the resolver charter's rule stands that "required CI" means the full local gate pasted in the pull-request body.
 

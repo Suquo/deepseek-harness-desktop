@@ -146,10 +146,11 @@ composition, needs nothing here: the `dsh-web-app` bundle mounts it, and
 no build step and no runtime dependency; the package is configuration plus one
 installer.
 
-The root `corepack yarn test` does **not** reach this workspace yet: that
-script is pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`,
-so the root chain and that pinned string have to move in one change. Tracked as
-issue #9, item 2.
+The root `corepack yarn test` reaches this workspace too. That script is pinned
+by exact string in `dsh-plugin-desktop/tests/package.spec.ts`, so the root chain
+and that pinned string had to move in one change — and `scripts/verify-layout.mjs`
+now fails the gate if any workspace defining a `test` script drops out of the
+root chain again.
 
 | Fence | What it holds |
 |---|---|
