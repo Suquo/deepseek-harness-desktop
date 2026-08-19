@@ -47,8 +47,9 @@ const DECLARED_DELTA = {
   /** Rows kept, with a different config. Key = flattened row id, value = the reason. */
   reconfigured: {
     persona:
-      'the run states its own shape: load the skill, and delegate visual checks to '
-      + 'subagent_validator rather than subagent',
+      'the run states its own shape: load the skill, delegate visual checks to '
+      + 'subagent_validator rather than subagent, and meet the two sandbox facts this '
+      + 'host has (workspace-local uv cache; per-call escalation for the screenshot script)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
       + 'and registers into this preset\'s nearer registry layer',
@@ -85,6 +86,15 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     const persona = ours.get('persona').config.text
     assert.match(persona, /subagent_validator/, 'the persona must route visual checks to the validator')
     assert.match(persona, /suquo-systems-parametria/, 'the persona must name the skill the run depends on')
+    // The sandbox half of issue #9 item 1. Composition cannot inject a
+    // non-`DSH_*` variable into a shell call and the sandbox seam has no
+    // extra-writable-root vocabulary, so these two facts reach the run as
+    // persona text or not at all — which makes their presence a fence, not a
+    // style preference. The live run rediscovered both by trial (two denied uv
+    // cache locations, then a denied Playwright driver spawn).
+    assert.match(persona, /UV_CACHE_DIR/, 'the persona must name the workspace-local uv cache the sandbox allows')
+    assert.match(persona, /sandbox_permissions/, 'the persona must name the per-call escalation the screenshot script needs')
+    assert.match(persona, /parametria-capture/, 'the persona must name the permission preset the profile adds')
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
 

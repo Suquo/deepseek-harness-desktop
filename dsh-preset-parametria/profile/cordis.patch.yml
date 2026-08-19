@@ -87,6 +87,71 @@
               off:
               high: high
 
+# ── the run's own permission preset (issue #9 item 1) ───────────────────────
+#
+# WHAT THE LIVE RUN DID, and why this row exists. Export `dsh-session-853a0bc2`
+# (the first Parametria profile run) hit three sandbox refusals under the
+# composed `workspace-write` default and the operator answered by typing
+# `/permission danger-full-access` mid-run (L197). That shipped preset does not
+# only unconfine the filesystem — it bundles `approval: never`, whose own
+# context contribution reads "Approval prompts are disabled in this session:
+# actions that require approval are rejected automatically — do not request
+# sandbox escalation (do not set `sandbox_permissions`)". So the one control
+# that could have kept the widening down to a single command was switched off
+# by the same keystroke that widened everything. `parametria-capture` is that
+# same file access with the approval channel LEFT ON.
+#
+# WHY A WIDER MODE IS UNAVOIDABLE AT ALL — measured, not assumed. Under
+# `workspace-write` on win32 the sandbox seam resolves to the ACL
+# restricted-token runner, and that backend documents its own hard boundary:
+# libuv/Python piped stdio uses NAMED pipes, whose Win32 default security
+# descriptor grants the client end write access no restricting SID carries, so
+# "a confined process cannot capture a grandchild's output through a pipe;
+# tools that must capture output cannot run confined"
+# (`deepseek-harness/packages/sandbox/sandbox-windows-acl/README.md`). The
+# skill's `screenshot-definition.py` is exactly that shape: Playwright's sync
+# API spawns its driver with piped stdio, and the live call died in
+# `asyncio/windows_utils.py` `Popen.__init__` with `PermissionError(13, 'Access
+# is denied')` — classified correctly by the tool layer as a sandbox denial
+# with the escalation hint attached (seq 201). Every screenshot call after the
+# switch succeeded (seq 215 onward). No writable-root grant could have fixed
+# it, because this seam HAS no such grant: `SandboxMode` is a file-effect
+# vocabulary of exactly three values and `dsh-sandbox-policy` documents "extra
+# writable roots are not part of `SandboxExecutionPolicy`".
+#
+# WHAT THIS ROW IS NOT. It is a table entry, not a default: `defaultPreset` is
+# deliberately absent below, so the profile still boots sessions on the
+# composed `workspace-write` + `ask` pair, and this preset costs nothing until
+# a human selects it. The narrowest path stays the per-call one — the model
+# retrying one denied command with `sandbox_permissions` + `justification`,
+# which the persona now names — and this row is the whole-run alternative for a
+# capture-heavy session, not a replacement for it. Redefining the shipped
+# `danger-full-access` entry instead was rejected: an operator who types a
+# shipped preset's name must get the meaning that name has everywhere else.
+#
+# An id-targeted patch REPLACES the whole config, so all three shipped presets
+# are restated verbatim; `tests/profile-patch.test.mjs` diffs that restatement
+# against the pinned bundle in BOTH directions and pins the one added entry.
+# Declaration ORDER is load-bearing beyond readability: `derive()` returns the
+# FIRST table entry matching the current (sandbox, approval) pair, so an entry
+# placed above `workspace-write` and sharing its pair would capture the
+# inferred default. The fence asserts exactly one entry matches that pair.
+- id: permission
+  config:
+    presets:
+      read-only:
+        sandbox: read-only
+        approval: ask
+      workspace-write:
+        sandbox: workspace-write
+        approval: ask
+      danger-full-access:
+        sandbox: danger-full-access
+        approval: never
+      parametria-capture:
+        sandbox: danger-full-access
+        approval: ask
+
 # The session's own default model is deliberately NOT patched here.
 #
 # `dsh-base` leaves it at `deepseek-official`/`deepseek-v4-flash` — text-only,

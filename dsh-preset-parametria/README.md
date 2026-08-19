@@ -41,7 +41,7 @@ yarn workspace dsh-preset-parametria install:profile --force    # overwrite loca
 Then pick **Parametria** in the desktop profile picker (selecting a profile
 restarts the app), or run `dsh --profile parametria`.
 
-## The three things it guarantees
+## The four things it guarantees
 
 ### 1. A validator that can actually see
 
@@ -111,27 +111,64 @@ produces successful subagent image reads — pinning a vision model for the
 session would make that untestable, and a saved user selection outranks the
 composition row anyway.
 
+### 4. A run whose sandbox refusals do not cost the approval channel
+
+The first live run of this profile hit three sandbox refusals under the composed
+`workspace-write` default and ended with the operator typing
+`/permission danger-full-access` mid-run (export `dsh-session-853a0bc2`,
+L71/L82/seq 201/L197). That is a worse trade than it looks: the shipped
+`danger-full-access` preset bundles `approval: never`, and that policy's own
+context contribution tells the model *"do not request sandbox escalation (do not
+set `sandbox_permissions`)"* — so the keystroke that unconfined the filesystem
+also switched off the one control that could have kept the next widening down to
+a single command.
+
+**What the sandbox vocabulary can and cannot express**, since this determines
+the whole shape of the fix:
+
+- `SandboxMode` is `read-only` / `workspace-write` / `danger-full-access` and
+  governs **file effects only**. `dsh-sandbox-policy` states plainly that *extra
+  writable roots are not part of `SandboxExecutionPolicy`* — so "grant the uv
+  cache path" is not a thing composition can say, on any surface.
+- `dsh-shell-env` collects only `DSH_*`-prefixed variables into shell calls
+  (the prefix is enforced, not conventional), and no shell executor exposes an
+  environment map in config. So `UV_CACHE_DIR` cannot be injected by
+  composition either.
+
+Two of the three refusals therefore have a **relocation** answer rather than a
+policy answer, and the third has no answer at all short of a wider mode:
+
+| Refusal | Why | What this profile does |
+|---|---|---|
+| uv cache at `%LOCALAPPDATA%\uv\cache` | outside the session workspace | persona sets `$env:UV_CACHE_DIR = "$PWD\.uv-cache"` before `uv run` — the live run proved a workspace-local cache works unescalated |
+| uv cache at `C:\tmp\uv-cache` | same, and the ambient temp root is never an implicit grant (the runner rewrites `TMP`/`TEMP` to a private per-session directory) | same |
+| `screenshot-definition.py` (Playwright) | the win32 ACL backend documents it: piped stdio for a confined process's children uses named pipes whose default SD denies the client-end write, so *"tools that must capture output cannot run confined"* | persona names the per-call `sandbox_permissions` retry; the profile adds the `parametria-capture` preset for a capture-heavy session |
+
+`parametria-capture` is `danger-full-access` **+ `ask`** — the same file access
+the operator reached for, with the approval channel left on. It is a table
+entry, not a default: `defaultPreset` stays absent, sessions still boot on
+`workspace-write` + `ask`, and the preset costs nothing until a human selects
+it. The shipped `danger-full-access` entry is restated unchanged rather than
+redefined — an operator typing a shipped preset's name must get the meaning that
+name has everywhere else.
+
 ## What this deliberately does not ship
 
-The originating issue also names a *"permission preset, and any
-evidence/screenshot plumbing the skill's playwright scripts need"*. Neither
-appears in the patch layer, and that is a decision rather than an omission.
-**Issue #9 is the tracking surface** for the ones that are genuinely deferred:
+The originating issue also names *"any evidence/screenshot plumbing the skill's
+playwright scripts need"*, which does not appear in the patch layer — a decision
+rather than an omission. **Issue #9 is the tracking surface** for what is
+genuinely deferred:
 
-- **Permission preset** — `dsh-base` already composes `dsh-permission-presets`
-  with `read-only` / `workspace-write` / `danger-full-access`, and
-  `dsh-sandbox-policy` already defaults to `workspace-write` rooted at the
-  session's working directory. There is no parametria-specific *configuration*
-  to add: the preset roster and the sandbox mode are exactly what a Parametria
-  run wants already, and restating them would only create a second place to
-  keep in sync.
 - **Command-level policy for node / uv / playwright** — allowing or denying
-  specific commands is a `tools/pre-execute` interception, not a config field.
-  It needs a desktop-owned plugin, which is Increment 3 of the harness research
-  (`parametria-tools`), not profile composition. Issue #9, item 1.
-- **Screenshot plumbing** — the skill drives Playwright through the shell
-  today. Replacing that with a harness-managed screenshot tool with a readiness
-  probe is the same Increment 3 follow-up. Issue #9, item 1.
+  *specific commands* is a `tools/pre-execute` interception, not a config field,
+  and auto-answering an escalation would mean a second `approval/request`
+  answerer beside the desktop's own (upstream: compose one terminal answerer per
+  deployment). Both need a desktop-owned plugin — Increment 3 of the harness
+  research (`parametria-tools`), not profile composition.
+- **Screenshot plumbing** — the skill drives Playwright through the shell today
+  and writes the PNG to a workspace-relative path of its own choosing. Where run
+  evidence *lands* is a different mechanism from what the run is *allowed to
+  do*; it is not composition, so it is not in this package. Issue #9, item 1.
 - **The skill itself** — the mount seam ships, the skill does not; issue #7
   owns the migration, for the shadowing reason given above.
 
@@ -156,7 +193,7 @@ root chain again.
 |---|---|
 | `tests/preset-drift.test.mjs` | Exhaustive **two-direction** diff against the pinned upstream `standard` preset. Rows added, dropped, or reconfigured must appear in a closed `DECLARED_DELTA` with a stated reason; shared rows must keep the same plugin name, `disabled` expression, group shape, and `isolate` realm. Also holds the validator row's pin and the empty skill root. |
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
-| `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. |
+| `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. For `permission` specifically: a two-direction diff of the preset table against the bundle's, the added entry's exact shape, its `approval` never becoming `never`, and exactly one entry matching the composed `(workspace-write, ask)` pair — because `derive()` returns the FIRST match, so a mis-ordered entry would silently capture the inferred default. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. |
 
 Every drift fence reads the pinned upstream checkout, so

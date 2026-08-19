@@ -116,16 +116,77 @@ describe('the `llm-pi-ai` restatement', () => {
   })
 })
 
+describe('the `permission` restatement', () => {
+  const bundlePresets = bundles.get('permission').config.presets
+  const ourPresets = patched.get('permission').config.presets
+
+  it('replaces the whole config, so `presets` is the only key on either side', () => {
+    // The bundle row carries `presets` alone. If a future pin gives it a
+    // second key — `defaultPreset`, a label table, anything — this patch would
+    // silently discard it, which is what this assertion turns into a red gate
+    // rather than a boot-time surprise.
+    assert.deepEqual(Object.keys(bundles.get('permission').config), ['presets'])
+    assert.deepEqual(Object.keys(patched.get('permission').config), ['presets'])
+  })
+
+  it('carries every shipped preset forward with its exact bundled meaning', () => {
+    // Direction one: nothing the bundle shipped may be dropped or reshaped by
+    // the restatement. Compared per entry rather than as one object so a
+    // failure names the preset that changed.
+    for (const [name, spec] of Object.entries(bundlePresets)) {
+      assert.ok(Object.hasOwn(ourPresets, name), `the restatement drops the shipped preset "${name}"`)
+      assert.ok(
+        sameValue(ourPresets[name], spec),
+        `the restatement changes the shipped preset "${name}":\n`
+        + `  ours:   ${JSON.stringify(ourPresets[name])}\n`
+        + `  bundle: ${JSON.stringify(spec)}`,
+      )
+    }
+  })
+
+  it('adds exactly one preset of its own', () => {
+    // Direction two: an entry that appears here without appearing in this list
+    // is a permission surface nobody reviewed.
+    const added = Object.keys(ourPresets).filter(name => !Object.hasOwn(bundlePresets, name))
+    assert.deepEqual(added, ['parametria-capture'])
+  })
+
+  it('gives that preset full file access with the approval channel LEFT ON', () => {
+    // The whole point of the row. `danger-full-access` alone would be the
+    // shipped preset the live run already selected; `approval: ask` is the
+    // difference, and the shipped entry's `never` is what told that run's model
+    // not to request a per-call escalation at all.
+    assert.ok(sameValue(ourPresets['parametria-capture'], {
+      sandbox: 'danger-full-access',
+      approval: 'ask',
+    }))
+    assert.notEqual(ourPresets['parametria-capture'].approval, 'never')
+  })
+
+  it('does not become the default: exactly one entry matches the composed pair', () => {
+    // `defaultPreset` is absent on both sides, so the plugin infers it — and
+    // `derive()` returns the FIRST entry matching (sandbox, approval), so a new
+    // entry sharing the composed pair and declared earlier would silently
+    // become the boot default. The composed pair is workspace-write + ask:
+    // `sandbox-policy` mode and `approval` policy both key off the same
+    // DSH_PERMISSION_MODE expression, whose fallback is workspace-write.
+    assert.equal(bundles.get('permission').config.defaultPreset, undefined)
+    assert.equal(patched.get('permission').config.defaultPreset, undefined)
+    assert.equal(
+      bundles.get('approval').config.policy.source,
+      "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'",
+    )
+    const matching = Object.entries(ourPresets)
+      .filter(([, spec]) => spec.sandbox === 'workspace-write' && spec.approval === 'ask')
+      .map(([name]) => name)
+    assert.deepEqual(matching, ['workspace-write'])
+  })
+})
+
 describe('capabilities the README says the base composition already provides', () => {
   // Each of these is why the patch layer stays as small as it is. The README
   // states them as reasons for NOT configuring something, which makes each one
   // a checkable claim rather than a comment.
-  it('already composes the permission presets, so the profile adds none', () => {
-    assert.deepEqual(Object.keys(bundles.get('permission').config.presets).sort(), [
-      'danger-full-access', 'read-only', 'workspace-write',
-    ])
-  })
-
   it('already defaults the sandbox to workspace-write at the session\'s own root', () => {
     assert.equal(bundles.get('sandbox-policy').config.mode.source, "process.env.DSH_PERMISSION_MODE ?? 'workspace-write'")
     assert.equal(bundles.get('sandbox-policy').config.workspaceRoot.source, 'process.cwd()')

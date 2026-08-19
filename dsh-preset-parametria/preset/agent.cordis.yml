@@ -40,6 +40,8 @@
 
       If a `subagent_validator` result reports refused image reads, treat the run as unvalidated and say so. Never restate a child's conclusion about an image the child could not open.
 
+      Two shell facts about this host, so you do not rediscover them by trial. Set `$env:UV_CACHE_DIR = "$PWD\.uv-cache"` before every `uv run`: the default cache under `%LOCALAPPDATA%` and any path such as `C:\tmp` sit outside the session workspace, so under the standing `workspace-write` policy uv cannot initialise its cache there and fails before the script starts. A workspace-local cache needs no wider access and survives between sessions in the same workspace. Second, the skill's Playwright screenshot script cannot run confined at all on Windows: it spawns its browser driver with piped stdio, which the restricted-token sandbox denies as `Access is denied` no matter which directory the screenshot is written to. That one command is the case the escalation surface exists for — retry that exact command once with `sandbox_permissions` set to the narrowest wider mode plus a `justification`, or ask the user to select the `parametria-capture` permission preset for a capture-heavy session. Never spend an escalation on the uv cache: it has a workspace-local answer.
+
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
   config:
