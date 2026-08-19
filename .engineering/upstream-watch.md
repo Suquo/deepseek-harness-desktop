@@ -106,10 +106,23 @@ decision is "inherit" or "adapt".
    submodule + `git add deepseek-harness` from the parent). This updates which commit
    we point at; it never edits upstream files, which stays forbidden.
 2. Update `upstream.json`: `commit`, `sourceVersion`, `runtimePackageVersion`.
-3. Move the whole **bump surface** the script enumerated — at `0.1.0-rc.7` that is
-   **166** entries: 96 exact `@deepseek-ai/dsh*` dependency pins in
-   `dsh-plugin-desktop/package.json`, 61 dev+peer pins in
-   `dsh-community-market/package.json`, and 9 root `resolutions` selectors. Note the
+3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
+   **This paragraph is the authoritative statement of what that surface holds; the
+   rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
+   restating the arithmetic.** At `0.1.0-rc.7` it is **166** entries:
+
+   | Where | Entries | Enforced by |
+   |---|---|---|
+   | `dsh-plugin-desktop/package.json` `dependencies` | 96 | `pinSurface` |
+   | `dsh-community-market/package.json` `devDependencies` | 32 | `pinSurface` |
+   | `dsh-community-market/package.json` `peerDependencies` | 29 | `pinSurface` |
+   | root `package.json` `resolutions` selectors | 9 | `patchedPackages` |
+   | **total** | **166** | |
+
+   The middle two are the "61 dev+peer" the script prints as one line. Both enforcing
+   lists live in `scripts/verify-layout.mjs` and hold package **names**, not counts,
+   so they are version-independent and move only when upstream's package set moves.
+   Note the
    script counts against whatever `upstream.json` currently says, so after step 2 it
    counts entries already moved to the **new** version: it starts near zero and is
    done when it reaches the full surface. The independent check is that the old
@@ -130,9 +143,11 @@ submodule's origin URL, and the submodule's `package.json` version against
 
 - every `@deepseek-ai/dsh*` entry in **every** workspace manifest, across all four
   dependency fields, carries `runtimePackageVersion`;
-- the surface itself is snapshotted `[manifest, field, count]`, so an entry appearing
-  or disappearing fails too — without that, the version assertion would pass
-  vacuously over a field that had lost its entries;
+- the surface itself is snapshotted as the sorted package **names** per manifest and
+  field (`pinSurface`), so an entry appearing, disappearing, or being swapped for
+  another at the same count fails too — without that, the version assertion would
+  pass vacuously over a field that had lost its entries, and a rename inside a
+  release would read as no change at all;
 - each root `resolutions` selector naming the family is checked as one unit with its
   patch: selector range (exact or caret), `patch:` locator version, patch **filename**
   version, and the file's existence;
@@ -154,12 +169,8 @@ lands, the first hold-back will need the guard widened in the same PR that makes
 The guard selects by package **identity**, never by "range equals the current pin":
 `scripts/upstream-watch.mjs` enumerates by version because it builds a forward
 worklist, but a fence written that way would skip exactly the entries a half-done bump
-left on the old version. The three counts live in `pinSurface` in
-`scripts/verify-layout.mjs` — that is the enforced copy of the numbers in step 3.
-
-Its one acknowledged gap: an addition and a removal of equal size, in the same field,
-in the same commit, move package identity without moving the count. That is a manifest
-edit rather than a half-done bump, and the surviving entries are still held to the pin.
+left on the old version. `pinSurface` and `patchedPackages` in
+`scripts/verify-layout.mjs` are the enforced copy of the [step 3 table](#bump-surface).
 
 ## Patch re-validation checklist
 
@@ -250,11 +261,12 @@ The pin-bump PR that moves the pin updates them in the same PR — that is the o
 exception to "a pin-bump PR changes nothing else", because leaving them behind makes
 this document lie about the tree it describes:
 
-- the **166 / 96 / 61 / 9** bump-surface numbers (re-read them off the script) — and
-  with them `pinSurface` in `scripts/verify-layout.mjs`, which carries the same
-  counts split as 96 / 32 / 29. The gate holds `pinSurface` against the **tree**, so
-  a stale `pinSurface` fails `check:layout` loudly; nothing reads this document, so
-  its copy of the numbers is kept in step by this list and nothing else;
+- the [bump-surface table](#bump-surface) in step 3 (re-read the numbers off the
+  script). Only that table states them; nothing reads this document, so it is kept in
+  step by this list and nothing else. Its two enforcing lists in
+  `scripts/verify-layout.mjs` need no edit for a version change — they hold names —
+  but a real change to upstream's package set moves them, and the gate holds them
+  against the **tree**, so a stale one fails `check:layout` loudly;
 - the **per-patch table**, including its "as of `0.1.0-rc.7`" heading and any patch
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.

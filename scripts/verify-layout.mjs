@@ -172,26 +172,207 @@ for (const [path, manifest] of manifests) {
 // field that lost its entries, a workspace that stopped depending on the family,
 // or a manifest deleted outright — so the surface itself is snapshotted, exactly
 // as the `workspaces` list above is. An entry appearing, an entry disappearing,
-// or a whole manifest/field joining or leaving fails here before the version
-// assertion gets the chance to pass over nothing. Counts rather than names: the
-// 157 names would be a second copy of two manifests, churned by every release.
-// The gap that leaves is one addition plus one removal of equal size, in the same
-// field, in the same commit — which moves package identity rather than the pin,
-// and whose surviving entries the version assertion below still holds to the pin.
-// These three numbers are 157 of the 166 entries `.engineering/upstream-watch.md`
-// quotes as the bump-surface worklist: its 61 is this 32 + 29, and its remaining 9
-// are the root `resolutions` selectors, fenced by `patchedPackages` below. Nothing
-// reads that document, so the two copies are kept in step by the maintenance list
-// it carries — not by this gate.
+// an entry SWAPPED for another at the same count, or a whole manifest/field
+// joining or leaving fails here, before the version assertion gets the chance to
+// pass over nothing.
+//
+// Names, not counts. A count misses an equal-size add+remove inside one field —
+// an upstream package renamed within a release reads as no change at all, while
+// the incoming entry sails through the version check on its way in. Names are
+// version-INDEPENDENT, so this list survives a pin bump untouched and moves only
+// when upstream's package SET moves, which is exactly the event worth reviewing.
+//
+// This is the enforced copy of the dependency half of the bump surface described
+// in `.engineering/upstream-watch.md` (trial pin bump, step 3), which is the
+// authoritative statement of what that surface holds; the `resolutions` half is
+// `patchedPackages` below.
 const pinSurface = [
-  ['dsh-plugin-desktop/package.json', 'dependencies', 96],
-  ['dsh-community-market/package.json', 'devDependencies', 32],
-  ['dsh-community-market/package.json', 'peerDependencies', 29],
+  ['dsh-plugin-desktop/package.json', 'dependencies', [
+    '@deepseek-ai/dsh',
+    '@deepseek-ai/dsh-agent',
+    '@deepseek-ai/dsh-agent-default-model',
+    '@deepseek-ai/dsh-agent-presets',
+    '@deepseek-ai/dsh-anonymous-user-id',
+    '@deepseek-ai/dsh-api-gateway',
+    '@deepseek-ai/dsh-api-remotes',
+    '@deepseek-ai/dsh-app-boot',
+    '@deepseek-ai/dsh-atomic-write',
+    '@deepseek-ai/dsh-attachment',
+    '@deepseek-ai/dsh-base',
+    '@deepseek-ai/dsh-bash-local',
+    '@deepseek-ai/dsh-brand',
+    '@deepseek-ai/dsh-client-connection',
+    '@deepseek-ai/dsh-client-locale',
+    '@deepseek-ai/dsh-client-modules',
+    '@deepseek-ai/dsh-client-runtime',
+    '@deepseek-ai/dsh-client-schema-form',
+    '@deepseek-ai/dsh-client-ui-attachment',
+    '@deepseek-ai/dsh-client-ui-commands',
+    '@deepseek-ai/dsh-client-ui-conversation',
+    '@deepseek-ai/dsh-client-ui-directory-picker-browse',
+    '@deepseek-ai/dsh-client-ui-directory-picker-native',
+    '@deepseek-ai/dsh-client-ui-input-trigger',
+    '@deepseek-ai/dsh-client-ui-layout',
+    '@deepseek-ai/dsh-client-ui-primitives',
+    '@deepseek-ai/dsh-client-ui-settings',
+    '@deepseek-ai/dsh-client-ui-sidebar',
+    '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-ui-theme',
+    '@deepseek-ai/dsh-client-ui-tool',
+    '@deepseek-ai/dsh-client-ui-workspace',
+    '@deepseek-ai/dsh-client-web-react',
+    '@deepseek-ai/dsh-cmdline',
+    '@deepseek-ai/dsh-code-runtime',
+    '@deepseek-ai/dsh-command-feedback',
+    '@deepseek-ai/dsh-commands',
+    '@deepseek-ai/dsh-compaction',
+    '@deepseek-ai/dsh-cordis-client-runner',
+    '@deepseek-ai/dsh-cordis-host-runner',
+    '@deepseek-ai/dsh-credentials',
+    '@deepseek-ai/dsh-fs',
+    '@deepseek-ai/dsh-fs-local',
+    '@deepseek-ai/dsh-goal',
+    '@deepseek-ai/dsh-home-paths',
+    '@deepseek-ai/dsh-host-directory-picker-browse',
+    '@deepseek-ai/dsh-host-directory-picker-native',
+    '@deepseek-ai/dsh-host-plugin-inventory',
+    '@deepseek-ai/dsh-host-webserver',
+    '@deepseek-ai/dsh-invariants',
+    '@deepseek-ai/dsh-jobs',
+    '@deepseek-ai/dsh-launch-environment',
+    '@deepseek-ai/dsh-llm',
+    '@deepseek-ai/dsh-llm-retry',
+    '@deepseek-ai/dsh-message-feedback',
+    '@deepseek-ai/dsh-output-retention',
+    '@deepseek-ai/dsh-permission-presets',
+    '@deepseek-ai/dsh-plan-mode',
+    '@deepseek-ai/dsh-pwsh-local',
+    '@deepseek-ai/dsh-pwsh-sandbox',
+    '@deepseek-ai/dsh-sandbox',
+    '@deepseek-ai/dsh-sandbox-policy',
+    '@deepseek-ai/dsh-sandbox-windows-acl',
+    '@deepseek-ai/dsh-scope',
+    '@deepseek-ai/dsh-session',
+    '@deepseek-ai/dsh-session-persistence',
+    '@deepseek-ai/dsh-session-projection',
+    '@deepseek-ai/dsh-session-query',
+    '@deepseek-ai/dsh-session-stats',
+    '@deepseek-ai/dsh-session-telemetry',
+    '@deepseek-ai/dsh-session-title',
+    '@deepseek-ai/dsh-session-title-llm',
+    '@deepseek-ai/dsh-settings',
+    '@deepseek-ai/dsh-settings-file',
+    '@deepseek-ai/dsh-shell',
+    '@deepseek-ai/dsh-shell-env',
+    '@deepseek-ai/dsh-skill',
+    '@deepseek-ai/dsh-spill',
+    '@deepseek-ai/dsh-storage',
+    '@deepseek-ai/dsh-storage-domain',
+    '@deepseek-ai/dsh-subagent',
+    '@deepseek-ai/dsh-subagent-in-process-driver',
+    '@deepseek-ai/dsh-subprocess',
+    '@deepseek-ai/dsh-system-prompt',
+    '@deepseek-ai/dsh-terminal',
+    '@deepseek-ai/dsh-timeout',
+    '@deepseek-ai/dsh-token-meter',
+    '@deepseek-ai/dsh-tool-workflow',
+    '@deepseek-ai/dsh-tools',
+    '@deepseek-ai/dsh-typert-protocol',
+    '@deepseek-ai/dsh-typert-registry',
+    '@deepseek-ai/dsh-user-approval',
+    '@deepseek-ai/dsh-user-questions',
+    '@deepseek-ai/dsh-web',
+    '@deepseek-ai/dsh-web-app',
+    '@deepseek-ai/dsh-workflow',
+  ]],
+  ['dsh-community-market/package.json', 'devDependencies', [
+    '@deepseek-ai/dsh-agent',
+    '@deepseek-ai/dsh-agent-presets',
+    '@deepseek-ai/dsh-api-gateway',
+    '@deepseek-ai/dsh-api-remotes',
+    '@deepseek-ai/dsh-atomic-write',
+    '@deepseek-ai/dsh-brand',
+    '@deepseek-ai/dsh-client-connection',
+    '@deepseek-ai/dsh-client-locale',
+    '@deepseek-ai/dsh-client-runtime',
+    '@deepseek-ai/dsh-client-schema-form',
+    '@deepseek-ai/dsh-client-ui-layout',
+    '@deepseek-ai/dsh-client-ui-primitives',
+    '@deepseek-ai/dsh-client-ui-settings',
+    '@deepseek-ai/dsh-client-ui-sidebar',
+    '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-ui-theme',
+    '@deepseek-ai/dsh-commands',
+    '@deepseek-ai/dsh-cordis-host-runner',
+    '@deepseek-ai/dsh-credentials',
+    '@deepseek-ai/dsh-goal',
+    '@deepseek-ai/dsh-home-paths',
+    '@deepseek-ai/dsh-host-plugin-inventory',
+    '@deepseek-ai/dsh-host-webserver',
+    '@deepseek-ai/dsh-invariants',
+    '@deepseek-ai/dsh-llm',
+    '@deepseek-ai/dsh-message-feedback',
+    '@deepseek-ai/dsh-session',
+    '@deepseek-ai/dsh-session-persistence',
+    '@deepseek-ai/dsh-settings',
+    '@deepseek-ai/dsh-settings-file',
+    '@deepseek-ai/dsh-typert-protocol',
+    '@deepseek-ai/dsh-typert-registry',
+  ]],
+  ['dsh-community-market/package.json', 'peerDependencies', [
+    '@deepseek-ai/dsh-agent',
+    '@deepseek-ai/dsh-agent-presets',
+    '@deepseek-ai/dsh-api-gateway',
+    '@deepseek-ai/dsh-api-remotes',
+    '@deepseek-ai/dsh-brand',
+    '@deepseek-ai/dsh-client-connection',
+    '@deepseek-ai/dsh-client-locale',
+    '@deepseek-ai/dsh-client-runtime',
+    '@deepseek-ai/dsh-client-schema-form',
+    '@deepseek-ai/dsh-client-ui-layout',
+    '@deepseek-ai/dsh-client-ui-primitives',
+    '@deepseek-ai/dsh-client-ui-settings',
+    '@deepseek-ai/dsh-client-ui-sidebar',
+    '@deepseek-ai/dsh-client-ui-slots',
+    '@deepseek-ai/dsh-client-ui-theme',
+    '@deepseek-ai/dsh-commands',
+    '@deepseek-ai/dsh-cordis-host-runner',
+    '@deepseek-ai/dsh-credentials',
+    '@deepseek-ai/dsh-goal',
+    '@deepseek-ai/dsh-host-plugin-inventory',
+    '@deepseek-ai/dsh-host-webserver',
+    '@deepseek-ai/dsh-invariants',
+    '@deepseek-ai/dsh-llm',
+    '@deepseek-ai/dsh-message-feedback',
+    '@deepseek-ai/dsh-session',
+    '@deepseek-ai/dsh-session-persistence',
+    '@deepseek-ai/dsh-settings',
+    '@deepseek-ai/dsh-typert-protocol',
+    '@deepseek-ai/dsh-typert-registry',
+  ]],
 ]
-const observedSurface = pinned.map(({ path, field, entries }) => [path, field, entries.length])
-if (JSON.stringify(observedSurface) !== JSON.stringify(pinSurface)) {
-  fail(`the upstream pin surface moved: expected ${JSON.stringify(pinSurface)}, found ${JSON.stringify(observedSurface)}`)
+const observedSurface = pinned.map(({ path, field, entries }) => [path, field, entries.map(([name]) => name).sort()])
+// Keyed and diffed rather than positional and dumped: a 157-name stringify
+// mismatch is unreadable at the moment someone has to act on it, so a failure
+// names the manifest, the field, and the exact packages that moved.
+const surfaceKey = ([path, field]) => `${path} ${field}`
+const recordedRows = new Map(pinSurface.map(row => [surfaceKey(row), row[2]]))
+const observedRows = new Map(observedSurface.map(row => [surfaceKey(row), row[2]]))
+for (const key of observedRows.keys()) {
+  if (!recordedRows.has(key)) fail(`${key} carries pinned DSH packages that pinSurface does not record at all`)
 }
+for (const [key, recorded] of recordedRows) {
+  const observed = observedRows.get(key)
+  if (observed === undefined) {
+    fail(`${key} no longer carries any pinned DSH package, but pinSurface records ${recorded.length}`)
+  }
+  const unrecorded = observed.filter(name => !recorded.includes(name))
+  const missing = recorded.filter(name => !observed.includes(name))
+  if (unrecorded.length > 0 || missing.length > 0) {
+    fail(`${key} does not match pinSurface — in the tree but not recorded: ${unrecorded.join(', ') || '(none)'}; recorded but not in the tree: ${missing.join(', ') || '(none)'}`)
+  }
+}
+
 for (const { path, field, entries } of pinned) {
   for (const [name, range] of entries) {
     if (range !== upstream.runtimePackageVersion) {
