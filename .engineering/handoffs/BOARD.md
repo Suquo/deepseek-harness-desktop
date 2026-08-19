@@ -10,6 +10,10 @@
 
 ## Now
 
+**AA-GENERATION SUCCESSION (2026-08-19 ~13:10 CEST): planned handoff so the successor session picks up the NEW named lane agents.** `.claude/agents/{resolver-general,resolver-parametria,resolver-upstream,resolver-design}.md` were committed this generation (`1667b63794`) but agent registries load at SESSION START — this session cannot spawn them (environment lesson, now recorded). Operator wants lane generations visible with clickable transcripts (ruling), which the named types provide.
+
+**FIRST ACTION FOR THE SUCCESSOR RM — spawn Lane B gen-2 as agent type `resolver-parametria` with this takeover brief:** TAKEOVER on issue #2, continue (don't restart): claim + plan-settled comments on #2 (read `gh issue view 2 --comments`); branch `pm/issue-2-parametria-profile` pushed (empty); worktree EXISTS at `C:\Users\chidi\.pm-resolver-worktrees\issue-2` with install COMPLETE (verify, adopt); gen-1 stopped cleanly mid-investigation (locating pi-ai catalog for the openrouter gemini route) — re-derive from the research pack. Rulings in force: validator model `google/gemini-3.6-flash` via pi-ai route with `input: [text, image]`; apiKeyEnv discovered read-only or documented + flagged, never a freeze. Expected-touch: new preset dir at repo root + root package.json + .engineering docs; NEVER submodule/patches/upstream.json; dsh-plugin-desktop source = freeze-exit. Gate `corepack yarn check` foreground, tail in PR body, `Closes #2` bare. Post a one-line gen-2 takeover comment on #2.
+
 **AA-GENERATION BOOTED (2026-08-19, cjjmaster, `/loop /repo-manager` — first chartered RM generation, continuing in the bootstrap session's context).**
 
 - **Boot reconciliation:** gh default repo initially resolved to the anywhere-labs PARENT (fixed: `gh repo set-default Suquo/deepseek-harness-desktop`); parent repo is highly active (~20 open PRs, 2.0.x bug wave) — Lane C watch data. Fork had issues DISABLED + master 2 ahead unpushed.
