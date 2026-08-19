@@ -101,23 +101,30 @@
 # by the same keystroke that widened everything. `parametria-capture` is that
 # same file access with the approval channel LEFT ON.
 #
-# WHY A WIDER MODE IS UNAVOIDABLE AT ALL — measured, not assumed. Under
-# `workspace-write` on win32 the sandbox seam resolves to the ACL
-# restricted-token runner, and that backend documents its own hard boundary:
-# libuv/Python piped stdio uses NAMED pipes, whose Win32 default security
-# descriptor grants the client end write access no restricting SID carries, so
-# "a confined process cannot capture a grandchild's output through a pipe;
-# tools that must capture output cannot run confined"
-# (`deepseek-harness/packages/sandbox/sandbox-windows-acl/README.md`). The
-# skill's `screenshot-definition.py` is exactly that shape: Playwright's sync
-# API spawns its driver with piped stdio, and the live call died in
+# WHY A WIDER MODE IS UNAVOIDABLE AT ALL — a documented mechanism plus one
+# inference, kept apart on purpose. Under `workspace-write` on win32 the
+# sandbox seam resolves to the ACL restricted-token runner, and THAT BACKEND
+# DOCUMENTS a hard boundary: piped stdio uses NAMED pipes, whose Win32 default
+# security descriptor denies the client-end open a write no restricting SID
+# carries, so "a confined process cannot capture a grandchild's output through
+# a pipe; tools that must capture output cannot run confined" — while
+# `inherit` and `ignore` spawns are explicitly fine
+# (`deepseek-harness/packages/sandbox/sandbox-windows-acl/README.md`).
+#
+# THE INFERENCE is that the skill's `screenshot-definition.py` is that shape:
+# nothing upstream says Playwright's sync API spawns its driver with piped
+# stdio. What says so is the live call, which died in
 # `asyncio/windows_utils.py` `Popen.__init__` with `PermissionError(13, 'Access
-# is denied')` — classified correctly by the tool layer as a sandbox denial
-# with the escalation hint attached (seq 201). Every screenshot call after the
-# switch succeeded (seq 215 onward). No writable-root grant could have fixed
-# it, because this seam HAS no such grant: `SandboxMode` is a file-effect
-# vocabulary of exactly three values and `dsh-sandbox-policy` documents "extra
-# writable roots are not part of `SandboxExecutionPolicy`".
+# is denied')` — classified by the tool layer as a sandbox denial with the
+# escalation hint attached (seq 201) — and every screenshot call after the
+# switch succeeding (seq 215 onward). Read that as one datum rather than a
+# proof of mechanism: what is certain is that this command failed confined and
+# succeeded unconfined on this host.
+#
+# No writable-root grant could have fixed it under either reading, because this
+# seam HAS no such grant: `SandboxMode` is a file-effect vocabulary of exactly
+# three values and `dsh-sandbox-policy` documents "extra writable roots are not
+# part of `SandboxExecutionPolicy`".
 #
 # WHAT THIS ROW IS NOT. It is a table entry, not a default: `defaultPreset` is
 # deliberately absent below, so the profile still boots sessions on the
@@ -129,13 +136,24 @@
 # `danger-full-access` entry instead was rejected: an operator who types a
 # shipped preset's name must get the meaning that name has everywhere else.
 #
+# HOW THE SELECTION IS RELEASED, since selecting it IS a durable claim on full
+# file access. Two releases, both upstream's: within the session,
+# `/permissionPresets workspace-write` switches back (the selection is a
+# log-only event and the last one wins); across sessions there is nothing to
+# release, because a preset selection is pinned into the session that made it
+# and a new session starts from `defaultPreset` instead — which this patch
+# leaves at the composed `workspace-write`. What neither release covers is a
+# long session that never switches back, so the entry's `description` says to,
+# and the persona asks the model to say so once the capture phase ends.
+#
 # An id-targeted patch REPLACES the whole config, so all three shipped presets
 # are restated verbatim; `tests/profile-patch.test.mjs` diffs that restatement
 # against the pinned bundle in BOTH directions and pins the one added entry.
-# Declaration ORDER is load-bearing beyond readability: `derive()` returns the
-# FIRST table entry matching the current (sandbox, approval) pair, so an entry
-# placed above `workspace-write` and sharing its pair would capture the
-# inferred default. The fence asserts exactly one entry matches that pair.
+# Declaration ORDER is load-bearing beyond readability: with no recorded
+# selection to prefer — which is exactly the state the inferred default is
+# computed in — `derive()` falls to a FIRST-match scan of the table, so an
+# entry placed above `workspace-write` and sharing its (sandbox, approval) pair
+# would capture that default. The fence asserts exactly one entry matches it.
 - id: permission
   config:
     presets:
@@ -148,9 +166,16 @@
       danger-full-access:
         sandbox: danger-full-access
         approval: never
+      # `name`/`description` are optional and the shipped rows omit them, so
+      # the picker renders their bare keys. This entry states both anyway: it
+      # is the one entry a run tells the operator to select MID-RUN, and
+      # "parametria-capture" alone does not say that the thing being selected
+      # is full file access.
       parametria-capture:
         sandbox: danger-full-access
         approval: ask
+        name: parametria-capture
+        description: Full file access for the Parametria screenshot pass, with approval prompts still enabled. Switch back to workspace-write when the capture phase ends.
 
 # The session's own default model is deliberately NOT patched here.
 #

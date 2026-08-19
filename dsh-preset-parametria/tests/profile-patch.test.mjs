@@ -70,6 +70,23 @@ describe('the patch layer', () => {
     }
   })
 
+  it('changes rows through `config` and nothing else', () => {
+    // A patch entry's every key beyond `id`/`name` is copied onto the target
+    // row, so `disabled: true`, a `group`, or an `isolate` realm added to one
+    // of these entries would unmount or relocate the plugin rather than
+    // configure it — with the whole config restatement below still passing,
+    // because it only ever looks inside `config`. Riding on this slice for the
+    // `permission` row, which is a permission surface; the two older rows get
+    // it in the same pass because the hazard is identical and the fence is one
+    // loop.
+    for (const [id, entry] of patched) {
+      assert.deepEqual(
+        Object.keys(entry).sort(), ['config', 'id'],
+        `patch entry ${id} carries a key beyond id/config: a patch key is copied onto the target ROW, not merged into its config`,
+      )
+    }
+  })
+
   it('inserts nothing: every capability this profile needs is already composed', () => {
     // Notably `dsh-session-stats`, which the harness research listed as absent
     // from the default composition: the `dsh-web-app` bundle mounts it, and
@@ -130,6 +147,17 @@ describe('the `permission` restatement', () => {
     assert.deepEqual(Object.keys(patched.get('permission').config), ['presets'])
   })
 
+  it('targets the plugin it means to target, by name and not only by id', () => {
+    // The patch entry carries no `name:`, which upstream would treat as a
+    // mismatch GUARD (a differing name skips the patch with a warning rather
+    // than applying it). Without that guard, an upstream re-point of the id
+    // `permission` to some other plugin would apply this preset table to the
+    // wrong row silently. Pinning the pinned bundle's name here catches the
+    // re-point at gate time instead — the same protection, failing loudly in
+    // CI rather than quietly at someone's boot.
+    assert.equal(bundles.get('permission').name, '@deepseek-ai/dsh-permission-presets')
+  })
+
   it('carries every shipped preset forward with its exact bundled meaning', () => {
     // Direction one: nothing the bundle shipped may be dropped or reshaped by
     // the restatement. Compared per entry rather than as one object so a
@@ -160,8 +188,24 @@ describe('the `permission` restatement', () => {
     assert.ok(sameValue(ourPresets['parametria-capture'], {
       sandbox: 'danger-full-access',
       approval: 'ask',
+      name: 'parametria-capture',
+      description: 'Full file access for the Parametria screenshot pass, with approval prompts still enabled. '
+        + 'Switch back to workspace-write when the capture phase ends.',
     }))
     assert.notEqual(ourPresets['parametria-capture'].approval, 'never')
+  })
+
+  it('says what it grants where the operator selects it', () => {
+    // The picker labels an option by its `name` and falls back to the bare key
+    // when none is given. The shipped rows omit both fields, which is fine for
+    // names an operator already knows; this is the one entry a RUN asks them to
+    // select mid-task, so the option has to state that it is full file access
+    // and that it should be switched back — this is also the only release the
+    // durable selection has that reaches the person making it.
+    const spec = ourPresets['parametria-capture']
+    assert.match(spec.description, /[Ff]ull file access/)
+    assert.match(spec.description, /approval prompts still enabled/)
+    assert.match(spec.description, /[Ss]witch back to workspace-write/)
   })
 
   it('is the same preset name the persona tells the run to ask for', () => {
@@ -181,23 +225,42 @@ describe('the `permission` restatement', () => {
     }
   })
 
-  it('does not become the default: exactly one entry matches the composed pair', () => {
-    // `defaultPreset` is absent on both sides, so the plugin infers it — and
-    // `derive()` returns the FIRST entry matching (sandbox, approval), so a new
-    // entry sharing the composed pair and declared earlier would silently
-    // become the boot default. The composed pair is workspace-write + ask:
-    // `sandbox-policy` mode and `approval` policy both key off the same
-    // DSH_PERMISSION_MODE expression, whose fallback is workspace-write.
+  it('does not become the default under ANY composed pair the bundle can produce', () => {
+    // `defaultPreset` is absent on both sides, so the plugin infers it: with no
+    // recorded selection to prefer, `derive()` scans the table and takes the
+    // FIRST entry matching (sandbox, approval). An added entry sharing a
+    // reachable pair and declared above its shipped twin would silently become
+    // the boot default.
+    //
+    // Which pairs are reachable is not one pair. `sandbox-policy`'s mode and
+    // `approval`'s policy both key off the SAME `DSH_PERMISSION_MODE`
+    // expression, so the composed pair is whichever of the three that
+    // environment variable selects — the fence walks all three rather than the
+    // unset case alone, because a deployment that sets it is exactly where an
+    // unnoticed default would land.
     assert.equal(bundles.get('permission').config.defaultPreset, undefined)
     assert.equal(patched.get('permission').config.defaultPreset, undefined)
+    assert.equal(bundles.get('sandbox-policy').config.mode.source, "process.env.DSH_PERMISSION_MODE ?? 'workspace-write'")
     assert.equal(
       bundles.get('approval').config.policy.source,
       "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'",
     )
-    const matching = Object.entries(ourPresets)
-      .filter(([, spec]) => spec.sandbox === 'workspace-write' && spec.approval === 'ask')
-      .map(([name]) => name)
-    assert.deepEqual(matching, ['workspace-write'])
+    // The pair each `DSH_PERMISSION_MODE` value composes, derived from the two
+    // expressions asserted above, and the preset each must therefore infer.
+    const composed = [
+      { mode: 'read-only', approval: 'ask', expect: 'read-only' },
+      { mode: 'workspace-write', approval: 'ask', expect: 'workspace-write' },
+      { mode: 'danger-full-access', approval: 'never', expect: 'danger-full-access' },
+    ]
+    for (const { mode, approval, expect } of composed) {
+      const matching = Object.entries(ourPresets)
+        .filter(([, spec]) => spec.sandbox === mode && spec.approval === approval)
+        .map(([name]) => name)
+      assert.deepEqual(
+        matching, [expect],
+        `with DSH_PERMISSION_MODE=${mode} the composed pair (${mode}, ${approval}) must infer exactly "${expect}"`,
+      )
+    }
   })
 })
 

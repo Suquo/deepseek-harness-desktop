@@ -104,10 +104,17 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
       'the persona must state the workspace-local uv cache assignment verbatim: '
       + 'the default cache and any absolute path outside the session workspace are denied under workspace-write',
     )
-    assert.match(
-      persona, /\bsandbox_permissions\b/,
-      'the persona must name the per-call escalation by its parameter name — it is the narrowest path past the '
-      + 'one refusal that has no relocation answer',
+    // Anchored on the instruction for the same reason as the line above, and
+    // this one has a sharper failure mode: the `approval: never` policy teaches
+    // the model the exact INVERSE sentence ("do not request sandbox
+    // escalation — do not set `sandbox_permissions`"), so a persona that
+    // drifted into forbidding the escalation would keep a bare
+    // /sandbox_permissions/ green while reinstating the failure this text
+    // exists to prevent.
+    assert.ok(
+      persona.includes('retry that exact command once with `sandbox_permissions: danger-full-access`'),
+      'the persona must INSTRUCT the per-call escalation, naming the one wider mode above workspace-write — '
+      + 'it is the narrowest path past the one refusal that has no relocation answer',
     )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
