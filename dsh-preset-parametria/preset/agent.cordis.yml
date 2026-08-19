@@ -270,10 +270,12 @@
     # holds the sibling `subagent` / `subagent_fork` rows above, which carry no
     # cap and therefore take upstream's default of `3` — a depth-2 grandchild
     # on the session model remains reachable through those. Closing that needs
-    # a per-child `toolFilter` on this row, which is its own decision: a filter
-    # naming a tool that does not exist fails startup, and this repo cannot
-    # verify global tool names in a headless gate. Tracked separately rather
-    # than folded in here.
+    # a per-child `toolFilter` on this row, which is its own decision and not
+    # one this change makes: a filter naming a tool that does not exist fails
+    # startup, and this repo cannot verify global tool names in a headless
+    # gate. `tests/validator-depth.test.mjs` pins the residual shape — the
+    # sibling rows carry no cap of their own — so the gap stays visible in a
+    # fence rather than only in this paragraph.
     - id: tool-subagent-validator
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
