@@ -42,9 +42,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Owner items (batched, non-blocking)
 
-- **Fork Actions event triggers are DORMANT, then branch protection (#3, re-scoped — TWO steps in order)**: `workflow_dispatch` runs the inherited `ci.yml` green on all five jobs, but `pull_request` events produce NO run (PRs #10/#11 rollups empty) — consistent with GitHub's fork Actions opt-in, needs the operator to enable Actions/workflow runs in the fork's Actions tab FIRST. Only then: branch protection (RM recommendation: ruleset requiring `check` + `desktop-windows` on PRs, bypass for direct docs pushes) — requiring checks that never arrive would make master unmergeable. Approve both and the RM applies step 2; #3 closes then.
-
-- **Vision model/route for the validator pin** (#1): must be a `dsh-llm-pi-ai` route (deepseek adapter has no modality config). Name the provider + model to pin.
+- **ONE step left on #3 — the fork Actions tab enable-workflows click (UI-only, operator-only).** Branch protection is DONE per the in-session ruling (2026-08-19): ruleset `master-required-checks` (21051431) active — required checks `check` + `desktop-windows`, deletion + force-push blocked, admin bypass always (no wedge while events are dormant). API shows Actions enabled and the workflow active, yet push/PR events fire zero runs — the fork opt-in banner is the remaining explanation and only the UI clears it. #3 closes on the first real PR-event rollup.
 - **Price table seeds** (#5): per-model $/Mtok (uncached-input / cacheRead / cacheWrite / output) for the models you want costed.
 - **Skill-root canonicalization** (#7): OK to make the preset-local copy in this repo canonical and retire/sync-target `~/.claude/skills` + `~/.agents/skills` copies? (Coordinates with your sync-skills fleet flow.)
 - **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` (also reads `OPENAI_API_KEY` from other skills' `.env`s). Recommend rotating the Pinecone key and moving it to `scripts/.env`. Flagging only — the skill folder is outside this repo's fleet surface.
