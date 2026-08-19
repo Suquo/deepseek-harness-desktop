@@ -39,8 +39,10 @@
 #
 # `input: [text, image]` is the load-bearing declaration, per the owner ruling.
 # Modalities resolve entry `input` -> installed catalog entry -> route
-# `defaultInput` (default `[text]`), and the harness refuses an image BEFORE it
-# is attached when the resolved list omits one, naming the model. The pinned
+# `defaultInput` (default `[text]`). `assertImageCapableRoute` resolves the
+# calling agent's route and refuses an image read outright unless that list
+# includes `image`, so this is what lets the validator open a screenshot at all
+# — the gate itself is upstream's and is already fail-closed. The pinned
 # catalog happens to declare `[text, image]` for this model already; stating it
 # here means a future upstream pin that narrows or drops the entry cannot
 # silently strip vision from the validator.

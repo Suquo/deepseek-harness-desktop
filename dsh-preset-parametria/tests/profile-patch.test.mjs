@@ -116,6 +116,29 @@ describe('the `llm-pi-ai` restatement', () => {
   })
 })
 
+describe('capabilities the README says the base composition already provides', () => {
+  // Each of these is why the patch layer stays as small as it is. The README
+  // states them as reasons for NOT configuring something, which makes each one
+  // a checkable claim rather than a comment.
+  it('already composes the permission presets, so the profile adds none', () => {
+    assert.deepEqual(Object.keys(bundles.get('permission').config.presets).sort(), [
+      'danger-full-access', 'read-only', 'workspace-write',
+    ])
+  })
+
+  it('already defaults the sandbox to workspace-write at the session\'s own root', () => {
+    assert.equal(bundles.get('sandbox-policy').config.mode.source, "process.env.DSH_PERMISSION_MODE ?? 'workspace-write'")
+    assert.equal(bundles.get('sandbox-policy').config.workspaceRoot.source, 'process.cwd()')
+  })
+
+  it('already composes a shell tool on every platform', () => {
+    // The skill drives node/uv/playwright through the shell; command-level
+    // policy is a tools/pre-execute plugin, not composition.
+    assert.ok(bundles.has('tool-bash'))
+    assert.ok(bundles.has('tool-pwsh'))
+  })
+})
+
 describe('the session default model', () => {
   it('is deliberately left at the bundle default', () => {
     // Issue #1's acceptance criterion is that a run whose MAIN model is

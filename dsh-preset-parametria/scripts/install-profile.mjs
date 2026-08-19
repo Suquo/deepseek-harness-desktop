@@ -95,19 +95,35 @@ function walk(dir) {
 const toPosix = value => value.split(sep).join(posix.sep)
 const digest = contents => createHash('sha256').update(contents).digest('hex')
 
-/** Read the receipt this installer last wrote, or an empty one. */
-function readReceipt(path) {
-  if (!existsSync(path)) return { version: RECEIPT_VERSION, files: {} }
+/**
+ * Read the receipt this installer last wrote, or an empty one.
+ *
+ * An unreadable receipt is fatal WITHOUT `--force`, because the claim it
+ * records is the only thing separating a stale install from an operator's
+ * edit: continuing would silently reclassify every managed file as
+ * operator-owned and refuse a legitimate upgrade with a misleading message.
+ * `--force` overwrites regardless of the receipt, so under it the unreadable
+ * document is genuinely irrelevant and the run proceeds — which is what makes
+ * the "pass --force" half of the diagnostic a true statement.
+ * @param path - the receipt file.
+ * @param force - whether the caller has already elected to overwrite.
+ */
+function readReceipt(path, force) {
+  const empty = { version: RECEIPT_VERSION, files: {} }
+  if (!existsSync(path)) return empty
   let parsed
   try {
     parsed = JSON.parse(readFileSync(path, 'utf8'))
   } catch (cause) {
+    if (force) return empty
     throw new InstallError(`${BIN}: receipt ${path} is unreadable; move it aside or pass --force (${String(cause)})`)
   }
-  // An unrecognized receipt version cannot be reasoned about, so treat every
-  // file as operator-owned rather than guessing which hashes still mean what.
+  // A receipt version this build does not know cannot be reasoned about: its
+  // hashes may mean something else entirely. Treating every file as
+  // operator-owned is the conservative reading — a real edit is never
+  // overwritten, and an upgrade past this point needs the explicit --force.
   if (parsed?.version !== RECEIPT_VERSION || typeof parsed.files !== 'object' || parsed.files === null) {
-    return { version: RECEIPT_VERSION, files: {} }
+    return empty
   }
   return parsed
 }
@@ -134,7 +150,7 @@ export function planFile(destinationPath, contents, recordedHash, force) {
 export function install({ home, force = false, dryRun = false, packageRoot = PACKAGE_ROOT } = {}) {
   const files = managedFiles(packageRoot)
   const receiptPath = join(home, 'profiles', PRESET_NAME, RECEIPT_NAME)
-  const receipt = readReceipt(receiptPath)
+  const receipt = readReceipt(receiptPath, force)
   const plan = new Map()
   const conflicts = []
   for (const [relativePath, contents] of files) {
@@ -197,9 +213,10 @@ if (process.argv[1] !== undefined
     const home = resolveHome(homeOverride)
     const result = install({ ...options, home })
     const verb = options.dryRun ? 'would write' : 'wrote'
+    const marker = options.dryRun ? '~' : '+'
     process.stdout.write(
       `${BIN}: ${verb} ${result.written.length} file(s), ${result.unchanged.length} already current, under ${home}\n`
-      + result.written.map(name => `  ${verb === 'wrote' ? '+' : '~'} ${name}\n`).join('')
+      + result.written.map(name => `  ${marker} ${name}\n`).join('')
       + `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`,
     )
   } catch (error) {

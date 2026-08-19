@@ -118,13 +118,16 @@ describe('a re-install', () => {
 })
 
 describe('a locally modified file', () => {
-  const home = freshHome()
-  install({ home })
-  const path = join(home, 'profiles', 'parametria', 'cordis.patch.yml')
-  writeFileSync(path, '# the operator edited this\n[]\n')
+  /** A fresh home whose installed patch layer the operator has since edited. */
+  const editedHome = () => {
+    const home = freshHome()
+    install({ home })
+    writeFileSync(join(home, 'profiles', 'parametria', 'cordis.patch.yml'), '# the operator edited this\n[]\n')
+    return home
+  }
 
   it('stops the install and names the file', () => {
-    assert.throws(() => install({ home }), error => {
+    assert.throws(() => install({ home: editedHome() }), error => {
       assert.ok(error instanceof InstallError)
       assert.match(error.message, /refusing to overwrite/)
       assert.match(error.message, /cordis\.patch\.yml/)
@@ -132,16 +135,65 @@ describe('a locally modified file', () => {
     })
   })
 
-  it('leaves the edit in place', () => {
-    assert.match(readFileSync(path, 'utf8'), /the operator edited this/)
+  it('leaves the edit in place, and writes nothing else either', () => {
+    const home = editedHome()
+    const presetPath = join(home, '.agent-presets', 'parametria', 'agent.cordis.yml')
+    writeFileSync(presetPath, '[]\n')
+    assert.throws(() => install({ home }), InstallError)
+    assert.match(readFileSync(join(home, 'profiles', 'parametria', 'cordis.patch.yml'), 'utf8'), /the operator edited this/)
+    // The refusal is all-or-nothing: a conflict anywhere stops every write, so
+    // a partly-upgraded profile is not a state this installer can produce.
+    assert.equal(readFileSync(presetPath, 'utf8'), '[]\n')
   })
 
   it('is released by --force, which re-records the receipt', () => {
+    const home = editedHome()
     const result = install({ home, force: true })
     assert.ok(result.written.includes(PROFILE_PATCH))
-    assert.match(readFileSync(path, 'utf8'), /parametria-vision/)
+    assert.match(readFileSync(join(home, 'profiles', 'parametria', 'cordis.patch.yml'), 'utf8'), /parametria-vision/)
     // With the claim re-taken, an ordinary re-install is a no-op again.
     assert.deepEqual(install({ home }).written, [])
+  })
+})
+
+describe('the receipt itself', () => {
+  const receiptPathIn = home => join(home, 'profiles', 'parametria', RECEIPT_NAME)
+
+  it('stops the install when unreadable, rather than guessing at ownership', () => {
+    // Continuing would reclassify every managed file as operator-owned and
+    // refuse a legitimate upgrade with a message about edits nobody made.
+    const home = freshHome()
+    install({ home })
+    writeFileSync(receiptPathIn(home), '{ not json')
+    assert.throws(() => install({ home }), error => {
+      assert.ok(error instanceof InstallError)
+      assert.match(error.message, /receipt .* is unreadable/)
+      return true
+    })
+  })
+
+  it('honours the --force the unreadable-receipt message offers', () => {
+    // The diagnostic names --force as the way through; this is the assertion
+    // that keeps that sentence true.
+    const home = freshHome()
+    install({ home })
+    writeFileSync(receiptPathIn(home), '{ not json')
+    const result = install({ home, force: true })
+    assert.deepEqual(result.written, [])
+    assert.equal(JSON.parse(readFileSync(receiptPathIn(home), 'utf8')).preset, 'parametria')
+  })
+
+  it('treats a receipt version it does not know as no claim at all', () => {
+    // A future format's hashes may mean something else, so every managed file
+    // reverts to operator-owned: an unmodified file still matches byte for
+    // byte and passes, while a changed one is refused rather than clobbered.
+    const home = freshHome()
+    install({ home })
+    writeFileSync(receiptPathIn(home), JSON.stringify({ version: 99, files: {} }))
+    assert.deepEqual(install({ home }).written, [])
+    writeFileSync(join(home, 'profiles', 'parametria', 'cordis.patch.yml'), '# newer format, edited\n[]\n')
+    writeFileSync(receiptPathIn(home), JSON.stringify({ version: 99, files: {} }))
+    assert.throws(() => install({ home }), InstallError)
   })
 })
 

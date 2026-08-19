@@ -36,7 +36,9 @@
 
       This session runs the Parametria work profile: you build and verify parametric millwork definitions in Suquo Systems Parametria through the `suquo-systems-parametria` skill. Load that skill before building anything; it owns the node catalog, the definition schema, and the screenshot and verification procedure.
 
-      Delegate every visual check to `subagent_validator`, never to `subagent`. The validator delegate is pinned to a vision-capable model and declares image input explicitly, so an image it cannot read is refused before the attachment rather than reported as a clean pass. A general `subagent` child inherits this session's model, which may be text-only — a blind validator's report looks exactly like a passing one, which is the failure this preset exists to make impossible.
+      Delegate every visual check to `subagent_validator`, never to `subagent`. The validator delegate is pinned to a route that declares image input, so it can actually read a screenshot. A general `subagent` child inherits this session's model instead: if that model is text-only, every image read is REFUSED — and the child still returns a summary, which is how a validation pass that never saw anything comes back reading like a clean one. Delegating a visual check to `subagent` is therefore an error even though nothing crashes.
+
+      If a `subagent_validator` result reports refused image reads, treat the run as unvalidated and say so. Never restate a child's conclusion about an image the child could not open.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -219,11 +221,28 @@
     # decides whether the validator can see.
     #
     # The route is `parametria-vision`, declared by the profile's
-    # `cordis.patch.yml` with `input: [text, image]`. Declaring the modality is
-    # the load-bearing half: the harness refuses an image BEFORE it is attached
-    # when a model's modalities omit one, naming the model. Without it a blind
-    # validator reads the screenshot as absent and reports a clean pass — the
-    # first-run failure mode, which looks exactly like success.
+    # `cordis.patch.yml` with `input: [text, image]`.
+    #
+    # What that declaration buys, precisely. Upstream's image gate is already
+    # fail-closed and route-agnostic: `assertImageCapableRoute`
+    # (`packages/fs/tool-fs/src/read-image.ts`) resolves the calling agent's
+    # route and THROWS unless it declares `image`, and `dsh-llm-deepseek`
+    # hardcodes `inputModalities: ['text']`. So a validator on a text-only
+    # session model does not read a blank image — every read is refused, loudly,
+    # per call.
+    #
+    # The silence is one level up. The child still finishes and still returns a
+    # summary, and a summary written around a stack of refusals reads exactly
+    # like a passing validation — which is what the first Parametria run
+    # produced. This row does not add the refusal; it removes the need for one,
+    # by giving the validator a route that can actually open the screenshot
+    # regardless of what the session is running. The persona above carries the
+    # other half: a refused read means the run is unvalidated, not passed.
+    #
+    # Under-declaring the modality therefore costs a loud refusal naming the
+    # model, and over-declaring costs a mid-turn provider rejection after the
+    # message is durable. `tests/vision-route.test.mjs` diffs the declaration
+    # against the installed catalog so neither is a silent state.
     #
     # `one-shot`, not `continuable`: a validation pass is a question with an
     # answer, so the parent waits for the verdict in the foreground rather than

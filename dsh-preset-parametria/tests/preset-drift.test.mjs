@@ -79,6 +79,25 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     assert.deepEqual(reconfigured.sort(), Object.keys(DECLARED_DELTA.reconfigured).sort())
   })
 
+  it('states WHAT each reconfigured row became, not merely that it differs', () => {
+    // Knowing which rows differ is only half a fence: without this, a second
+    // accidental edit to an already-declared row would still pass.
+    const persona = ours.get('persona').config.text
+    assert.match(persona, /subagent_validator/, 'the persona must route visual checks to the validator')
+    assert.match(persona, /suquo-systems-parametria/, 'the persona must name the skill the run depends on')
+    assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
+  })
+
+  it('keeps the shared rows in upstream order, so a moved row is visible', () => {
+    // `indexRows` keys a nested row by `<group>/<row>`, so a row that moves
+    // between the top level and a group is already reported as one added and
+    // one dropped. What is left to catch is reordering WITHIN a level, which
+    // this comparison of the shared subsequence covers.
+    const shared = [...ours.keys()].filter(id => upstream.has(id))
+    const upstreamShared = [...upstream.keys()].filter(id => ours.has(id))
+    assert.deepEqual(shared, upstreamShared)
+  })
+
   it('keeps every shared row pointing at the same plugin, with the same disable expression', () => {
     for (const [id, row] of ours) {
       const other = upstream.get(id)

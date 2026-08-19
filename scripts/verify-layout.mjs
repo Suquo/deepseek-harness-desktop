@@ -52,6 +52,19 @@ for (const name of ['dsh-community-fabric', 'dsh-community-market', 'dsh-preset-
     fail(`the root check script must run the ${name} gate`)
   }
 }
+// AGENTS.md documents `corepack yarn test` as the unit-test command, so a
+// workspace holding tests must appear there too — `check` covering it is not
+// enough when the documented command silently skips the package.
+for (const [name, manifest] of [
+  ['dsh-community-market', market],
+  ['dsh-preset-parametria', preset],
+  ['dsh-plugin-desktop', plugin],
+]) {
+  if (manifest.scripts?.test === undefined) continue
+  if (!workspace.scripts.test.includes(`yarn workspace ${name} test`)) {
+    fail(`the root test script must run the ${name} unit tests`)
+  }
+}
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the
