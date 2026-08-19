@@ -28,7 +28,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-3 completed #18 (PR #19 merged: validator maxDepth 0→1, upstream-executing depth fence). Next: #20 (sibling-row depth hole) claimable; #1 pending-live on the owner's next run.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned gen-4 on #9 item 1** (sandbox policy for node/uv/playwright; branch `pm/issue-9-sandbox-policy`; non-closing PR). Expected-touch: dsh-preset-parametria/** + .engineering docs. #20 queued behind it; #1 pending-live on the owner's next run.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
