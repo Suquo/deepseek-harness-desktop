@@ -235,7 +235,32 @@ const spec: DesktopShellSpec = {
   requestModeChange: vi.fn(async () => {}),
 }
 
-describe('Electron desktop runtime', () => {
+describe('Electron desktop runtime', {
+  // Windows budget sized from measurement. Forty-seven of these tests `await
+  // import('../src/electron-runtime.ts')` in their own body, but only the first
+  // pays for it: that import transforms and links a 26-file, ~8.3k-line closure,
+  // and every later one is served from the module registry. So the file has one
+  // expensive test and forty-seven cheap ones — 215-277ms over twelve isolated
+  // runs against a second-worst of <=68ms.
+  //
+  // The anchor is the compound worst, not the robust worst. Under full-suite load
+  // that first test measured 153-372ms over seven runs; 372ms is a single outlier,
+  // but the stall class this host demonstrably produces is 14.9x (measured in
+  // desktop-plugins.spec.ts, which caught an event live), and 372ms x 14.9 = 5.5s.
+  // A budget that reds on a datum already in hand is mis-sized however rare that
+  // datum is, which is why the 5s default had to move even though the robust worst
+  // argues it was fine. 10s clears the compound worst 1.8x and still sits 36x above
+  // the 277ms isolated worst.
+  //
+  // No ceiling constraint: the beforeEach/afterEach below only reset in-memory
+  // fakes and restore mocks — green at a 10ms hookTimeout, i.e. >=1000x against
+  // the untouched 10s default. Exactly one number moves. Known limitation of this
+  // class of fix: the ten `vi.waitFor(...)` calls in this file take vitest's
+  // default 1000ms waitFor budget, which no describe-level timeout can reach.
+  // The POSIX arm keeps the 5s default — the load characteristic sized here is
+  // NTFS/Defender and was not measured on a POSIX host.
+  timeout: process.platform === 'win32' ? 10_000 : 5_000,
+}, () => {
   beforeEach(() => {
     electron.app.isPackaged = false
     electron.browserWindowOptions.length = 0

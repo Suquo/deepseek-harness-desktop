@@ -70,7 +70,34 @@ function eventLine(overrides: Record<string, unknown> = {}): string {
   return JSON.stringify(baseEvent(overrides))
 }
 
-describe('desktop lifecycle events', () => {
+describe('desktop lifecycle events', {
+  // Windows budget sized from measurement. This file is not the junction-closure
+  // class its siblings document — its cost is synchronous evidence-file I/O. One
+  // test ('replaces stale run evidence and keeps current evidence within byte
+  // caps') drives 900 transitionStartupStage calls, each of which rewrites the
+  // byte-capped lifecycle JSONL under a fresh temp user-data dir; that single test
+  // measures 359-472ms over twelve isolated runs (median 390) against a
+  // second-worst of <=28ms, and 347-556ms over seven full-suite runs.
+  //
+  // It is in this PR because it demonstrably reds: a full-suite run at this branch
+  // head killed it with `Test timed out in 5000ms`, which puts the stall it met at
+  // >=12.8x its isolated median — the same class measured directly at 14.9x in
+  // desktop-plugins.spec.ts. On the loaded worst, 556ms x 14.9 = 8.3s, so the 5s
+  // default cannot cover the load this host produces.
+  //
+  // Sized to 15s rather than the 20s its siblings carry, because it is genuinely
+  // cheaper and the number is derived, not copied: 15s clears the 8.3s compound
+  // worst by 1.8x — the same clearance electron-runtime.spec.ts was ruled to — and
+  // sits 27x above the 556ms loaded worst, keeping all four budgets inside one
+  // tolerance band (1.4-1.8x over compound worst) instead of drifting apart.
+  //
+  // No ceiling constraint: this file declares no hooks, so its temp-dir work runs
+  // inside this same budget. Exactly one number moves. Deferred deliberately: at
+  // 15s a ~15x regression in the evidence-write path would still pass green. The
+  // POSIX arm keeps the 5s default — the load characteristic sized here is
+  // NTFS/Defender and was not measured on a POSIX host.
+  timeout: process.platform === 'win32' ? 15_000 : 5_000,
+}, () => {
   it.each([
     ['schema version', { schemaVersion: 2 }],
     ['event name', { eventName: 'startup.stage.skipped' }],
