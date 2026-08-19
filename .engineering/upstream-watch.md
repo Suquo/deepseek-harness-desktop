@@ -45,28 +45,42 @@ works in checkouts where `git submodule update --init` never ran.
 It is deliberately **not** part of `corepack yarn check` — the headless gate stays
 offline and deterministic. Run it by hand (or from the RM's tick), not from CI.
 
-Three reading rules:
+Reading rules. `current` is printed only when the drift was actually established;
+every distinct way of failing to establish it has its own name, and none of them is
+`current`:
 
-- **`(unknown)` is never `0`.** `--offline` and a failed `gh api` call both render as
-  `(unknown)`; "we could not look" is not "we are current", and the ACTION line
-  (`verdict` in `--json`) says `inconclusive` rather than `none`.
-- **`indeterminate` is its own answer.** If the pinned commit is not the commit of a
-  published release — a mid-release pin, a tag with no Release object, a moved tag —
-  then "0 releases behind" would be an artefact of not being able to place our own
-  pin. That case reports `indeterminate` plus a warning, never `current`. The harness
-  verdict also folds in commits-behind-default-branch, so a pin trailing the branch
-  with no release cut yet still reads `behind`.
+| Status | Means |
+|---|---|
+| `behind` | a positive drift signal was found — conclusive, and it outranks the rest |
+| `current` | every signal was read and all of them say up to date |
+| `unknown` | the upstream could not be read at all (`--offline`, or `gh api` failed) |
+| `indeterminate` | the upstream was read, but our own pin could not be placed against a published release — a mid-release pin, a tag with no Release object, a moved tag. "0 releases behind" would be an artefact of that, not a finding |
+| `incomplete` | the release side was established but the commits-behind comparison was not, so the "no drift" reading rests on a signal that was never read |
+
+`--json` carries the same conclusion as a top-level `verdict` (`behind` /
+`current` / `inconclusive`), so a machine consumer cannot read it as a clean bill of
+health where the text form would not have been.
+
+Two more:
+
+- **An unreadable local fact is never rendered as a finding.** If the submodule
+  gitlink cannot be read out of the committed tree, the report says
+  `(unknown — gitlink unreadable, NOT cross-checked)` and warns. It never says DRIFT:
+  a pin we could not compare is not a pin that disagrees, and treating it as one
+  would send the next tick chasing a bump that isn't needed.
 - **A stale local `upstream/master` ref does not distort `last merged`**: a merge-base
   only moves when a merge actually lands. The staleness is reported, not corrected.
 
 ## Cadence
 
 - **Every RM tick** that involves a board update: run `node scripts/upstream-watch.mjs`.
-  It costs a few seconds and seven read-only API GETs. Record the two headline numbers
-  (releases behind, overlay commits behind) in the RM's memory iteration entry.
-  *This obligation is not yet wired into `handoffs/repo-manager-charter.md` or into a
-  root `package.json` script — both are the RM's to add, and are raised as such on
-  issue #4. Until then the cadence lives only here.*
+  It costs a few seconds and seven read-only API GETs at current upstream sizes (more
+  only if either upstream ever grows past one page of tags or releases). Record the two
+  headline numbers (releases behind, overlay commits behind) in the RM's memory
+  iteration entry. The obligation is carried by
+  [`handoffs/repo-manager-charter.md`](handoffs/repo-manager-charter.md) as the daily
+  watch tick; a root `package.json` `upstream:watch` entry to shorten the invocation
+  rides **issue #12**.
 - **Harness releases behind > 0** ⇒ the RM spawns a Lane C generation for a *trial*
   pin bump (below). New harness releases are the event this whole protocol exists for.
 - **Overlay commits behind** is expected to be large and to grow; the parent repo is
@@ -113,8 +127,9 @@ submodule's origin URL, the submodule's `package.json` version, and every
 **Known blind spot** (`scripts/verify-layout.mjs` ~L133): that last assertion covers
 `dsh-plugin-desktop.dependencies` only. `dsh-community-market`'s 61 dev+peer pins at
 the same version are **not** guarded — a bump could leave them behind and
-`check:layout` would still pass. Until the guard is widened, step 3 is a manual
-obligation and the watch script's bump-surface count is what makes it checkable.
+`check:layout` would still pass. Widening the guard is tracked on **issue #12**; until
+that lands, step 3 is a manual obligation and the watch script's bump-surface count is
+what makes it checkable.
 
 ## Patch re-validation checklist
 
@@ -165,9 +180,9 @@ preference order:
    is a missing seam (ADR H-0001), which is an RM+owner decision, not a Lane C fix.
 3. **Partial hold-back** — inherit the release but pin the breaking package back
    through `resolutions`. A hold-back is a **durable claim and therefore needs a
-   release**: record which package, at which version, why, and the condition that
-   retires it. A hold-back with no retirement condition is a permanent fork of that
-   package by accident.
+   retirement condition**: record which package, at which version, why, and what has
+   to become true for the hold-back to end. A hold-back with no retirement condition
+   is a permanent fork of that package by accident.
 4. **Skip, with a record** — the release is not worth its cost right now. Record it on
    the board (and an ADR if the reasoning is durable), naming the release skipped and
    why. Re-evaluated at the next release.

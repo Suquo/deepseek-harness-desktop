@@ -36,12 +36,12 @@ const root = resolve(import.meta.dirname, '..')
 // so it throws rather than degrading. `config` is the one subcommand that is not
 // read-only by nature (`git config k v` writes), so it is admitted only in its
 // reading form; the rest cannot modify anything whatever arguments they are given.
+// Exactly the four calls this script makes, nothing held open for future use: a fence
+// wider than its use is a fence that stops describing the program it guards.
 const READ_ONLY_GIT = new Map([
   ['config', args => args.includes('--get')],
-  ['log', () => true],
   ['ls-tree', () => true],
   ['merge-base', () => true],
-  ['rev-list', () => true],
   ['rev-parse', () => true],
 ])
 
@@ -64,22 +64,42 @@ const git = (...args) => {
   }
 }
 
-// `paginate` is opt-in and only ever used on array endpoints: on an OBJECT endpoint
-// gh would emit one JSON object per page back to back, which is not parseable JSON.
-const ghApi = (path, { paginate = false } = {}) => {
+const ghApi = path => {
   if (offline) return null
   try {
-    const raw = execFileSync('gh', ['api', ...(paginate ? ['--paginate'] : []), path], {
+    const raw = execFileSync('gh', ['api', path], {
       cwd: root,
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-    // `--paginate` concatenates one array per page; splice the seams before parsing.
-    return JSON.parse(paginate ? raw.replaceAll(/\]\s*\[/gu, ',') : raw)
+    return JSON.parse(raw)
   } catch (error) {
     return warn(`gh api ${path} failed (${String(error.message).split('\n')[0]})`)
   }
+}
+
+// Pages an array endpoint by asking for one page at a time. `gh --paginate`
+// concatenates the pages' JSON documents, and stitching those back together by text
+// substitution cannot be done safely — a `][` sequence inside any string value in the
+// payload (a release note containing markdown reference links, say) is
+// indistinguishable from a real page seam. Asking for each page separately means
+// every response is parsed as the complete JSON document it actually is.
+const PER_PAGE = 100
+const MAX_PAGES = 10
+
+const ghApiAll = path => {
+  if (offline) return null
+  const separator = path.includes('?') ? '&' : '?'
+  const collected = []
+  for (let page = 1; page <= MAX_PAGES; page += 1) {
+    const batch = ghApi(`${path}${separator}per_page=${PER_PAGE}&page=${page}`)
+    if (!Array.isArray(batch)) return collected.length > 0 ? collected : null
+    collected.push(...batch)
+    if (batch.length < PER_PAGE) return collected
+  }
+  warn(`${path} has more than ${MAX_PAGES * PER_PAGE} entries — only the first ${MAX_PAGES * PER_PAGE} were read`)
+  return collected
 }
 
 const readJson = path => JSON.parse(readFileSync(resolve(root, path), 'utf8'))
@@ -126,8 +146,17 @@ const harnessSlug = toSlug(upstreamJson.repository)
 // must never depend on materialising upstream source.
 const gitlinkLine = git('ls-tree', 'HEAD', 'deepseek-harness')
 const submoduleGitlink = gitlinkLine ? /^\S+\s+commit\s+(\S+)/u.exec(gitlinkLine)?.[1] ?? null : null
-if (submoduleGitlink && submoduleGitlink !== upstreamJson.commit) {
+// A gitlink we could not READ is not a gitlink that DISAGREES. `git()` swallows its
+// errors to null, so comparing null against the pin would turn "we could not look"
+// into an affirmative drift claim and send the next tick chasing a phantom bump.
+const gitlinkState = submoduleGitlink === null
+  ? 'unreadable'
+  : submoduleGitlink === upstreamJson.commit ? 'matches' : 'drift'
+if (gitlinkState === 'drift') {
   warn(`pin drift: upstream.json commit ${upstreamJson.commit} != submodule gitlink ${submoduleGitlink}`)
+}
+if (gitlinkState === 'unreadable') {
+  warn('could not read the deepseek-harness gitlink from the committed tree — the pin was NOT cross-checked against upstream.json (this is not a drift finding)')
 }
 if (upstreamJson.sourceVersion !== upstreamJson.runtimePackageVersion) {
   warn(`upstream.json sourceVersion ${upstreamJson.sourceVersion} != runtimePackageVersion ${upstreamJson.runtimePackageVersion}`)
@@ -135,15 +164,15 @@ if (upstreamJson.sourceVersion !== upstreamJson.runtimePackageVersion) {
 
 // ---------------------------------------------------------------- harness side
 
-const tags = ghApi(`repos/${harnessSlug}/tags?per_page=100`, { paginate: true }) ?? []
-const releases = ghApi(`repos/${harnessSlug}/releases?per_page=100`, { paginate: true }) ?? []
+const tags = ghApiAll(`repos/${harnessSlug}/tags`) ?? []
+const releases = ghApiAll(`repos/${harnessSlug}/releases`) ?? []
 const harnessRepo = ghApi(`repos/${harnessSlug}`)
 
 // Identify our pin by SHA rather than by version string: the tag naming scheme is
 // upstream's to change, but the commit we pinned is the commit we pinned.
 const pinnedTag = tags.find(tag => tag.commit?.sha === upstreamJson.commit)?.name ?? null
 if (tags.length > 0 && !pinnedTag) {
-  warn(`pinned commit ${upstreamJson.commit.slice(0, 10)} does not match any of the ${tags.length} most recent tags — pin is mid-release or the tag was moved`)
+  warn(`pinned commit ${upstreamJson.commit.slice(0, 10)} matches none of the ${tags.length} tags read — pin is mid-release or the tag was moved`)
 }
 
 const pinnedRelease = pinnedTag ? releases.find(release => release.tag_name === pinnedTag) ?? null : null
@@ -180,6 +209,13 @@ const harnessKnown = harnessReachable && pinnedRelease !== null
 // so both signals the script already holds have to reach the status.
 const commitsBehind = harnessCompare?.ahead_by ?? null
 const harnessBehind = newerReleases.length > 0 || (commitsBehind ?? 0) > 0
+// `(commitsBehind ?? 0)` reads unknown as zero, which is the right way to decide
+// "is there a positive drift signal" and the WRONG way to decide "is this clean" —
+// so when it folds an unknown, the status has to carry that, not just a warning.
+const harnessIncomplete = commitsBehind === null
+if (harnessReachable && harnessIncomplete) {
+  warn(`could not compare the pin against ${harnessSlug} ${harnessDefaultBranch ?? 'default branch'} — commits-behind is unknown, not zero`)
+}
 
 const harness = {
   repository: harnessSlug,
@@ -190,16 +226,22 @@ const harness = {
     runtimePackageVersion: upstreamJson.runtimePackageVersion,
     tag: pinnedTag,
     submoduleGitlink,
+    gitlinkState,
   },
   latestRelease,
   releasesBehind: harnessKnown ? newerReleases.length : null,
   newerReleases,
   commitsBehindDefaultBranch: commitsBehind,
-  // `behind` wins over `indeterminate`: a positive drift signal is conclusive even
-  // when the release side could not be placed.
+  // `behind` wins: a positive drift signal is conclusive even when another signal
+  // could not be established. Absent one, every way of failing to establish the
+  // drift gets its own name, and none of them is `current`.
   status: harnessBehind
     ? 'behind'
-    : harnessKnown ? 'current' : harnessReachable ? 'indeterminate' : 'unknown',
+    : !harnessReachable
+        ? 'unknown'
+        : !harnessKnown
+            ? 'indeterminate'
+            : harnessIncomplete ? 'incomplete' : 'current',
 }
 
 // ---------------------------------------------------------------- overlay side
@@ -340,7 +382,7 @@ const bumpSurfaceTotal = bumpSurface.reduce((sum, entry) => sum + entry.total, 0
 // would have said otherwise.
 const verdict = harness.status === 'behind' || overlay.status === 'behind'
   ? 'behind'
-  : [harness.status, overlay.status].some(status => status === 'unknown' || status === 'indeterminate')
+  : [harness.status, overlay.status].some(status => status !== 'current')
     ? 'inconclusive'
     : 'current'
 
@@ -360,7 +402,12 @@ say(`generated ${report.generatedAt}${offline ? ' [offline: local facts only]' :
 say('')
 say(`HARNESS  ${harness.repository}  [${harness.status}]`)
 say(`  pinned        ${harness.pinned.sourceVersion}  ${shortSha(harness.pinned.commit)}${harness.pinned.tag ? `  (${harness.pinned.tag})` : ''}`)
-say(`  gitlink       ${shortSha(harness.pinned.submoduleGitlink)}${harness.pinned.submoduleGitlink === harness.pinned.commit ? '  matches upstream.json' : '  DRIFT vs upstream.json'}`)
+const GITLINK_RENDER = {
+  matches: '  matches upstream.json',
+  drift: '  DRIFT vs upstream.json',
+  unreadable: '  (unknown — gitlink unreadable, NOT cross-checked)',
+}
+say(`  gitlink       ${shortSha(harness.pinned.submoduleGitlink)}${GITLINK_RENDER[harness.pinned.gitlinkState]}`)
 say(`  latest release ${latestRelease ? `${latestRelease.tag}  ${latestRelease.publishedAt}${latestRelease.prerelease ? '  (prerelease)' : ''}` : '(unknown)'}`)
 say(`  releases behind ${harness.releasesBehind ?? '(unknown)'}`)
 for (const release of harness.newerReleases) {
