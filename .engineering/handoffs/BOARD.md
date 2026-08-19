@@ -10,6 +10,8 @@
 
 ## Now
 
+**PR #10 MERGED (2026-08-19 ~17:02): #9 item 2 + CI contract doc delivered (closes nothing by design).** Root `test` reaches `dsh-preset-parametria`; verify-layout guards are segment-exact and driven by ONE workspace list; AGENTS.md carries the CI contract with corrected fork-parent attribution. #3 stays open on the owner's two ordered steps (fork Actions opt-in → branch protection). New: **#13** (profile.spec.ts ~10.5s vs 10s budget — tips red under load). Lane A FREE; worktree issue-3 pending cleanup.
+
 **PR #11 MERGED (2026-08-19 ~16:57): issue #4 delivered — upstream watch tooling + protocol.** `scripts/upstream-watch.mjs` (read-only, tri-state gitlink, unknown-surfacing verdicts) + `.engineering/upstream-watch.md` (cadence, eval decision tree, patches checklist, pin-bump-PR rules). RM charter carries the daily watch tick. Today's live delta: harness pin CURRENT (0 behind); overlay 40 commits behind anywhere-labs — no bump trigger. #12 tracks the pin-guard exhaustiveness gap (+ root `upstream:watch` script rider). Lane C FREE; worktree issue-4 pending cleanup.
 
 **PR #8 MERGED (2026-08-19 ~15:45): issue #2 delivered — Parametria work profile.** `dsh-preset-parametria/` workspace landed (preset with `subagent_validator` pinned `parametria-vision`/`google/gemini-3.6-flash`, profile patch with the modality-declared pi-ai route, receipt-backed installer, 64 node:test fences). Review: REQUEST CHANGES (3 small blockers + 3 riders) → fixed in one cycle → APPROVE at `eae928de` → merged. RM independently re-ran the gate green (exit 0, quiet machine) — gen-1/2's timeout-only reds attributed to machine load. **Follow-ups live on #9** (evidence/sandbox plumbing · root-`test` pin coverage · mount observation pending-live on the operator's next run). #1 stays open pending a live provider datum; #7 fills the deliberately-empty preset skill root. Post-merge branch delete + docs push pending a classifier-flap recovery.
@@ -23,9 +25,9 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-1 (type `resolver-general`) on #3** (CI workflow; branch `claude/issue-3-ci`). Expected-touch: `.github/workflows/**`, root package.json test script, the pinned string in `dsh-plugin-desktop/tests/package.spec.ts` (#9 item 2 rides), CI docs note.
+- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-2 on #13** (profile.spec.ts timeout budget; branch `claude/issue-13-profile-spec-timeout`). Expected-touch: that spec file + at most the workspace vitest config. Also cleaning merged worktrees issue-3/issue-4.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 pending-live → #5 → #6; #7 and #9 available, #5/#6/#7 gated on owner items). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-1 completed #4 (PR #11 merged); agent resumable (#12 is its natural next assignment, after #10 merges — root package.json contention). Worktree `~/.dsh-resolver-worktrees/issue-4` pending cleanup.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — RM-spawned gen-2 on #12** (exhaustive pin guard + `upstream:watch` script rider; branch `up/issue-12-pin-guard`). Expected-touch: `scripts/verify-layout.mjs` + root package.json scripts block. Disjointness vs Lane A gen-2 verified at spawn.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
 ## Second run harvested (weaker model, 2026-08-19)
