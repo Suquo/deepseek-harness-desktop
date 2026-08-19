@@ -142,7 +142,33 @@ async function createWebServer() {
   }
 }
 
-describe('desktop pnpm and community market integration', () => {
+describe('desktop pnpm and community market integration', {
+  // Windows budget sized from measurement. This file's one test spends nearly all
+  // of its time on the `await import()` below: instrumented over four runs, that
+  // single dynamic import of dsh-community-market's src closure (27 files, ~6.9k
+  // lines) costs 664-733ms of a 672-744ms test, because the graph is transformed
+  // and linked inside the test body rather than by the spec file's own import
+  // phase. The route work, mkdtemp and rm that follow are 1-4ms each. The test as
+  // a whole measures 626-890ms over twelve isolated runs (median 697) and
+  // 762-977ms under full-suite load.
+  //
+  // The lever is external machine load, the same class desktop-plugins.spec.ts
+  // documents: an event measured there stretched a 670ms test to 9956ms, 14.9x,
+  // consistent with the >=14x inferred in PR #10. 14.9x on this test's 977ms loaded
+  // worst is 14.6s, so the former 5s default could not survive a stall this host
+  // demonstrably produces. 20s clears it and sits 20.5x above that loaded worst.
+  //
+  // No ceiling constraint: this file declares no hooks, so its cleanup runs in the
+  // test's own `finally` under this same budget. Exactly one number moves.
+  // Deferred deliberately: at 20s a ~20x regression in the module-graph cost would
+  // still pass green. The POSIX arm keeps the 5s default — the load characteristic
+  // sized here is NTFS/Defender and was not measured on a POSIX host.
+  //
+  // Not used in this derivation: one 4302ms observation, on the very first vitest
+  // invocation after a fresh install and build, did not reproduce in twelve
+  // subsequent isolated runs and is recorded as an unattributed outlier.
+  timeout: process.platform === 'win32' ? 20_000 : 5_000,
+}, () => {
   it('executes a market uninstall route through the managed desktop pnpm boundary', async () => {
     const marketModuleUrl = new URL('../../dsh-community-market/src/index.js', import.meta.url).href
     const market = await import(marketModuleUrl) as CommunityMarketModule

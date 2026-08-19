@@ -112,7 +112,31 @@ function errorCode(cause: unknown): string | undefined {
   return cause instanceof DesktopPluginsError ? cause.code : undefined
 }
 
-describe('desktop direct bundle management', () => {
+describe('desktop direct bundle management', {
+  // Windows budget sized from measurement. Only two of these thirteen tests call
+  // prepareDesktopProfile, which relinks the same ~527-package junction closure
+  // profile.spec.ts pays for (upstream healProfilesModuleFallback); the other
+  // eleven are an order of magnitude cheaper, tens of ms. Suite concurrency is not
+  // the lever: those two measure 596-727ms over twelve isolated runs (median 670)
+  // and 725-892ms under full-suite load. External machine load is the lever, and
+  // one such event landed inside that twelve-run sample: both closure tests
+  // stretched to 9956ms and 9679ms — 14.9x the isolated median — while the cheapest
+  // test in the same run went from ~35ms to 739ms, 21x. Both passed under this
+  // budget; both would have been killed at the former 5s default. That is PR #10's
+  // >=14x stall class, measured directly rather than inferred from a kill time.
+  //
+  // 20s therefore sits 2.0x above the largest stall actually observed and 22.4x
+  // above the 892ms loaded worst. The ceiling is the afterEach above: its rmSync of
+  // the same closure is bounded in (200, 500]ms — reds at 200 in 1 of 4 runs, green
+  // at 500 in 3 of 3 and at 1000 in 2 of 2 — against the untouched 10s hookTimeout,
+  // so the hook tolerates >=20x and this budget's 22.4x is the looser of the two;
+  // no second number has to move. Deferred deliberately: at 20s a ~22x regression
+  // in the junction-closure cost would still pass green. The POSIX arm keeps the 5s
+  // default — the closure cost is an NTFS/Defender characteristic and was not
+  // measured on a POSIX host. A genuine hang still fails loudly: quiet, the whole
+  // file runs under 3s.
+  timeout: process.platform === 'win32' ? 20_000 : 5_000,
+}, () => {
   it('lists each direct bundle once and keeps only explicit product bundles immutable', async () => {
     const root = temporaryRoot()
     const options = bootstrap(root)
