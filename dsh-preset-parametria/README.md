@@ -141,9 +141,13 @@ composition, needs nothing here: the `dsh-web-app` bundle mounts it, and
 ## Fences
 
 `yarn workspace dsh-preset-parametria check` runs `node --test
-"tests/**/*.test.mjs"`, which the root `check` and the root `test` both invoke.
-There is no build step and no runtime dependency; the package is configuration
-plus one installer.
+"tests/**/*.test.mjs"`, and the root `corepack yarn check` invokes it. There is
+no build step and no runtime dependency; the package is configuration plus one
+installer.
+
+The root `corepack yarn test` does **not** reach this workspace yet: that
+script is pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`,
+which is outside this change's scope. Adding it there is a follow-up.
 
 | Fence | What it holds |
 |---|---|
