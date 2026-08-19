@@ -106,14 +106,18 @@ if (typeof upstreamPackage.packageManager !== 'string' || !upstreamPackage.packa
   fail('the upstream checkout must retain its pnpm package manager')
 }
 
-for (const [owner, manifest] of [
-  ['root', workspace],
-  ['desktop', plugin],
-  ['fabric', fabric],
-  ['market', market],
-  ['preset', preset],
-]) {
-  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'resolutions']) {
+// One manifest list, keyed by the path a failure message should name, drives both
+// the boundary guard below and the pin surface further down — the same principle
+// as the `workspaces` list above, which is why this is derived from it rather than
+// spelled out a second time.
+const manifests = [
+  ['package.json', workspace],
+  ...workspaces.map(([name, manifest]) => [`${name}/package.json`, manifest]),
+]
+const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
+
+for (const [owner, manifest] of manifests) {
+  for (const field of [...dependencyFields, 'resolutions']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
       if (typeof range !== 'string') continue
       if (/^(?:workspace|portal|link):/u.test(range)
@@ -157,12 +161,8 @@ if (upstreamPackage.version !== upstream.sourceVersion) {
 // share the npm scope but not the release train, so the test is a segment-exact
 // `@deepseek-ai/dsh` or a `@deepseek-ai/dsh-` prefix, never the scope.
 const isUpstreamPackage = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
-const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 const pinned = []
-for (const [path, manifest] of [
-  ['package.json', workspace],
-  ...workspaces.map(([name, manifest]) => [`${name}/package.json`, manifest]),
-]) {
+for (const [path, manifest] of manifests) {
   for (const field of dependencyFields) {
     const entries = Object.entries(manifest[field] ?? {}).filter(([name]) => isUpstreamPackage(name))
     if (entries.length > 0) pinned.push({ path, field, entries })
@@ -178,8 +178,11 @@ for (const [path, manifest] of [
 // The gap that leaves is one addition plus one removal of equal size, in the same
 // field, in the same commit — which moves package identity rather than the pin,
 // and whose surviving entries the version assertion below still holds to the pin.
-// These three numbers are the ones `.engineering/upstream-watch.md` quotes as the
-// bump-surface worklist (96 + 61 + 9 = 166); this is the enforced copy.
+// These three numbers are 157 of the 166 entries `.engineering/upstream-watch.md`
+// quotes as the bump-surface worklist: its 61 is this 32 + 29, and its remaining 9
+// are the root `resolutions` selectors, fenced by `patchedPackages` below. Nothing
+// reads that document, so the two copies are kept in step by the maintenance list
+// it carries — not by this gate.
 const pinSurface = [
   ['dsh-plugin-desktop/package.json', 'dependencies', 96],
   ['dsh-community-market/package.json', 'devDependencies', 32],
@@ -202,29 +205,65 @@ for (const { path, field, entries } of pinned) {
 // the selector's range, the `patch:` locator's version, and the patch FILENAME
 // all name the pinned release. Half-updating them is silent — Yarn is content to
 // apply a patch through a selector no installed tree ever matches.
+//
+// Yarn honours `resolutions` in the ROOT manifest only, so a block in a workspace
+// package is a silent no-op — and it would also sit outside this guard while still
+// being counted by the watch script's bump surface, which enumerates `resolutions`
+// in every manifest. Refusing it keeps the two enumerations over the same set.
+for (const [path, manifest] of manifests) {
+  if (path !== 'package.json' && manifest.resolutions !== undefined) {
+    fail(`${path} declares resolutions; Yarn honours them in the root manifest only`)
+  }
+}
 const selectorPattern = /^(?<name>.+)@npm:(?<range>.+)$/u
 const targetPattern = /^patch:(?<name>.+)@npm%3A(?<locator>[^#]+)#\.\/patches\/(?<file>[^#]+)$/u
+// The version segment of `<stem>@<version>.patch`, parsed rather than suffix-tested,
+// so the assertion is anchored to the filename's structure the way the root-script
+// chain guards above compare whole segments instead of substrings.
+const patchFilePattern = /^(?<stem>.+)@(?<version>[^@]+)\.patch$/u
 const patchedShapes = new Map()
 for (const [selector, target] of Object.entries(workspace.resolutions ?? {})) {
-  const selected = selectorPattern.exec(selector)?.groups
-  if (selected === undefined) fail(`root resolutions selector ${selector} is not a <package>@npm:<range> selector`)
+  // Selectors are matched leniently on purpose: `resolutions` legitimately holds
+  // plain `"<package>": "<range>"` keys (and non-DSH ones like `koffi`), which are
+  // no business of this guard. An unparsed key is treated as a bare package name so
+  // that a DSH package written in a form we do not understand still fails here
+  // rather than slipping through the filter unguarded.
+  const selected = selectorPattern.exec(selector)?.groups ?? { name: selector, range: null }
   if (!isUpstreamPackage(selected.name)) continue
+  if (selected.range === null) {
+    fail(`root resolutions selector ${selector} must name the package as <package>@npm:<range>`)
+  }
   const shape = selected.range === upstream.runtimePackageVersion
     ? 'exact'
     : selected.range === `^${upstream.runtimePackageVersion}` ? 'caret' : null
+  // Both of the next two failures are also how a HOLD-BACK presents: option 3 of
+  // the eval decision tree (`.engineering/upstream-watch.md`) inherits a release
+  // but pins one package back through `resolutions`, which lands here either as a
+  // selector naming the old version or as a target that is not one of our patches.
+  // Failing is deliberate. A hold-back is a durable claim, and standard 9 requires
+  // durable claims to carry a retirement condition; tripping the gate makes one an
+  // explicit reviewed change rather than a manifest line nobody revisits. Where a
+  // hold-back gets DECLARED so this guard can admit it is an RM ruling, raised on
+  // #12 — until it lands, the conservative answer is the safe one either way.
   if (shape === null) {
-    fail(`root resolutions selector ${selector} does not pin the recorded DSH runtime package version ${upstream.runtimePackageVersion}`)
+    fail(`root resolutions selector ${selector} does not pin the recorded DSH runtime package version ${upstream.runtimePackageVersion} (an undeclared hold-back looks like this)`)
   }
   const patched = targetPattern.exec(target)?.groups
-  if (patched === undefined) fail(`root resolutions["${selector}"] must resolve to a patch under ./patches`)
+  if (patched === undefined) {
+    fail(`root resolutions["${selector}"] overrides a pinned DSH package with something other than a ./patches target — an undeclared hold-back`)
+  }
   if (patched.name !== selected.name) {
     fail(`root resolutions["${selector}"] patches ${patched.name}, a different package`)
   }
   if (patched.locator !== upstream.runtimePackageVersion) {
     fail(`root resolutions["${selector}"] patches version ${patched.locator}, not the pinned ${upstream.runtimePackageVersion}`)
   }
-  if (!patched.file.endsWith(`@${upstream.runtimePackageVersion}.patch`)) {
-    fail(`patches/${patched.file} is not named for the pinned version ${upstream.runtimePackageVersion}`)
+  const patchFile = patchFilePattern.exec(patched.file)?.groups
+  if (patchFile === undefined) {
+    fail(`patches/${patched.file} is not named <package>@<version>.patch`)
+  }
+  if (patchFile.version !== upstream.runtimePackageVersion) {
+    fail(`patches/${patched.file} is named for version ${patchFile.version}, not the pinned ${upstream.runtimePackageVersion}`)
   }
   if (!existsSync(resolve(root, 'patches', patched.file))) {
     fail(`root resolutions["${selector}"] points at patches/${patched.file}, which does not exist`)

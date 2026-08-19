@@ -137,7 +137,19 @@ submodule's origin URL, and the submodule's `package.json` version against
   patch: selector range (exact or caret), `patch:` locator version, patch **filename**
   version, and the file's existence;
 - which packages carry which selector shapes is snapshotted version-independently, so
-  a half-updated selector set (the hazard the checklist below names) fails.
+  a half-updated selector set (the hazard the checklist below names) fails;
+- and no workspace manifest may declare `resolutions` at all — Yarn honours them in
+  the root only, so a workspace-level block is a silent no-op, and it would sit
+  outside the guard while the watch script still counted it.
+
+**A hold-back trips this guard, by design.** Option 3 of the decision tree below pins
+a package back through `resolutions`, which presents either as a selector naming the
+old version or as a target that is not one of our patches — both fail `check:layout`.
+That is deliberate: a hold-back is a durable claim, and durable claims need a
+retirement condition (resolver-charter standard 9), so it should cost an explicit
+reviewed change rather than a manifest line nobody revisits. **Where a hold-back gets
+declared so the guard can admit one is an open RM ruling** (raised on #12); until it
+lands, the first hold-back will need the guard widened in the same PR that makes it.
 
 The guard selects by package **identity**, never by "range equals the current pin":
 `scripts/upstream-watch.mjs` enumerates by version because it builds a forward
@@ -239,8 +251,10 @@ exception to "a pin-bump PR changes nothing else", because leaving them behind m
 this document lie about the tree it describes:
 
 - the **166 / 96 / 61 / 9** bump-surface numbers (re-read them off the script) — and
-  with them `pinSurface` in `scripts/verify-layout.mjs`, which is the same numbers
-  enforced; the gate fails until they agree, so this one cannot go stale quietly;
+  with them `pinSurface` in `scripts/verify-layout.mjs`, which carries the same
+  counts split as 96 / 32 / 29. The gate holds `pinSurface` against the **tree**, so
+  a stale `pinSurface` fails `check:layout` loudly; nothing reads this document, so
+  its copy of the numbers is kept in step by this list and nothing else;
 - the **per-patch table**, including its "as of `0.1.0-rc.7`" heading and any patch
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.
