@@ -47,8 +47,9 @@ const DECLARED_DELTA = {
   /** Rows kept, with a different config. Key = flattened row id, value = the reason. */
   reconfigured: {
     persona:
-      'the run states its own shape: load the skill, and delegate visual checks to '
-      + 'subagent_validator rather than subagent',
+      'the run states its own shape: load the skill, delegate visual checks to '
+      + 'subagent_validator rather than subagent, and meet the two sandbox facts this '
+      + 'host has (workspace-local uv cache; per-call escalation for the screenshot script)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
       + 'and registers into this preset\'s nearer registry layer',
@@ -85,6 +86,49 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     const persona = ours.get('persona').config.text
     assert.match(persona, /subagent_validator/, 'the persona must route visual checks to the validator')
     assert.match(persona, /suquo-systems-parametria/, 'the persona must name the skill the run depends on')
+    // The sandbox half of issue #9 item 1. Composition cannot inject a
+    // non-`DSH_*` variable into a shell call and the sandbox seam has no
+    // extra-writable-root vocabulary, so these two facts reach the run as
+    // persona text or not at all — which makes their presence a fence, not a
+    // style preference. The live run rediscovered both by trial (two denied uv
+    // cache locations, then a denied Playwright driver spawn).
+    //
+    // Matched as the WHOLE instruction rather than by keyword. A bare
+    // /UV_CACHE_DIR/ still matches a persona that misspells the variable or
+    // relocates the cache back outside the workspace — both of which reinstate
+    // the exact denial this text exists to prevent, while the fence stays
+    // green. The assignment is what the model has to emit, so the assignment is
+    // what gets pinned.
+    assert.ok(
+      persona.includes('$env:UV_CACHE_DIR = "$PWD\\.uv-cache"'),
+      'the persona must state the workspace-local uv cache assignment verbatim: '
+      + 'the default cache and any absolute path outside the session workspace are denied under workspace-write',
+    )
+    // Anchored on the instruction for the same reason as the line above, and
+    // this one has a sharper failure mode: the `approval: never` policy teaches
+    // the model the exact INVERSE sentence ("do not request sandbox
+    // escalation — do not set `sandbox_permissions`"), so a persona that
+    // drifted into forbidding the escalation would keep a bare
+    // /sandbox_permissions/ green while reinstating the failure this text
+    // exists to prevent.
+    assert.ok(
+      persona.includes('retry that exact command once with `sandbox_permissions: danger-full-access`'),
+      'the persona must INSTRUCT the per-call escalation, naming the one wider mode above workspace-write — '
+      + 'it is the narrowest path past the one refusal that has no relocation answer',
+    )
+    // Per-call is the WHOLE instruction, not the first of two options. Issue #9
+    // ruled against shipping a named whole-run preset for this, and the reason
+    // reaches the persona too: the session-wide full-access preset bundles
+    // `approval: never`, so a run that talked the user into it would be a run
+    // that could no longer ask for anything afterwards. The escalation
+    // instruction above is a per-call one and this keeps it that way — a
+    // persona that grew a "or just switch the session to full access" sentence
+    // would leave every assertion above green.
+    assert.doesNotMatch(
+      persona, /select the .* permission preset|switch the session|for the whole session/,
+      'the persona must not route the run toward a session-wide widening: the full-access preset also '
+      + 'switches approval prompts off, which is the state the per-call escalation exists to avoid',
+    )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
 

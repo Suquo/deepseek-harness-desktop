@@ -69,6 +69,22 @@ describe('the patch layer', () => {
     }
   })
 
+  it('changes rows through `config` and nothing else', () => {
+    // A patch entry's every key beyond `id`/`name` is copied onto the target
+    // row, so `disabled: true`, a `group`, or an `isolate` realm added to one
+    // of these entries would unmount or relocate the plugin rather than
+    // configure it — with the restatement fences below still passing, because
+    // they only ever look inside `config`. A rider from issue #9's sandbox
+    // slice: that slice's own row did not survive its ruling, but the hazard it
+    // exposed belongs to every patch entry and the fence is one loop.
+    for (const [id, entry] of patched) {
+      assert.deepEqual(
+        Object.keys(entry).sort(), ['config', 'id'],
+        `patch entry ${id} carries a key beyond id/config: a patch key is copied onto the target ROW, not merged into its config`,
+      )
+    }
+  })
+
   it('inserts nothing: every capability this profile needs is already composed', () => {
     // Notably `dsh-session-stats`, which the harness research listed as absent
     // from the default composition: the `dsh-web-app` bundle mounts it, and
@@ -121,9 +137,27 @@ describe('capabilities the README says the base composition already provides', (
   // states them as reasons for NOT configuring something, which makes each one
   // a checkable claim rather than a comment.
   it('already composes the permission presets, so the profile adds none', () => {
+    // Restated after issue #9 ruled on a proposed fourth entry
+    // (`parametria-capture`: danger-full-access + ask, for the Playwright
+    // capture pass). The owner rejected it, and the reason is what this
+    // assertion now protects rather than mere minimalism: the desktop's
+    // full-access risk acknowledgement is gated on the preset KEY, not on the
+    // sandbox mode it carries —
+    // `packages/client/ui-conversation/src/client/skeleton/PermissionSelect.tsx`
+    // declares `const FULL_ACCESS = 'danger-full-access'` and routes only that
+    // literal id through its confirmation Modal. ANY added entry carrying
+    // `sandbox: danger-full-access` under a different name would therefore
+    // reach unconfined file access from the composer's Access chip without the
+    // acknowledgement step. So this is a two-part fence: the shipped table is
+    // unchanged, and the patch layer does not target the row at all.
     assert.deepEqual(Object.keys(bundles.get('permission').config.presets).sort(), [
       'danger-full-access', 'read-only', 'workspace-write',
     ])
+    assert.equal(
+      patched.has('permission'), false,
+      'the profile patches the permission table: any entry carrying danger-full-access under a non-shipped key '
+      + 'bypasses the desktop full-access acknowledgement, which issue #9 ruled against',
+    )
   })
 
   it('already defaults the sandbox to workspace-write at the session\'s own root', () => {
