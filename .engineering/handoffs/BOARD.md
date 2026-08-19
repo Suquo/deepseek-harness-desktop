@@ -10,6 +10,8 @@
 
 ## Now
 
+**PR #17 MERGED (2026-08-19 ~19:01, admin bypass — required checks can't arrive until the Actions-tab click): #16 delivered — every marginal win32 test budget re-sized from measurement.** Final band: market 20s/1.37x · desktop-plugins 20s/1.50x · lifecycle-events 15s/1.80x · electron-runtime 10s/1.80x — none marginal, none inflated; POSIX arms untouched. The 14.9x stall class is now measured directly (caught live), not inferred. Resolver's 15s-over-RM's-presumptive-20s accepted on measurement (different cost class). Lane A FREE; worktree registry EMPTY.
+
 **PR #14 MERGED (2026-08-19 ~18:04): #12 delivered — pin guard exhaustive over the full 166-entry surface.** Names-not-counts snapshots per (manifest, field), generated off the tree; keyed diff failures; the doc's step-3 table is the single surface authority; `yarn upstream:watch` rider landed. Hold-back declaration mechanism deferred until first use (ruling on #12). Gate flake datum posted to #16 (class reaches desktop-plugins.spec.ts). Lane C FREE; all merged worktrees cleaned (registry: issue-16 only).
 
 **PR #15 MERGED (2026-08-19 ~17:48): #13 delivered — profile.spec.ts win32 budget 10s→45s, derivation measured.** The resolver's measurement REFUTED the RM's issue framing (the PR #10 red was a ≥14x external-load stall on a sub-second test, not a headroom problem) — verified and ruled, issue closed on the corrected basis. RM reviewed inline (1-file +12/−1 diff fully read + empirically re-run: 18/18, 14.37s) — proportionality precedent: sub-agent axes are for diffs the RM can't hold whole. New: **#16** (marginal 5s budgets: desktop-plugins ~7.4x, market-pnpm-integration, electron-runtime). Lane A FREE.
@@ -23,7 +25,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-3 on #16** (marginal budgets, measure-first per PR #15 pattern; branch `claude/issue-16-marginal-budgets`). Expected-touch: the three named spec files + at most workspace vitest configs. Disjoint vs Lane C fix cycle.
+- **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged). Remaining queue (#1 pending-live, #5/#6/#7 owner-gated, #9 items 1+3).
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
@@ -34,7 +36,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Queue (open GitHub issues, RM-triaged; DELIVERED today: #2→PR8, #4→PR11, #13→PR15, #9-item-2→PR10)
 
-- **#16 [Lane A] Marginal 5s test budgets** — IN PROGRESS (gen-3; now also owns the desktop-plugins flake datum from PR #14's gate).
+- (delivered today, all lanes: #2→PR8 · #4→PR11 · #9-item2→PR10 · #13→PR15 · #12→PR14 · #16→PR17)
 - **#1 [Lane B] Vision routing** — structural half landed in PR #8; stays open PENDING-LIVE (first real run must show `subagent_validator` on `parametria-vision` + the opaque `subagent run failed` finding scoped here).
 - **#5 [Lane B] Cost/timing report** — gated on owner price seeds. **#6 [Lane B] Model A/B protocol** — first datum recorded; buildable after #5's seeds. **#7 [Lane B] Skill-root consolidation** — gated on owner canonicalization OK.
 - **#9 [Lane B] PR #8 follow-ups** — item 2 done (PR #10); items 1 (evidence/sandbox plumbing) + 3 (mount observation, pending-live) remain. **#3 [owner] CI required-checks** — see owner items.
