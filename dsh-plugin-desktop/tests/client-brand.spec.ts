@@ -5,21 +5,35 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   HERO_HEADLINE_TEXT,
-  SUQUO_BRAND_NAME,
-  SUQUO_MARK_PATHS,
-  SUQUO_MARK_VIEW_BOX,
+  PARAMETRIA_ACCENT_DARK,
+  PARAMETRIA_ACCENT_LIGHT,
+  PARAMETRIA_WORDMARK,
   UPSTREAM_BRAND_CLASSES,
-  suquoBrandStyles,
-  suquoMarkDataUri,
+  parametriaBrandStyles,
 } from '../src/client/brand.ts'
+import {
+  PARAMETRIA_MARK_ELEMENTS,
+  PARAMETRIA_MARK_VIEW_BOX,
+  parametriaMarkDataUri,
+} from '../src/client/parametria-mark.ts'
 import { apply } from '../src/client/index.ts'
 import { advancedStyleSheet } from '../src/client/styles.ts'
 
 const require = createRequire(import.meta.url)
-const ASSET_PATH = fileURLToPath(new URL('../../assets/suquo-systems-logo-light.svg', import.meta.url))
+const ASSET_PATH = fileURLToPath(new URL('../assets/parametria-logo-icon.svg', import.meta.url))
+const CONVERSATION = '@deepseek-ai/dsh-client-ui-conversation'
 
 /** Selector classes owned by the desktop overlay itself rather than by a pinned upstream package. */
 const OVERLAY_CLASS_PREFIX = 'dshDesktop'
+
+/**
+ * Read one pinned upstream client bundle.
+ * @param packageName - upstream package shipping a `./client` entry.
+ * @returns the bundle text.
+ */
+function upstreamBundle(packageName: string): string {
+  return readFileSync(require.resolve(`${packageName}/client`), 'utf8')
+}
 
 /**
  * Read every class token a stylesheet selects on.
@@ -35,91 +49,116 @@ function selectedClasses(css: string): Set<string> {
     [...selector.matchAll(/\.([A-Za-z][\w-]*)/g)].map(match => match[1] as string)))
 }
 
-describe('Suquo Systems brand lockup', () => {
-  it('replaces the upstream mark at all three of its render sites', () => {
-    const css = suquoBrandStyles()
-    const mark = `url("${suquoMarkDataUri()}")`
+describe('Parametria brand presentation', () => {
+  it('renders the wordmark where there is room for text and the mark where there is not', () => {
+    const css = parametriaBrandStyles()
+    const mark = `url("${parametriaMarkDataUri()}") no-repeat center / contain`
 
-    // Sidebar brand lockup: mark plus the wordmark, upstream's own svg hidden.
-    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand > svg \{ display: none; \}/)
-    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand::before { content: ""; flex: none; width: 40px; height: 21px; background-color: currentColor; -webkit-mask: ${mark} no-repeat center / contain; mask: ${mark} no-repeat center / contain; }`)
-    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${SUQUO_BRAND_NAME}";`)
+    // Sidebar brand lockup: the wordmark, with upstream's own svg hidden.
+    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
+    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }`)
 
-    // Collapsed sidebar rail and empty-state hero: mark only, repainted in place.
-    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railFish \{[^}]*background-color: currentColor;/)
+    // Collapsed sidebar rail and empty-state hero: the mark, painted over the hidden svg.
+    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railFish > \* \{ display: none; \}/)
-    expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_fishHitbox \.pXSMma_fish \{[^}]*background-color: currentColor;/)
+    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_fishHitbox \.pXSMma_fish > \* \{ display: none; \}/)
+  })
 
-    // Every site paints through currentColor, which is what makes one asset serve both themes.
-    const maskRules = [...css.matchAll(/\{[^}]*mask: url\([^}]*\}/g)]
-    expect(maskRules).toHaveLength(3)
-    for (const [rule] of maskRules) expect(rule).toContain('background-color: currentColor')
+  it('carries an accent for each theme and pins no other colour', () => {
+    const css = parametriaBrandStyles()
 
-    // Nothing may pin a foreground colour: both themes are served by inheriting upstream's.
-    expect(css).not.toMatch(/[^-]color:(?! currentColor)/)
+    // The dark accent must arrive through the attribute the desktop theme presenter sets, and the
+    // light accent must be the unqualified default, or one theme silently inherits the other's.
+    expect(css).toContain(`body[data-ds-dark-theme] .dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand.hHd-Xa_wide::after { color: ${PARAMETRIA_ACCENT_DARK}; }`)
+    expect(PARAMETRIA_ACCENT_LIGHT).not.toBe(PARAMETRIA_ACCENT_DARK)
+
+    // Exactly two colour declarations exist, and they are exactly the two accents: anything else
+    // would be a theme-blind value the sheet has no business pinning.
+    const declared = [...css.matchAll(/(?:^|[\s;{])color:\s*([^;}]+)/g)].map(match => match[1] as string)
+    expect(declared).toEqual([PARAMETRIA_ACCENT_LIGHT, PARAMETRIA_ACCENT_DARK])
   })
 
   it('replaces the empty-state headline without leaving the upstream string readable', () => {
-    const css = suquoBrandStyles()
+    const css = parametriaBrandStyles()
 
     // display:none, not a visual hide: the superseded string must leave the accessibility tree.
     expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_headline \.pXSMma_headlineText \{ display: none; \}/)
-    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; order: 2; white-space: nowrap; }`)
+    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; grid-area: 1 / 2; }`)
 
-    // Generated content is last in DOM order, so every remaining grid item is ordered explicitly.
-    expect(css).toMatch(/\.pXSMma_headline \.pXSMma_fishHitbox \{ order: 1; \}/)
-    expect(css).toMatch(/\.pXSMma_headline \.pXSMma_previewBadge \{ order: 3; \}/)
+    // The replacement must not re-introduce nowrap: upstream's headline text wraps, and this one
+    // sits in the same auto-sized column.
+    expect(css).not.toMatch(/\.pXSMma_headline::after \{[^}]*white-space/)
+  })
+
+  it('still finds the headline grid it places the replacement into', () => {
+    const bundle = upstreamBundle(CONVERSATION)
+
+    // The replacement claims a cell by explicit placement, so both facts are load-bearing: the
+    // headline is a grid, and upstream puts the text it supersedes at row 1, column 2.
+    expect(bundle).toMatch(/\.pXSMma_headline\{[^}]*display:grid/)
+    expect(bundle).toContain('.pXSMma_headlineText{grid-area:1/2}')
   })
 
   it('still finds the superseded upstream headline in the pinned conversation bundle', () => {
-    const bundle = readFileSync(require.resolve('@deepseek-ai/dsh-client-ui-conversation/client'), 'utf8')
+    const bundle = upstreamBundle(CONVERSATION)
 
-    // A pin that renames, retranslates, or drops this entry must fail here rather than ship the
-    // replacement over changed copy.
-    expect(bundle).toContain('Into the Unknown')
-    expect(bundle).not.toContain(HERO_HEADLINE_TEXT)
+    // Key-anchored and both locales: a pin that renames, retranslates, or drops this entry must
+    // fail here rather than ship the replacement over changed copy.
+    expect(bundle).toContain('"hero.headline": "Into the Unknown"')
+    expect(bundle).toContain('"hero.headline": "探索未至之境"')
   })
 
   it('keeps the inlined mark identical to the committed asset', () => {
     const asset = readFileSync(ASSET_PATH, 'utf8')
-    const assetPaths = [...asset.matchAll(/<path[^>]*\sd="([^"]+)"/g)].map(match => match[1])
+    const assetElements = [...asset.matchAll(/<(?:line|path|polygon|circle)\s[^>]*\/>/g)].map(match => match[0])
     const assetViewBox = /viewBox="([^"]+)"/.exec(asset)?.[1]
 
-    expect(assetPaths).toHaveLength(2)
-    expect(SUQUO_MARK_PATHS).toEqual(assetPaths)
-    expect(SUQUO_MARK_VIEW_BOX).toBe(assetViewBox)
+    expect(assetElements).toHaveLength(26)
+    expect(PARAMETRIA_MARK_ELEMENTS).toEqual(assetElements)
+    expect(PARAMETRIA_MARK_VIEW_BOX).toBe(assetViewBox)
 
-    // A mask reads alpha only: shipping a fill would silently pin the mark to one theme.
-    const markup = decodeURIComponent(suquoMarkDataUri().replace('data:image/svg+xml,', ''))
+    // The mark is painted as an image, so its own fills must survive into the data URI: this is a
+    // brand mark whose blues the source documents as deliberate in both themes.
+    const markup = decodeURIComponent(parametriaMarkDataUri().replace('data:image/svg+xml,', ''))
     expect(markup).toContain(`viewBox="${assetViewBox}"`)
-    for (const commands of assetPaths) expect(markup).toContain(`<path d="${commands}"/>`)
-    expect(markup).not.toContain('fill')
-    expect(markup).not.toContain('#686867')
+    for (const element of assetElements) expect(markup).toContain(element)
+    expect(markup).toContain('fill="#1a8fc4"')
+    expect(markup).toContain('fill="#0e6a94"')
+  })
+
+  it('keeps both interpolated strings safe to embed in a CSS content value', () => {
+    for (const value of [PARAMETRIA_WORDMARK, HERO_HEADLINE_TEXT]) {
+      expect(value).not.toContain('"')
+      expect(value).not.toContain('\\')
+    }
   })
 
   it.each(Object.entries(UPSTREAM_BRAND_CLASSES))(
     'still finds every class it overrides in the pinned %s bundle',
     (packageName, classes) => {
-      const bundle = readFileSync(require.resolve(`${packageName}/client`), 'utf8')
-      for (const className of classes) expect(bundle).toContain(className)
+      const bundle = upstreamBundle(packageName)
+
+      // Anchored on the module export mapping, not the bare class: several of these names are
+      // prefixes of one another, so a substring match could not detect a rename.
+      for (const [local, emitted] of Object.entries(classes)) {
+        expect(bundle).toContain(`"${local}": "${emitted}"`)
+      }
     },
   )
 
   it('names exactly the upstream classes the pin was verified against', () => {
-    const declared = new Set(Object.values(UPSTREAM_BRAND_CLASSES).flat())
-    const selected = [...selectedClasses(suquoBrandStyles())]
-      .filter(className => !className.startsWith(OVERLAY_CLASS_PREFIX))
+    const declared = new Set(Object.values(UPSTREAM_BRAND_CLASSES).flatMap(classes => Object.values(classes)))
+    const selected = new Set([...selectedClasses(parametriaBrandStyles())]
+      .filter(className => !className.startsWith(OVERLAY_CLASS_PREFIX)))
 
-    // Two directions: no override reaches an unverified class, and no verified class goes unused.
-    expect(new Set(selected)).toEqual(declared)
-    expect([...declared].every(className => selected.includes(className))).toBe(true)
+    // Two directions at once: no override reaches a class the pin was never verified against, and
+    // no verified class goes unused.
+    expect(selected).toEqual(declared)
   })
 
   it('ships the brand override only inside the advanced-shell stylesheet', () => {
-    expect(advancedStyleSheet()).toContain(suquoBrandStyles())
-    expect(advancedStyleSheet().indexOf(SUQUO_BRAND_NAME))
-      .toBeGreaterThan(advancedStyleSheet().indexOf('.dshDesktopResizeHandle'))
+    expect(advancedStyleSheet()).toContain(parametriaBrandStyles())
   })
 
   it('leaves compatibility mode running the upstream client without the override', () => {
@@ -133,8 +172,13 @@ describe('Suquo Systems brand lockup', () => {
 
     try {
       apply(ctx)
-      expect(labels).not.toContain('desktop: advanced shell styles')
-      expect(labels).not.toContain('desktop: advanced root slot')
+
+      // Exhaustive, so a newly added advanced effect cannot slip into the compatibility path and
+      // so an apply() that stopped running at all cannot pass by registering nothing.
+      expect(labels).toEqual([
+        'dsh-plugin-desktop: renderer boot health report',
+        'dsh-plugin-desktop: workspace folder drop',
+      ])
     }
     finally {
       vi.unstubAllGlobals()
