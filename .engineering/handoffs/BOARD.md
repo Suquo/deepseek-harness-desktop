@@ -10,7 +10,7 @@
 
 ## Now
 
-**PR #21 MERGED (2026-08-19 ~21:30): #9 item 1 delivered persona-only per owner ruling** — workspace-local UV_CACHE_DIR + per-call playwright escalation; the danger-full-access preset row REJECTED (acknowledgement dialog is key-gated; owner keeps it), rationale fenced in the preset tests. #9 stays open on the evidence half (separate plugin-shaped slice).
+**PR #22 MERGED (2026-08-19 ~22:15): #20 delivered as re-scoped — validator is a LEAF** (toolFilter denies all 5 delegation tools incl. ralph/workflow; fence DERIVES the list from upstream classification; refuted-premise comments corrected — gen-5's source refutation of the RM's issue text accepted and ruled). **PR #21 MERGED (2026-08-19 ~21:30): #9 item 1 delivered persona-only per owner ruling** — workspace-local UV_CACHE_DIR + per-call playwright escalation; the danger-full-access preset row REJECTED (acknowledgement dialog is key-gated; owner keeps it), rationale fenced in the preset tests. #9 stays open on the evidence half (separate plugin-shaped slice).
 
 **PR #19 MERGED (2026-08-19 ~20:15): #18 delivered — validator maxDepth 0→1 (the live-run blocker on the vision route).** Grounded at upstream source (absolute child-depth cap; README: 0 forbids delegation); fence executes upstream's own depth functions. New: **#20** (sibling-row depth hole, disclosed in review). **#1 now closes on the owner's NEXT profile run** — the validator should spawn and answer through parametria-vision/gemini-3.6-flash. Harvest of run 1 fully recorded (#1/#6/#9 comments).
 
@@ -30,7 +30,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned gen-5 on #20** (sibling-row depth hole; branch `pm/issue-20-sibling-depth`). Expected-touch: preset agent.cordis.yml + preset tests + README. #9 open on evidence half; #1 pending-live on the owner's next run.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-5 delivered #20 as re-scoped (PR #22: validator-is-a-leaf toolFilter, derived fence). Queue: #9 evidence half (needs design), #1 pending-live, #5/#6/#7 owner-gated.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
