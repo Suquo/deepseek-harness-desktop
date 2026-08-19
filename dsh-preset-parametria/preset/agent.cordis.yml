@@ -266,18 +266,70 @@
     # that admits the spawn, and it still refuses a depth-2 child through this
     # same row, so the validator cannot recursively re-enter the vision route.
     #
-    # What the cap does NOT close, stated so nobody re-reads it as more than it
+    # What the cap does NOT reach, stated so nobody re-reads it as more than it
     # is: a cap is enforced per START through the row that carries it. A child
     # joins its parent's preset through `composeFrom()`, so the validator also
-    # holds the sibling `subagent` / `subagent_fork` rows above, which carry no
-    # cap and therefore take upstream's default of `3` — a depth-2 grandchild
-    # on the session model remains reachable through those. Closing that needs
-    # a per-child `toolFilter` on this row, which is its own decision and not
-    # one this change makes: a filter naming a tool that does not exist fails
-    # startup, and this repo cannot verify global tool names in a headless
-    # gate. `tests/validator-depth.test.mjs` pins the residual shape — the
-    # sibling rows carry no cap of their own — so the gap stays visible in a
-    # fence rather than only in this paragraph.
+    # holds every OTHER delegation row in this file — the sibling `subagent` /
+    # `subagent_fork` rows above (no cap, so upstream's default `3`) and the
+    # `ralph` / `workflow` rows below, which reach children through
+    # `workflow-worker-thread` with no cap requested at all
+    # (`packages/workflow/workflow-worker-thread/src/host.ts:352-357`). This
+    # row's `maxDepth` touches none of them.
+    #
+    # CORRECTION (issue #20). This comment previously said a grandchild through
+    # those rows would land "on the session model", i.e. that the blind-child
+    # hole re-opened one level down. That was WRONG, and the correction is the
+    # reason the fix below is what it is. Upstream resolves a child's route
+    # from its CALLING agent's live options — `resolveChildAgentOptions`
+    # (`child-agent.ts:68-83`) spreads `parent.options.provider/model` and only
+    # then the row's own `agentOptions` — and the calling agent for a start made
+    # INSIDE the validator is the validator, which runs on the route this row
+    # pins (`tool-subagent/src/index.ts:372` takes `exec.agent` as that parent;
+    # `subagent-in-process-driver/src/index.ts:136` hands it straight to the
+    # resolver; an agent's `options` are the ones it was created with verbatim,
+    # `agent-loop/src/agent.ts:83`). So an uncapped grandchild RECURSES AND
+    # SPENDS on the paid vision route. It does not go blind.
+    #
+    # `toolFilter` is what makes both impossible: the validator is a LEAF.
+    # Every delegation-starting tool this preset registers is denied to the
+    # child, so it cannot start one at any depth, on any route, through any
+    # row. Rationale is containment and simplicity — a validation pass is a
+    # question with an answer, not an orchestrator — NOT blindness, which was
+    # never reachable here.
+    #
+    # Three properties of `toolFilter` this list is built around:
+    #
+    # 1. It is applied in the CHILD's creation window, after the preset join —
+    #    `applyChildComposition` calls `composeFrom()` and then
+    #    `childCtx.tools.restrict(toolFilter)` (`child-agent.ts:163-175`). The
+    #    preset's standing mount is therefore an ANCESTOR of the child scope
+    #    (`agent-presets/src/index.ts:316-325`), and an ancestor's rows are
+    #    exactly what a child may restrict: `view()` exempts only the child's
+    #    OWN layer (`core/tools/src/index.ts:1152-1192`), which is what keeps
+    #    the delegation runtime's own reporting tools out of the filter.
+    #    Upstream fences that shape directly (`core/tools/tests/scoped.spec.ts`,
+    #    "filters tools the child inherits from an ancestor scope").
+    # 2. A name that is not registered is REJECTED, not ignored:
+    #    `tools.restrict()` throws on an unknown global name
+    #    (`core/tools/src/index.ts:1088-1092`). That throw lands inside the
+    #    child's creation window, so it fails the DELEGATION — every
+    #    `subagent_validator` call, the issue #18 failure class again — while
+    #    the app and session keep running. Hence: this list names only tools
+    #    rows in THIS file actually register and leave ENABLED. The disabled
+    #    `subagent_codex` / `subagent_claude_code` rows are deliberately absent
+    #    — a disabled row registers nothing, so naming it would throw.
+    # 3. `deny`, not `allow`. An allow-list would be a closed enumeration of
+    #    every tool the validator is permitted, and every row added upstream
+    #    would silently disappear from the child. A deny-list states exactly
+    #    the capability being withdrawn.
+    #
+    # `tests/validator-leaf.test.mjs` derives this list rather than restating
+    # it: it classifies every enabled row against the pinned upstream source
+    # (does the package both register a model-facing tool AND reach a child-
+    # start seam?) and requires the deny list to equal that set exactly, with
+    # each name resolved from the row's own `toolName` or from the upstream
+    # declaration it defaults to. A delegation row added later and left
+    # undenied fails there; so does a denied name this preset does not register.
     - id: tool-subagent-validator
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
@@ -285,6 +337,13 @@
         toolName: subagent_validator
         backgroundMode: one-shot
         maxDepth: 1
+        toolFilter:
+          deny:
+            - subagent
+            - subagent_fork
+            - subagent_validator
+            - ralph
+            - workflow
         agentOptions:
           provider: parametria-vision
           model: google/gemini-3.6-flash

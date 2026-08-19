@@ -206,6 +206,19 @@ describe('the vision-pinned validator row', () => {
     )
   })
 
+  it('withdraws delegation from the child rather than only budgeting it', () => {
+    // Presence only, for the same reason as the cap above: the LIST is derived
+    // from this composition's own rows in `validator-leaf.test.mjs`, which owns
+    // that claim whole. Deletion is what this catches — with the key gone,
+    // that file's derived comparison has nothing to compare and the child
+    // silently regains every delegation row the preset mounts (issue #20).
+    assert.ok(
+      Object.hasOwn(row.config, 'toolFilter'),
+      'the validator row must state a per-child tool filter; omitting it leaves the validator holding '
+      + 'the sibling delegation rows it joins through composeFrom()',
+    )
+  })
+
   it('runs one-shot, so the parent waits for the verdict', () => {
     assert.equal(row.config.backgroundMode, 'one-shot')
   })

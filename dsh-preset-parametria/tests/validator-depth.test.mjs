@@ -99,8 +99,13 @@ describe('the validator delegate\'s delegation-depth cap', () => {
   it('leaves the plain delegation rows uncapped, as upstream ships them', () => {
     // Stated here because the cap above is easy to over-read: it governs starts
     // made through THIS row only. The sibling rows keep upstream's default of
-    // `3`, so a validator child can still reach them — named in the row's own
-    // comment and deliberately not closed by this change.
+    // `3`, and capping them was REJECTED as the answer to that (issue #20): it
+    // would take the PRIMARY agent's depth-2 delegation away for a problem that
+    // is the validator's alone, and it would still miss `ralph` / `workflow`,
+    // which request no cap at all. The validator's reach is closed one layer up
+    // instead, by this row's `toolFilter` — `validator-leaf.test.mjs` owns that
+    // claim. What is left for this assertion is drift: these two rows must keep
+    // matching upstream `standard`, which states no cap.
     for (const id of ['delegation/tool-subagent', 'delegation/tool-subagent-fork']) {
       assert.equal(
         rows.get(id).config.maxDepth, undefined,
