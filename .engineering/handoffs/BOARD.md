@@ -10,13 +10,11 @@
 
 ## Now
 
-**PR #10 MERGED (2026-08-19 ~17:02): #9 item 2 + CI contract doc delivered (closes nothing by design).** Root `test` reaches `dsh-preset-parametria`; verify-layout guards are segment-exact and driven by ONE workspace list; AGENTS.md carries the CI contract with corrected fork-parent attribution. #3 stays open on the owner's two ordered steps (fork Actions opt-in → branch protection). New: **#13** (profile.spec.ts ~10.5s vs 10s budget — tips red under load). Lane A FREE; worktree issue-3 pending cleanup.
+**PR #15 MERGED (2026-08-19 ~17:48): #13 delivered — profile.spec.ts win32 budget 10s→45s, derivation measured.** The resolver's measurement REFUTED the RM's issue framing (the PR #10 red was a ≥14x external-load stall on a sub-second test, not a headroom problem) — verified and ruled, issue closed on the corrected basis. RM reviewed inline (1-file +12/−1 diff fully read + empirically re-run: 18/18, 14.37s) — proportionality precedent: sub-agent axes are for diffs the RM can't hold whole. New: **#16** (marginal 5s budgets: desktop-plugins ~7.4x, market-pnpm-integration, electron-runtime). Lane A FREE.
+
+**PR #10 MERGED (2026-08-19 ~17:02): #9 item 2 + CI contract doc delivered (closes nothing by design).** Root `test` reaches `dsh-preset-parametria`; verify-layout guards are segment-exact and driven by ONE workspace list; AGENTS.md carries the CI contract with corrected fork-parent attribution. #3 stays open on the owner's two ordered steps (fork Actions opt-in → branch protection). New: **#13** (now closed via PR #15).
 
 **PR #11 MERGED (2026-08-19 ~16:57): issue #4 delivered — upstream watch tooling + protocol.** `scripts/upstream-watch.mjs` (read-only, tri-state gitlink, unknown-surfacing verdicts) + `.engineering/upstream-watch.md` (cadence, eval decision tree, patches checklist, pin-bump-PR rules). RM charter carries the daily watch tick. Today's live delta: harness pin CURRENT (0 behind); overlay 40 commits behind anywhere-labs — no bump trigger. #12 tracks the pin-guard exhaustiveness gap (+ root `upstream:watch` script rider). Lane C FREE; worktree issue-4 pending cleanup.
-
-**PR #8 MERGED (2026-08-19 ~15:45): issue #2 delivered — Parametria work profile.** `dsh-preset-parametria/` workspace landed (preset with `subagent_validator` pinned `parametria-vision`/`google/gemini-3.6-flash`, profile patch with the modality-declared pi-ai route, receipt-backed installer, 64 node:test fences). Review: REQUEST CHANGES (3 small blockers + 3 riders) → fixed in one cycle → APPROVE at `eae928de` → merged. RM independently re-ran the gate green (exit 0, quiet machine) — gen-1/2's timeout-only reds attributed to machine load. **Follow-ups live on #9** (evidence/sandbox plumbing · root-`test` pin coverage · mount observation pending-live on the operator's next run). #1 stays open pending a live provider datum; #7 fills the deliberately-empty preset skill root. Post-merge branch delete + docs push pending a classifier-flap recovery.
-
-**AB-GENERATION BOOTED (2026-08-19 ~afternoon, cjjmaster, `/loop /repo-manager` — fresh session per the AA succession plan).** Boot verification clean: no open PRs, issues #1–#7 open and matching the board, #2 carries gen-1's claim + settled plan. **Lane B gen-2 SPAWNED under named agent type `resolver-parametria`** with the AA takeover brief (continue #2, adopt existing worktree + branch, rulings in force: `google/gemini-3.6-flash` via pi-ai route `input: [text, image]`; apiKeyEnv read-only-discover or document+flag). Brief consumed — removed from this section.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -25,7 +23,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-2 on #13** (profile.spec.ts timeout budget; branch `claude/issue-13-profile-spec-timeout`). Expected-touch: that spec file + at most the workspace vitest config. Also cleaning merged worktrees issue-3/issue-4.
+- **Lane A (general, `claude/*`)**: FREE — gen-2 completed #13 (PR #15 merged). #16 is the natural next assignment (same measure-first pattern). All merged worktrees cleaned; registry holds issue-12 only.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 pending-live → #5 → #6; #7 and #9 available, #5/#6/#7 gated on owner items). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — RM-spawned gen-2 on #12** (exhaustive pin guard + `upstream:watch` script rider; branch `up/issue-12-pin-guard`). Expected-touch: `scripts/verify-layout.mjs` + root package.json scripts block. Disjointness vs Lane A gen-2 verified at spawn.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
@@ -34,14 +32,14 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 `gemini-3.6-flash` solo built a 119-node cabinet in 9.9 min (vs 20+8 min for run 1) but SKIPPED the per-increment validation discipline; its subagent died with an opaque `Error: subagent run failed` (empty transcript — new harness finding, scoped into #1); orchestrator self-validated via in-context image reads. First A/B datum + protocol implications recorded in `.engineering/research/model-comparison-first-datum.md`, commented onto #6 and #1. RM recommendation pending owner: validator pin = `google/gemini-3.6-flash` (pi-ai route, `input: [text, image]`).
 
-## Queue (RM-triaged; not yet filed as GitHub issues — filing is the first RM generation's call with the operator)
+## Queue (open GitHub issues, RM-triaged; DELIVERED today: #2→PR8, #4→PR11, #13→PR15, #9-item-2→PR10)
 
-1. **[parametria-harness / Lane B] Vision-aware subagent model routing.** First-run finding: validator subagents inherit the session model; on text-only `deepseek-v4-flash` every image read failed while capture commands succeeded — *a failure mode that looks like success*. The skill now guards this; the HARNESS should solve it structurally: compose agent presets / model routing so validator-class subagents get a vision-capable model (upstream plugins in play: `dsh-agent-presets`, `dsh-agent-default-model`, `dsh-subagent`). This is the seed feature of the Parametria work profile.
-2. **[parametria-harness / Lane B] Parametria work profile.** Define the desktop profile composition for Parametria runs (skill availability, model config, permission preset) so a run doesn't depend on hand-arranged session state.
-3. **[ci / Lane A] Stand up CI** (GitHub Actions: `corepack yarn check` on PR) — until then, "required CI" = the full local gate pasted in the PR body (charter rule).
-4. **[upstream / Lane C] Upstream watch cadence.** Current pin `0.1.0-rc.7` (`99f6f02fec`) = latest release at bootstrap; anywhere-labs `upstream` remote last merged at `3352bd1b20`. Establish the release-watch tick and the pin-bump eval protocol per the standing goal.
-5. **[skill, outside this repo] SK-1: reconcile SKILL.md ~L115 vs ~L298** — the old blanket `transform.rotate` prohibition contradicts the re-confirmed guidance; a future run reading L115 first re-imports the confusion the run agent just resolved. (Skill lives at `~\.agents\skills\suquo-systems-parametria\`; not versioned here — needs its own landing surface, RM to raise with operator.)
-6. **[skill, outside this repo] SK-2: node-catalog refresh.** `references/node-catalog.md` is provably stale (`transform.rotate` inputs + OCCT flag); a regeneration pass from the live app would retire the whole staleness class instead of patching entries one by one.
+- **#12 [Lane C] Exhaustive pin guard** — IN FIX CYCLE (PR #14, one blocker: names-not-counts snapshot).
+- **#16 [Lane A] Marginal 5s test budgets** — claimable now (measure-first pattern per PR #15).
+- **#1 [Lane B] Vision routing** — structural half landed in PR #8; stays open PENDING-LIVE (first real run must show `subagent_validator` on `parametria-vision` + the opaque `subagent run failed` finding scoped here).
+- **#5 [Lane B] Cost/timing report** — gated on owner price seeds. **#6 [Lane B] Model A/B protocol** — first datum recorded; buildable after #5's seeds. **#7 [Lane B] Skill-root consolidation** — gated on owner canonicalization OK.
+- **#9 [Lane B] PR #8 follow-ups** — item 2 done (PR #10); items 1 (evidence/sandbox plumbing) + 3 (mount observation, pending-live) remain. **#3 [owner] CI required-checks** — see owner items.
+- **[skill, outside repo] SK-1** (SKILL.md L115 vs L298 contradiction) + **SK-2** (node-catalog regeneration) — need a landing surface ruling (owner item).
 
 ## Owner items (batched, non-blocking)
 
