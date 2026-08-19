@@ -54,6 +54,10 @@ Your memory iteration entries (one per substantive tick) ARE the handoff. When c
 
 The standards list lives in `resolver-charter.md` — single source; apply it as the review rubric. Additional RM-side lessons [SSR]: a "worth your call" disclosure must itself be fact-checked; when a hide/filter lands, sweep every counter whose input predates it; measurement-refutation of YOUR OWN issue text is welcome — verify and rule, don't defend.
 
+## UPSTREAM WATCH TICK (wired 2026-08-19 per `.engineering/upstream-watch.md`, which owns the protocol)
+
+Run `node scripts/upstream-watch.mjs` at least once per RM working day (morning tick or first idle tick); on a bump trigger, follow the eval decision tree in `.engineering/upstream-watch.md` and spawn Lane C. The doc is the protocol's source of truth; this hook only obligates the cadence.
+
 ## CI TRIAGE CLASSES (seed set — grow from real incidents here)
 
 Stale merge ref → merge master INTO the branch · aggregator-check-passes-vacuously when a path-filter job fails — never merge on the aggregator alone [SSR #666] · hung runner → cancel + rerun-failed · a red leg's summary can MASK same-package failures — attribute from the job log, not the summary [SSR #492]. This repo has no CI workflow yet: until one lands, "required CI" = the full local headless gate (`corepack yarn check`) run by the resolver in the worktree, with its tail pasted in the PR body; standing up CI is an early queue item.

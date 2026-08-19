@@ -55,7 +55,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Owner items (batched, non-blocking)
 
-- **Branch protection on master (#3, re-scoped)**: CI already exists and runs green (inherited `ci.yml`, both OS legs — verified by live dispatch), but nothing is REQUIRED: PR #8 merged with an empty check rollup. RM recommendation: a ruleset requiring `check` + `desktop-windows` on PRs to master, with bypass so direct docs/status pushes (RM + operator) keep working. Approve and the RM applies it; #3 closes then.
+- **Fork Actions event triggers are DORMANT, then branch protection (#3, re-scoped — TWO steps in order)**: `workflow_dispatch` runs the inherited `ci.yml` green on all five jobs, but `pull_request` events produce NO run (PRs #10/#11 rollups empty) — consistent with GitHub's fork Actions opt-in, needs the operator to enable Actions/workflow runs in the fork's Actions tab FIRST. Only then: branch protection (RM recommendation: ruleset requiring `check` + `desktop-windows` on PRs, bypass for direct docs pushes) — requiring checks that never arrive would make master unmergeable. Approve both and the RM applies step 2; #3 closes then.
 
 - **Vision model/route for the validator pin** (#1): must be a `dsh-llm-pi-ai` route (deepseek adapter has no modality config). Name the provider + model to pin.
 - **Price table seeds** (#5): per-model $/Mtok (uncached-input / cacheRead / cacheWrite / output) for the models you want costed.
