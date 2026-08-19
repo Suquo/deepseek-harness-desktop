@@ -113,20 +113,28 @@ function errorCode(cause: unknown): string | undefined {
 }
 
 describe('desktop direct bundle management', {
-  // Windows budget sized from measurement. Eleven of these thirteen tests run in
-  // 24-44ms; the two that call prepareDesktopProfile measure 725-1144ms, because
-  // that call relinks the same ~527-package junction closure profile.spec.ts pays
-  // for (upstream healProfilesModuleFallback). Suite concurrency is not the lever —
-  // the same two tests measure 733-1144ms isolated and 725-892ms under full-suite
-  // load. External machine load is: in one full-suite run here both closure tests
-  // were killed at the former 5s default during a load event that stretched
-  // profile.spec.ts's worst test from 2.29s to 19.89s — an 8.7x stall, measured on
-  // the survivor because its 45s budget held. PR #10 saw the same class at >=14x.
-  // 14x on the 1144ms worst needs 16.0s, so 20s is the first round number clear of
-  // the observed floor, at 17.5x. The ceiling is the afterEach above: its rmSync of
-  // the same closure is bounded in (100, 200]ms against the untouched 10s
-  // hookTimeout, i.e. >=50x, so it stays the looser budget and only one number has
-  // to move. A genuine hang still fails loudly — the file runs 2.9-3.0s quiet.
+  // Windows budget sized from measurement. Only two of these thirteen tests call
+  // prepareDesktopProfile, which relinks the same ~527-package junction closure
+  // profile.spec.ts pays for (upstream healProfilesModuleFallback); the other
+  // eleven are an order of magnitude cheaper, tens of ms. Suite concurrency is not
+  // the lever: those two measure 596-727ms over twelve isolated runs (median 670)
+  // and 725-892ms under full-suite load. External machine load is the lever, and
+  // one such event landed inside that twelve-run sample: both closure tests
+  // stretched to 9956ms and 9679ms — 14.9x the isolated median — while the cheapest
+  // test in the same run went from ~35ms to 739ms, 21x. Both passed under this
+  // budget; both would have been killed at the former 5s default. That is PR #10's
+  // >=14x stall class, measured directly rather than inferred from a kill time.
+  //
+  // 20s therefore sits 2.0x above the largest stall actually observed and 22.4x
+  // above the 892ms loaded worst. The ceiling is the afterEach above: its rmSync of
+  // the same closure is bounded in (200, 500]ms — reds at 200 in 1 of 4 runs, green
+  // at 500 in 3 of 3 and at 1000 in 2 of 2 — against the untouched 10s hookTimeout,
+  // so the hook tolerates >=20x and this budget's 22.4x is the looser of the two;
+  // no second number has to move. Deferred deliberately: at 20s a ~22x regression
+  // in the junction-closure cost would still pass green. The POSIX arm keeps the 5s
+  // default — the closure cost is an NTFS/Defender characteristic and was not
+  // measured on a POSIX host. A genuine hang still fails loudly: quiet, the whole
+  // file runs under 3s.
   timeout: process.platform === 'win32' ? 20_000 : 5_000,
 }, () => {
   it('lists each direct bundle once and keeps only explicit product bundles immutable', async () => {
