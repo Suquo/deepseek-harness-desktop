@@ -5,6 +5,7 @@ import {
   WINDOWS_CAPTION_CONTROLS_WIDTH,
   WINDOWS_TITLEBAR_HEIGHT,
 } from '../window-chrome.ts'
+import { suquoBrandStyles } from './brand.ts'
 import { SIDEBAR_COLLAPSED } from './layout-state.ts'
 
 /** Advanced-shell stylesheet kept as a plain string so the package client bundle stays self-contained. */
@@ -49,7 +50,19 @@ export function installAdvancedStyles(): () => void {
   const style = document.createElement('style')
   style.dataset.plugin = 'dsh-plugin-desktop'
   style.dataset.pluginCss = 'dsh-plugin-desktop/advanced-shell'
-  style.textContent = ADVANCED_STYLES
+  style.textContent = advancedStyleSheet()
   document.head.appendChild(style)
   return () => { style.remove() }
+}
+
+/**
+ * Compose the advanced-shell stylesheet.
+ *
+ * The Suquo Systems brand lockup is appended last so it wins over the upstream marks it replaces
+ * at equal specificity. Compatibility mode never installs this sheet, which keeps the upstream
+ * default client running without overrides.
+ * @returns the full advanced-shell stylesheet text.
+ */
+export function advancedStyleSheet(): string {
+  return ADVANCED_STYLES + suquoBrandStyles()
 }
