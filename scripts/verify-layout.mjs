@@ -26,48 +26,45 @@ const noteRecordPath = `${noteDirectory}/${noteName}.i18n.yaml`
 if (workspace.packageManager !== 'yarn@4.18.0') {
   fail('the product workspace must pin yarn@4.18.0')
 }
-if (JSON.stringify(workspace.workspaces) !== JSON.stringify([
-  'dsh-plugin-desktop',
-  'dsh-community-fabric',
-  'dsh-community-market',
-  'dsh-preset-parametria',
-])) {
-  fail('the root Yarn workspace must contain the desktop, community-fabric, community-market, and preset-parametria packages')
-}
-for (const [name, manifest] of [
+// One list drives every workspace guard below — the root `workspaces` snapshot,
+// package identity, Yarn-release inheritance, and the root chain guards. A
+// fifth workspace added here is subject to all of them at once; added anywhere
+// else, it fails the snapshot first. Order matches the root `workspaces` array.
+const workspaces = [
   ['dsh-plugin-desktop', plugin],
   ['dsh-community-fabric', fabric],
   ['dsh-community-market', market],
   ['dsh-preset-parametria', preset],
-]) {
-  if (manifest.packageManager !== undefined) fail(`${name} must inherit the root Yarn release`)
+]
+// A root script is a `&&` chain of commands. Compare whole trimmed segments,
+// never substrings: `includes('yarn workspace x test')` also matches
+// `yarn workspace x test:e2e`, and matches mentions that never execute.
+const chainRuns = (chain, command) => (workspace.scripts[chain] ?? '')
+  .split('&&')
+  .map(segment => segment.trim())
+  .includes(command)
+
+if (JSON.stringify(workspace.workspaces) !== JSON.stringify(workspaces.map(([name]) => name))) {
+  fail(`the root Yarn workspace must contain exactly: ${workspaces.map(([name]) => name).join(', ')}`)
 }
-if (fabric.name !== 'dsh-community-fabric') fail('the Fabric workspace must own dsh-community-fabric')
-if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
-if (preset.name !== 'dsh-preset-parametria') fail('the preset workspace must own dsh-preset-parametria')
-// Every workspace's own gate must run under the root `check`, or a package can
-// be added to the tree and never validated by anything.
-for (const name of ['dsh-community-fabric', 'dsh-community-market', 'dsh-preset-parametria', 'dsh-plugin-desktop']) {
-  if (!workspace.scripts.check.includes(`yarn workspace ${name} check`)) {
+for (const [name, manifest] of workspaces) {
+  if (manifest.name !== name) fail(`the ${name} workspace must own the ${name} package name`)
+  if (manifest.packageManager !== undefined) fail(`${name} must inherit the root Yarn release`)
+  // Every workspace's own gate must run under the root `check`, or a package
+  // can be added to the tree and never validated by anything.
+  if (!chainRuns('check', `yarn workspace ${name} check`)) {
     fail(`the root check script must run the ${name} gate`)
   }
-}
-// The same, one level down: a workspace whose own gate runs under the root
-// `check` can still define unit tests that `corepack yarn test` never reaches,
-// which is how `dsh-preset-parametria` shipped 64 fences the documented
-// unit-test command silently skipped. Both root chains are pinned by exact
-// string in `dsh-plugin-desktop/tests/package.spec.ts`, so a workspace joins
-// one only in a change that moves the pinned string with it — these guards
-// are what force that change to happen.
-for (const [name, manifest] of [
-  ['dsh-community-fabric', fabric],
-  ['dsh-community-market', market],
-  ['dsh-preset-parametria', preset],
-  ['dsh-plugin-desktop', plugin],
-]) {
+  // The same, one level down: a workspace whose own gate runs under the root
+  // `check` can still define unit tests that `corepack yarn test` never
+  // reaches, which is how `dsh-preset-parametria` shipped 64 fences the
+  // documented unit-test command silently skipped. Both root chains are also
+  // pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`, so a
+  // workspace joins one only in a change that moves the pinned string with it
+  // — these guards are what force that change to happen.
   for (const chain of ['test', 'typecheck']) {
     if (manifest.scripts?.[chain] === undefined) continue
-    if (!workspace.scripts[chain].includes(`yarn workspace ${name} ${chain}`)) {
+    if (!chainRuns(chain, `yarn workspace ${name} ${chain}`)) {
       fail(`the root ${chain} script must run the ${name} ${chain}`)
     }
   }

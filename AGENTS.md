@@ -30,7 +30,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` is inherited from the pinned upstream and is this fork's CI. It runs on pull requests to `master`, pushes to `master`, and `workflow_dispatch`. Jobs:
+`.github/workflows/ci.yml` is inherited from this repository's fork parent (anywhere-labs) and is this fork's CI. It is **not** the pinned upstream's workflow: `deepseek-harness/` carries its own, different `.github/workflows/ci.yml`, which nothing in this repository runs. It triggers on pull requests to `master`, pushes to `master`, and `workflow_dispatch`. Jobs:
 
 | Job | Runner | What it runs |
 |---|---|---|
@@ -42,7 +42,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 
 The gate therefore runs on both a Linux and a Windows runner. Windows is the primary development platform, so a Windows-only regression is caught by `desktop-windows` rather than by `check`.
 
-The two jobs skip documentation-only diffs by different mechanisms, and the difference matters if these are ever made required checks: `check` has **no** job-level `if`, so it always runs and always reports — its steps are individually gated, and a documentation-only diff reduces it to a single announcing step. The three packaging jobs carry a job-level `if`, so a documentation-only diff leaves them *skipped* rather than passed.
+Four jobs read the `product` output, and they skip documentation-only diffs by two different mechanisms — which matters if any of them is ever made a required check. One of the four, `check`, has **no** job-level `if`: it always runs and always reports, because its steps are individually gated, so a documentation-only diff reduces it to a single announcing step. The other three (`desktop-windows`, `desktop-macos`, `upstream-command-windows`) carry a job-level `if`, so a documentation-only diff leaves them *skipped* rather than passed.
 
 **Every job that runs the gate must check out the submodule (`submodules: recursive`).** The gate reads the pinned upstream checkout, so a job without it fails at the gate's first step:
 
