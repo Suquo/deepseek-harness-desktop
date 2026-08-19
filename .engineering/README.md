@@ -17,8 +17,6 @@ This fork is being turned into the **Suquo Systems Parametria harness** — a cu
 | `adrs/` | Architecture Decision Records, numbered `H-NNNN` — durable architectural truths. See [`adrs/README.md`](adrs/README.md) |
 | `handoffs/` | Fleet operating model: stable role charters (Repo Manager, lane resolvers) + `BOARD.md`, the RM-maintained live fleet state. See the fleet table in [`../AGENTS.md`](../AGENTS.md) |
 
-Standing protocols sit at the top level of this directory: [`upstream-watch.md`](upstream-watch.md) — upstream watch cadence and the pin-bump eval protocol (Lane C, issue #4).
-
 ## Tracker
 
 GitHub Issues at `Suquo/deepseek-harness-desktop`. Convex Tracker is reserved for cross-cutting / fleet-wide work.
@@ -33,3 +31,4 @@ Per-change loop: `corepack yarn build` / `corepack yarn typecheck` / `corepack y
 - Methodology: `~/Documents/.context/ENGINEERING.md`
 - Engineering config: [`./config.yml`](./config.yml)
 - Upstream pin: [`../upstream.json`](../upstream.json) + `deepseek-harness/` submodule
+- Upstream watch cadence + pin-bump eval protocol (Lane C): [`./upstream-watch.md`](./upstream-watch.md)

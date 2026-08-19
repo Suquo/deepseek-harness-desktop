@@ -2,7 +2,8 @@
 
 How this fork stays current with the two upstreams it tracks, and what has to happen
 before a pin moves. Established on issue #4 under the RM's STANDING GOAL
-(`repo-manager-charter.md`) and ADR [H-0001](adrs/H-0001-fork-strategy-parametria-harness-overlay.md).
+([`handoffs/repo-manager-charter.md`](handoffs/repo-manager-charter.md)) and ADR
+[H-0001](adrs/H-0001-fork-strategy-parametria-harness-overlay.md).
 
 **Division of authority.** Lane C *observes, trials, and reports*. The
 inherit / adapt / hold-back / skip decision is the RM's, always — the standing goal
@@ -26,6 +27,7 @@ Neither remote is ever pushed to. `git push upstream` is forbidden by AGENTS.md.
 node scripts/upstream-watch.mjs             # human-readable report
 node scripts/upstream-watch.mjs --json      # machine-readable, same facts
 node scripts/upstream-watch.mjs --offline   # local facts only, no network
+node scripts/upstream-watch.mjs --help      # the script's own header
 ```
 
 It reports releases/commits behind on both sides, the `patches/` inventory (which
@@ -43,18 +45,28 @@ works in checkouts where `git submodule update --init` never ran.
 It is deliberately **not** part of `corepack yarn check` — the headless gate stays
 offline and deterministic. Run it by hand (or from the RM's tick), not from CI.
 
-Two reading rules:
+Three reading rules:
 
-- `--offline` and a failed `gh api` call both render as `(unknown)`, never as `0`.
-  "We could not look" is not "we are current"; the final ACTION line says so.
-- The local `upstream/master` ref being stale does **not** distort `last merged`: a
-  merge-base only moves when a merge actually lands. A stale ref is reported as such.
+- **`(unknown)` is never `0`.** `--offline` and a failed `gh api` call both render as
+  `(unknown)`; "we could not look" is not "we are current", and the ACTION line
+  (`verdict` in `--json`) says `inconclusive` rather than `none`.
+- **`indeterminate` is its own answer.** If the pinned commit is not the commit of a
+  published release — a mid-release pin, a tag with no Release object, a moved tag —
+  then "0 releases behind" would be an artefact of not being able to place our own
+  pin. That case reports `indeterminate` plus a warning, never `current`. The harness
+  verdict also folds in commits-behind-default-branch, so a pin trailing the branch
+  with no release cut yet still reads `behind`.
+- **A stale local `upstream/master` ref does not distort `last merged`**: a merge-base
+  only moves when a merge actually lands. The staleness is reported, not corrected.
 
 ## Cadence
 
 - **Every RM tick** that involves a board update: run `node scripts/upstream-watch.mjs`.
   It costs a few seconds and seven read-only API GETs. Record the two headline numbers
   (releases behind, overlay commits behind) in the RM's memory iteration entry.
+  *This obligation is not yet wired into `handoffs/repo-manager-charter.md` or into a
+  root `package.json` script — both are the RM's to add, and are raised as such on
+  issue #4. Until then the cadence lives only here.*
 - **Harness releases behind > 0** ⇒ the RM spawns a Lane C generation for a *trial*
   pin bump (below). New harness releases are the event this whole protocol exists for.
 - **Overlay commits behind** is expected to be large and to grow; the parent repo is
@@ -78,21 +90,25 @@ decision is "inherit" or "adapt".
    submodule + `git add deepseek-harness` from the parent). This updates which commit
    we point at; it never edits upstream files, which stays forbidden.
 2. Update `upstream.json`: `commit`, `sourceVersion`, `runtimePackageVersion`.
-3. Move the whole **bump surface** the script enumerated — currently **166** entries:
-   96 exact `@deepseek-ai/dsh*` dependency pins in `dsh-plugin-desktop/package.json`,
-   61 dev+peer pins in `dsh-community-market/package.json`, and 9 root `resolutions`
-   selectors. Re-run the script after editing; the count must reach zero at the old
-   version.
+3. Move the whole **bump surface** the script enumerated — at `0.1.0-rc.7` that is
+   **166** entries: 96 exact `@deepseek-ai/dsh*` dependency pins in
+   `dsh-plugin-desktop/package.json`, 61 dev+peer pins in
+   `dsh-community-market/package.json`, and 9 root `resolutions` selectors. Note the
+   script counts against whatever `upstream.json` currently says, so after step 2 it
+   counts entries already moved to the **new** version: it starts near zero and is
+   done when it reaches the full surface. The independent check is that the old
+   version string no longer appears in any manifest.
 4. Rename the harness-versioned patch files to the new version and repoint the
-   matching `resolutions` entries. **The pair moves together** (AGENTS.md).
+   matching `resolutions` entries. **The pair moves together**
+   (`handoffs/resolver-charter.md`, ENVIRONMENT).
 5. `corepack yarn install` (not `--immutable`) to regenerate `yarn.lock`, then
    re-validate every patch (next section).
 6. `corepack yarn check` in the foreground.
 
 `check:layout` is the drift guard that catches a half-done bump: it asserts the
 submodule index SHA, the submodule's checked-out HEAD, a clean submodule worktree, the
-submodule's `package.json` version, and every `@deepseek-ai/dsh*` dependency of
-`dsh-plugin-desktop` against `upstream.json`.
+submodule's origin URL, the submodule's `package.json` version, and every
+`@deepseek-ai/dsh*` dependency of `dsh-plugin-desktop` against `upstream.json`.
 
 **Known blind spot** (`scripts/verify-layout.mjs` ~L133): that last assertion covers
 `dsh-plugin-desktop.dependencies` only. `dsh-community-market`'s 61 dev+peer pins at
@@ -176,5 +192,19 @@ adapt vs hold-back. Explicitly **not** a recommendation dressed as a finding.
 - The PR body carries: the release delta, the per-patch re-validation table, the
   foreground `corepack yarn check` tail, the follow-up issues filed, and — for any
   `dsh-llm-deepseek` change — the pending-live-confirmation status.
-- Paste the watch script's output for the *new* pin as the closing evidence: the bump
-  surface count at the old version must be zero.
+- Paste the watch script's output for the *new* pin as the closing evidence, and
+  confirm the old version string appears in no manifest.
+
+## Maintaining this document
+
+Parts of this file are stamped to `0.1.0-rc.7` and go stale the moment a pin moves.
+The pin-bump PR that moves the pin updates them in the same PR — that is the one
+exception to "a pin-bump PR changes nothing else", because leaving them behind makes
+this document lie about the tree it describes:
+
+- the **166 / 96 / 61 / 9** bump-surface numbers (re-read them off the script);
+- the **per-patch table**, including its "as of `0.1.0-rc.7`" heading and any patch
+  whose target file or hunk count changed;
+- the **`scripts/verify-layout.mjs` ~L133 blind spot** — delete this whole caveat if
+  the guard has since been widened to cover every workspace.
+

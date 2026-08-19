@@ -9,19 +9,21 @@
 //
 // This script NEVER writes: it does not bump the pin, does not touch the submodule,
 // does not fetch, does not push, and does not edit any file. Every git invocation
-// goes through `git()`, which refuses any subcommand outside READ_ONLY_GIT (below),
-// and every network read is a `gh api` GET. Its whole output is a report; the
-// decision it feeds is the RM's (see `.engineering/upstream-watch.md`).
+// goes through `git()`, which throws on anything READ_ONLY_GIT (below) does not admit
+// as a reading call, and every network read is a `gh api` GET. Its whole output is a
+// report; the decision it feeds is the RM's (see `.engineering/upstream-watch.md`).
 //
 // Usage:
 //   node scripts/upstream-watch.mjs             human-readable report
 //   node scripts/upstream-watch.mjs --json      machine-readable report on stdout
 //   node scripts/upstream-watch.mjs --offline   local facts only, no `gh api` calls
+//   node scripts/upstream-watch.mjs --help      this header
 //
 // Exit code is 0 whenever the report was produced, even when the fork is behind —
-// being behind is information, not a gate failure. A non-zero exit means the report
-// itself could not be produced. This is deliberately NOT part of `yarn check`: the
-// headless gate must stay offline and deterministic.
+// being behind is information, not a gate failure. Exit 2 means the invocation was
+// rejected (unknown argument); any other non-zero means the report could not be
+// produced. This is deliberately NOT part of `yarn check`: the headless gate must
+// stay offline and deterministic.
 
 import { execFileSync } from 'node:child_process'
 import { readdirSync, readFileSync } from 'node:fs'
@@ -29,24 +31,27 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 
-// The read-only fence. `git()` is the only way this script reaches git, and a
-// subcommand that is not on this list is a bug in the script, not a runtime
-// condition to recover from — so it throws rather than degrading.
-const READ_ONLY_GIT = new Set([
-  'config',
-  'log',
-  'ls-tree',
-  'merge-base',
-  'rev-list',
-  'rev-parse',
+// The read-only fence. `git()` is the only way this script reaches git, and a call
+// outside this list is a bug in the script, not a runtime condition to recover from —
+// so it throws rather than degrading. `config` is the one subcommand that is not
+// read-only by nature (`git config k v` writes), so it is admitted only in its
+// reading form; the rest cannot modify anything whatever arguments they are given.
+const READ_ONLY_GIT = new Map([
+  ['config', args => args.includes('--get')],
+  ['log', () => true],
+  ['ls-tree', () => true],
+  ['merge-base', () => true],
+  ['rev-list', () => true],
+  ['rev-parse', () => true],
 ])
 
 const warnings = []
 const warn = message => { warnings.push(message); return null }
 
 const git = (...args) => {
-  if (!READ_ONLY_GIT.has(args[0])) {
-    throw new Error(`upstream-watch: refusing to run non-read-only git subcommand "${args[0]}"`)
+  const permitted = READ_ONLY_GIT.get(args[0])
+  if (!permitted || !permitted(args)) {
+    throw new Error(`upstream-watch: refusing to run non-read-only git invocation "${args.join(' ')}"`)
   }
   try {
     return execFileSync('git', args, {
@@ -87,13 +92,24 @@ const toSlug = url => {
   return match ? `${match[1]}/${match[2]}` : null
 }
 
+const FLAGS = new Set(['--json', '--offline', '--help', '-h'])
 const args = new Set(process.argv.slice(2))
+// A typo'd `--ofline` must not quietly take the live network path.
+for (const arg of args) {
+  if (!FLAGS.has(arg)) {
+    process.stderr.write(`upstream-watch: unknown argument "${arg}" (accepts ${[...FLAGS].join(', ')})\n`)
+    process.exit(2)
+  }
+}
 if (args.has('--help') || args.has('-h')) {
-  process.stdout.write(readFileSync(import.meta.filename, 'utf8')
-    .split('\n')
-    .filter(line => line.startsWith('//'))
-    .map(line => line.replace(/^\/\/ ?/u, ''))
-    .join('\n') + '\n')
+  // The header block only — everything above the first non-comment line. Section
+  // markers and implementation notes further down are not help text.
+  const header = []
+  for (const line of readFileSync(import.meta.filename, 'utf8').split('\n')) {
+    if (!line.startsWith('//')) break
+    header.push(line.replace(/^\/\/ ?/u, ''))
+  }
+  process.stdout.write(`${header.join('\n')}\n`)
   process.exit(0)
 }
 const offline = args.has('--offline')
@@ -148,8 +164,22 @@ const harnessCompare = harnessDefaultBranch
   ? ghApi(`repos/${harnessSlug}/compare/${upstreamJson.commit}...${harnessDefaultBranch}`)
   : null
 
-// "0 releases behind" and "we could not look" must never render the same way.
-const harnessKnown = !offline && releases.length > 0
+// "0 releases behind", "we could not look", and "we looked but could not place our
+// own pin" must never render the same way. The third case is the subtle one: if the
+// pinned commit is not the commit of a published Release — a mid-release pin, a tag
+// with no Release object, a moved tag — then `newerReleases` is empty for a reason
+// that has nothing to do with being up to date, and calling that `current` would be
+// exactly the false clean bill of health this script exists to prevent.
+const harnessReachable = !offline && releases.length > 0
+if (harnessReachable && !pinnedRelease) {
+  warn(`pinned commit ${upstreamJson.commit.slice(0, 10)} does not correspond to any published release — "releases behind" cannot be computed for this pin`)
+}
+const harnessKnown = harnessReachable && pinnedRelease !== null
+
+// A release-only verdict misses a pin that trails the branch with no release cut yet,
+// so both signals the script already holds have to reach the status.
+const commitsBehind = harnessCompare?.ahead_by ?? null
+const harnessBehind = newerReleases.length > 0 || (commitsBehind ?? 0) > 0
 
 const harness = {
   repository: harnessSlug,
@@ -164,8 +194,12 @@ const harness = {
   latestRelease,
   releasesBehind: harnessKnown ? newerReleases.length : null,
   newerReleases,
-  commitsBehindDefaultBranch: harnessCompare?.ahead_by ?? null,
-  status: harnessKnown ? (newerReleases.length > 0 ? 'behind' : 'current') : 'unknown',
+  commitsBehindDefaultBranch: commitsBehind,
+  // `behind` wins over `indeterminate`: a positive drift signal is conclusive even
+  // when the release side could not be placed.
+  status: harnessBehind
+    ? 'behind'
+    : harnessKnown ? 'current' : harnessReachable ? 'indeterminate' : 'unknown',
 }
 
 // ---------------------------------------------------------------- overlay side
@@ -281,17 +315,19 @@ const manifests = ['package.json', ...(workspace.workspaces ?? []).map(name => `
 const bumpSurface = manifests.map(path => {
   const manifest = readJson(path)
   const fields = {}
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
     const pinned = Object.entries(manifest[field] ?? {})
       .filter(([, range]) => range === version)
       .map(([name]) => name)
-    if (pinned.length > 0) fields[field] = pinned.length
+    if (pinned.length > 0) fields[field] = pinned
   }
+  // Resolutions selectors carry the version in either half and in both exact and
+  // caret form, so this is a "mentions the version" match, not an exact-pin match.
   const pinnedResolutions = Object.entries(manifest.resolutions ?? {})
     .filter(([selector, target]) => selector.includes(version) || target.includes(version))
-    .length
-  if (pinnedResolutions > 0) fields.resolutions = pinnedResolutions
-  const total = Object.values(fields).reduce((sum, count) => sum + count, 0)
+    .map(([selector]) => selector)
+  if (pinnedResolutions.length > 0) fields.resolutions = pinnedResolutions
+  const total = Object.values(fields).reduce((sum, entries) => sum + entries.length, 0)
   return { path, fields, total }
 }).filter(entry => entry.total > 0)
 
@@ -299,7 +335,16 @@ const bumpSurfaceTotal = bumpSurface.reduce((sum, entry) => sum + entry.total, 0
 
 // ---------------------------------------------------------------------- render
 
-const report = { generatedAt: new Date().toISOString(), offline, harness, overlay, patches, bumpSurface, warnings }
+// `verdict` gives a machine consumer the same conclusion the human ACTION line
+// carries, so `--json` cannot be read as a clean bill of health when the text form
+// would have said otherwise.
+const verdict = harness.status === 'behind' || overlay.status === 'behind'
+  ? 'behind'
+  : [harness.status, overlay.status].some(status => status === 'unknown' || status === 'indeterminate')
+    ? 'inconclusive'
+    : 'current'
+
+const report = { generatedAt: new Date().toISOString(), offline, verdict, harness, overlay, patches, bumpSurface, warnings }
 
 if (asJson) {
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`)
@@ -341,22 +386,21 @@ for (const patch of patches) {
   say(`                resolutions: ${patch.wiredResolutions.length}   yarn.lock patch: locators: ${patch.lockLocators}`)
 }
 say('')
-say(`BUMP SURFACE  ${bumpSurfaceTotal} manifest entries pinned exactly to ${upstreamJson.runtimePackageVersion} — all move in the pin-bump commit`)
+say(`BUMP SURFACE  ${bumpSurfaceTotal} manifest entries carrying ${upstreamJson.runtimePackageVersion} — all move in the pin-bump commit`)
 for (const entry of bumpSurface) {
-  say(`  ${entry.path}  ${Object.entries(entry.fields).map(([field, count]) => `${field}: ${count}`).join('   ')}`)
+  say(`  ${entry.path}  ${Object.entries(entry.fields).map(([field, entries]) => `${field}: ${entries.length}`).join('   ')}`)
 }
+say('  (--json lists every entry by name; dependency entries are exact pins, resolutions selectors carry the version in exact or caret form)')
 say('')
 if (warnings.length > 0) {
   say('WARNINGS')
   for (const message of warnings) say(`  - ${message}`)
   say('')
 }
-const behind = harness.status === 'behind' || overlay.status === 'behind'
-const unknown = harness.status === 'unknown' || overlay.status === 'unknown'
-if (behind) {
+if (verdict === 'behind') {
   say('ACTION: report the delta to the RM. A pin bump is an RM inherit/adapt/hold-back/skip decision — see .engineering/upstream-watch.md.')
-} else if (unknown) {
-  say('ACTION: inconclusive — one or both upstreams could not be read (see WARNINGS / --offline). This is NOT a clean bill of health.')
+} else if (verdict === 'inconclusive') {
+  say('ACTION: inconclusive — the drift could not be established for at least one upstream (see WARNINGS / --offline). This is NOT a clean bill of health.')
 } else {
   say('ACTION: none. Pin is current against the latest harness release; no overlay commits to merge.')
 }
