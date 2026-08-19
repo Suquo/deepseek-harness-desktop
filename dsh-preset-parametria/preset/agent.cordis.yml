@@ -248,20 +248,41 @@
     # answer, so the parent waits for the verdict in the foreground rather than
     # holding a durable child id it has no follow-up for.
     #
-    # `maxDepth: 0` forbids the validator from delegating at all. A child joins
-    # its parent's preset through `composeFrom()`, so it would otherwise reach
-    # every delegation tool in this group and could spawn its own children on
-    # the session model — re-opening the blind-validator hole one level down.
-    # The depth cap is the name-drift-free way to close it: a `toolFilter`
-    # naming a tool that does not exist fails startup, and this repo cannot
-    # verify global tool names in a headless gate.
+    # `maxDepth` is an ABSOLUTE cap on the CHILD's delegation depth, not a
+    # relative "how many further levels" budget. Upstream resolves the child's
+    # depth as `delegationDepthOf(parent) + 1` and throws `SubagentDepthError`
+    # the moment that exceeds the cap (`resolveChildDepth`,
+    # `packages/subagent/subagent/src/child-agent.ts:48-56`); a top-level agent
+    # is depth 0 (`depth.ts:28-36`). So the validator this session starts is
+    # depth 1, and `dsh-tool-subagent`'s own README says it plainly: default
+    # `3`, and `0` forbids delegation entirely.
+    #
+    # This row shipped `maxDepth: 0` (issue #18), which is exactly that: the
+    # persona MANDATES delegating every visual check here, and the harness
+    # refused every attempt — `Error: subagent depth 1 exceeds maxDepth 0`,
+    # observed live in export `dsh-session-853a0bc2`. `1` is the smallest cap
+    # that admits the spawn, and it still refuses a depth-2 child through this
+    # same row, so the validator cannot recursively re-enter the vision route.
+    #
+    # What the cap does NOT close, stated so nobody re-reads it as more than it
+    # is: a cap is enforced per START through the row that carries it. A child
+    # joins its parent's preset through `composeFrom()`, so the validator also
+    # holds the sibling `subagent` / `subagent_fork` rows above, which carry no
+    # cap and therefore take upstream's default of `3` — a depth-2 grandchild
+    # on the session model remains reachable through those. Closing that needs
+    # a per-child `toolFilter` on this row, which is its own decision and not
+    # one this change makes: a filter naming a tool that does not exist fails
+    # startup, and this repo cannot verify global tool names in a headless
+    # gate. `tests/validator-depth.test.mjs` pins the residual shape — the
+    # sibling rows carry no cap of their own — so the gap stays visible in a
+    # fence rather than only in this paragraph.
     - id: tool-subagent-validator
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: spawn
         toolName: subagent_validator
         backgroundMode: one-shot
-        maxDepth: 0
+        maxDepth: 1
         agentOptions:
           provider: parametria-vision
           model: google/gemini-3.6-flash
