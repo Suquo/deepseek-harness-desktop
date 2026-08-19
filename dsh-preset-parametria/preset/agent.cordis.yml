@@ -1,0 +1,301 @@
+# The `parametria` agent preset: the shipped `standard` coding agent, plus the
+# three things a Suquo Systems Parametria run needs and a hand-arranged session
+# cannot guarantee.
+#
+# 1. A PRESET-LOCAL SKILL ROOT (`skills/` beside this file). The skill travels
+#    with the preset and registers into THIS preset's layer of the host skill
+#    registry, where the nearest layer wins duplicates outright. The directory
+#    ships EMPTY on purpose: an empty or absent root discovers nothing, so the
+#    operator's existing `~/.agents/skills/suquo-systems-parametria` copy keeps
+#    resolving unchanged until issue #7 migrates the canonical copy in here.
+#    Seeding a placeholder would SHADOW the real skill, which is a regression.
+#
+# 2. A VISION-PINNED VALIDATOR DELEGATE (`subagent_validator`). See its row.
+#
+# 3. A persona that states the run's own shape rather than the generic one.
+#
+# Everything else is `standard` copied unchanged, which is the documented way
+# to author a preset (the shipped install belongs to the deployment and an
+# upgrade overwrites it). `tests/preset-drift.test.mjs` is an exhaustive
+# two-direction diff against the pinned upstream `standard` preset, so a row
+# that appears, disappears, or changes shape upstream fails the gate here
+# instead of drifting silently.
+#
+# A service row in a preset MUST sit inside a group carrying an `isolate`
+# realm, or `dsh-agent-presets` rejects the mount. The two groups below carry
+# the same realms `standard` gives them, for the same reasons.
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      You are a coding agent powered by the {{model}} model, running on the DeepSeek Harness Desktop. Your working directory is {{cwd}}.
+
+      This session runs the Parametria work profile: you build and verify parametric millwork definitions in Suquo Systems Parametria through the `suquo-systems-parametria` skill. Load that skill before building anything; it owns the node catalog, the definition schema, and the screenshot and verification procedure.
+
+      Delegate every visual check to `subagent_validator`, never to `subagent`. The validator delegate is pinned to a vision-capable model and declares image input explicitly, so an image it cannot read is refused before the attachment rather than reported as a clean pass. A general `subagent` child inherits this session's model, which may be text-only — a blind validator's report looks exactly like a passing one, which is the failure this preset exists to make impossible.
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition: a host row that injects a service
+# is the criterion for host-plane ownership — injection resolves before any
+# session exists, so there is no agent to key by. Both shell tools consume the
+# host registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
+# host-plane too.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane:
+# its producers sit outside any realm this file could put it in — `tool-bash`
+# above resolves it with `ctx.get`, and an entry-local realm here is invisible
+# to every sibling row, so `run_in_background` would answer "background jobs
+# unavailable" while these controls sat in the catalog. The registry is keyed by
+# owning agent anyway, so one host instance serves every session.
+- id: tool-jobs
+  name: '@deepseek-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+#
+# `customSkillDirs` is the one edit against `standard`. `baseUrl` is this
+# preset's own directory, so the root resolves wherever the preset is
+# installed — the installer copies `skills/` along with this file. Discovery
+# rank 300 puts it above `$DSH_HOME/skills` and the bundled roots and below a
+# project's own `.dsh/`/`.agents/` dirs, but rank only breaks ties WITHIN one
+# layer: this preset's layer is nearer than the deployment's, so once issue #7
+# lands the migrated skill here it wins outright over the home-directory copy.
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+# Only the model-facing tool. The goal SERVICE, its session driver, and the
+# `/goal` command stay on the host plane: the Gateway serves the goal domain as
+# Remote endpoints whose receiver comes from a generated descriptor, so it
+# resolves `goals` on the host and an entry-local realm here would hide it.
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+# Plan state is per-agent by nature, so an entry-local realm is not a
+# workaround here — it is the correct lifetime. The section text is `standard`'s
+# verbatim; the drift fence compares it byte for byte.
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@deepseek-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
+# share this realm rather than sit outside it.
+#
+# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
+# plane, and the rows here resolve that one instance. It keys every fold by
+# Session and owns the context-meter projection units the browser reads for
+# every session — behind a realm those units would come and go with whichever
+# presets happen to be mounted. A Parametria run is long and image-heavy, so
+# this preset keeps `standard`'s compaction stack rather than thinning it.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry and its spawn/fork backends live in the HOST
+# composition: the registry is a process singleton whose cross-session queries
+# the api-proxy serves to the browser, and a provider name may only be
+# registered once. This preset contributes the delegation TOOLS, which resolve
+# that host registry.
+#
+# `workflows` is different — nothing outside an agent reads it — so every row
+# that reaches it shares one entry-local realm here.
+#
+# `tool-subagent-report` stays host-plane: it registers a CONTINUABLE SETUP on
+# the singleton rather than a tool this agent calls, and the setup list is not
+# scope-aware, so a second agent-plane copy throws on the second live session.
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@deepseek-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-subagent
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: continuable
+
+    - id: tool-subagent-fork
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: continuable
+
+    # ── the vision-pinned validator delegate (issue #1) ──────────────────────
+    #
+    # Child model policy is fixed PER INSTANCE — per-call model selection does
+    # not exist — so a validator on another model is another distinctly named
+    # tool, which is what this row is. `agentOptions` states the route and
+    # model explicitly, and explicit values override what the child would
+    # otherwise inherit from this session: a text-only session model no longer
+    # decides whether the validator can see.
+    #
+    # The route is `parametria-vision`, declared by the profile's
+    # `cordis.patch.yml` with `input: [text, image]`. Declaring the modality is
+    # the load-bearing half: the harness refuses an image BEFORE it is attached
+    # when a model's modalities omit one, naming the model. Without it a blind
+    # validator reads the screenshot as absent and reports a clean pass — the
+    # first-run failure mode, which looks exactly like success.
+    #
+    # `one-shot`, not `continuable`: a validation pass is a question with an
+    # answer, so the parent waits for the verdict in the foreground rather than
+    # holding a durable child id it has no follow-up for.
+    #
+    # `maxDepth: 0` forbids the validator from delegating at all. A child joins
+    # its parent's preset through `composeFrom()`, so it would otherwise reach
+    # every delegation tool in this group and could spawn its own children on
+    # the session model — re-opening the blind-validator hole one level down.
+    # The depth cap is the name-drift-free way to close it: a `toolFilter`
+    # naming a tool that does not exist fails startup, and this repo cannot
+    # verify global tool names in a headless gate.
+    - id: tool-subagent-validator
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent_validator
+        backgroundMode: one-shot
+        maxDepth: 0
+        agentOptions:
+          provider: parametria-vision
+          model: google/gemini-3.6-flash
+
+    # Production dsh does not install these optional providers. An opting-in
+    # Profile mounts each provider once on the host plane; copy this preset,
+    # then remove `disabled` from the matching tool row.
+    - id: tool-subagent-codex
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@deepseek-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: workflow-worker-thread
+      name: '@deepseek-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+
+    - id: tool-workflow
+      name: '@deepseek-ai/dsh-tool-workflow'
+
+    - id: tool-ralph
+      name: '@deepseek-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000

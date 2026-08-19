@@ -1,0 +1,42 @@
+{
+  "name": "dsh-preset-parametria",
+  "version": "0.1.0-dev.0",
+  "private": true,
+  "description": "The Parametria work profile: an agent preset and desktop profile materials for /suquo-systems-parametria runs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anywhere-labs/deepseek-harness-desktop.git",
+    "directory": "dsh-preset-parametria"
+  },
+  "homepage": "https://github.com/anywhere-labs/deepseek-harness-desktop/tree/master/dsh-preset-parametria#readme",
+  "bugs": {
+    "url": "https://github.com/anywhere-labs/deepseek-harness-desktop/issues"
+  },
+  "type": "module",
+  "files": [
+    "preset/**",
+    "profile/**",
+    "scripts/**",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "install:profile": "node scripts/install-profile.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "check": "yarn run test"
+  },
+  "devDependencies": {
+    "yaml": "^2.9.0"
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "agent-preset",
+    "profile",
+    "parametria"
+  ]
+}

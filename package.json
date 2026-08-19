@@ -11,7 +11,8 @@
   "workspaces": [
     "dsh-plugin-desktop",
     "dsh-community-fabric",
-    "dsh-community-market"
+    "dsh-community-market",
+    "dsh-preset-parametria"
   ],
   "resolutions": {
     "app-builder-lib@npm:26.15.7": "patch:app-builder-lib@npm%3A26.15.7#./patches/app-builder-lib@26.15.7.patch",
@@ -57,7 +58,7 @@
     "typecheck": "yarn workspace dsh-plugin-desktop typecheck && yarn workspace dsh-community-market typecheck",
     "test": "yarn workspace dsh-plugin-desktop test && yarn workspace dsh-community-market test",
     "check:layout": "node scripts/verify-layout.mjs",
-    "check": "yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-plugin-desktop check",
+    "check": "yarn check:layout && yarn workspace dsh-community-fabric check && yarn workspace dsh-community-market check && yarn workspace dsh-preset-parametria check && yarn workspace dsh-plugin-desktop check",
     "dev": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop dev",
     "start": "yarn workspace dsh-plugin-desktop start",
     "package:dir": "yarn workspace dsh-community-market build && yarn workspace dsh-plugin-desktop package:dir",

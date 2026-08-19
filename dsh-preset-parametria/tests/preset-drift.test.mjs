@@ -1,0 +1,172 @@
+/**
+ * Exhaustive two-direction drift fence between the `parametria` preset and the
+ * shipped `standard` preset it was copied from.
+ *
+ * Authoring a preset means copying a shipped composition and editing the copy
+ * — the shipped install belongs to the deployment and an upgrade overwrites
+ * it. The cost of a copy is that upstream moves and the copy does not. This
+ * fence pays that cost: every row, every row name, and every row config is
+ * compared in BOTH directions against the pinned upstream, and the only
+ * permitted differences are the ones DECLARED below. A row added, removed, or
+ * reconfigured upstream fails here naming itself, and so does an undeclared
+ * local edit.
+ */
+
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import assert from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import {
+  PACKAGE_ROOT,
+  UPSTREAM_ROOT,
+  indexRows,
+  readComposition,
+  rowConfig,
+  sameValue,
+} from './helpers.mjs'
+
+const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
+const UPSTREAM_STANDARD = join(
+  UPSTREAM_ROOT, 'apps', 'cli', 'config', 'agent-presets', 'standard', 'agent.cordis.yml',
+)
+
+/**
+ * The complete, closed declaration of how `parametria` differs from
+ * `standard`. Every entry names the reason, because a delta without one is
+ * indistinguishable from drift someone forgot to reconcile.
+ */
+const DECLARED_DELTA = {
+  /** Rows this preset adds. Key = flattened row id, value = the reason. */
+  added: {
+    'delegation/tool-subagent-validator':
+      'issue #1: a second delegation instance pinned to the vision route, because child '
+      + 'model policy is per-instance and per-call model selection does not exist',
+  },
+  /** Rows this preset drops. Empty on purpose: parity with `standard` is the point. */
+  removed: {},
+  /** Rows kept, with a different config. Key = flattened row id, value = the reason. */
+  reconfigured: {
+    persona:
+      'the run states its own shape: load the skill, and delegate visual checks to '
+      + 'subagent_validator rather than subagent',
+    'skill-filesystem':
+      'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
+      + 'and registers into this preset\'s nearer registry layer',
+  },
+}
+
+const ours = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml')))
+const upstream = indexRows(readComposition(UPSTREAM_STANDARD))
+
+describe('parametria preset vs the pinned upstream `standard` preset', () => {
+  it('adds exactly the declared rows', () => {
+    const added = [...ours.keys()].filter(id => !upstream.has(id)).sort()
+    assert.deepEqual(added, Object.keys(DECLARED_DELTA.added).sort())
+  })
+
+  it('drops exactly the declared rows', () => {
+    const removed = [...upstream.keys()].filter(id => !ours.has(id)).sort()
+    assert.deepEqual(removed, Object.keys(DECLARED_DELTA.removed).sort())
+  })
+
+  it('reconfigures exactly the declared rows and no others', () => {
+    const reconfigured = []
+    for (const [id, row] of ours) {
+      const other = upstream.get(id)
+      if (other === undefined) continue
+      if (!sameValue(rowConfig(row), rowConfig(other))) reconfigured.push(id)
+    }
+    assert.deepEqual(reconfigured.sort(), Object.keys(DECLARED_DELTA.reconfigured).sort())
+  })
+
+  it('keeps every shared row pointing at the same plugin, with the same disable expression', () => {
+    for (const [id, row] of ours) {
+      const other = upstream.get(id)
+      if (other === undefined) continue
+      assert.equal(row.name, other.name, `row ${id} names a different plugin than upstream`)
+      assert.ok(
+        sameValue(row.disabled, other.disabled),
+        `row ${id} has a different \`disabled\` expression than upstream`,
+      )
+      assert.equal(row.group, other.group, `row ${id} changed between a group and a plain row`)
+      assert.ok(
+        sameValue(row.isolate, other.isolate),
+        `row ${id} has a different \`isolate\` realm than upstream`,
+      )
+    }
+  })
+
+  it('states a reason for every declared difference', () => {
+    for (const section of Object.values(DECLARED_DELTA)) {
+      for (const [id, reason] of Object.entries(section)) {
+        assert.ok(
+          typeof reason === 'string' && reason.length > 20,
+          `declared delta ${id} carries no usable reason`,
+        )
+      }
+    }
+  })
+})
+
+describe('the vision-pinned validator row', () => {
+  const row = ours.get('delegation/tool-subagent-validator')
+
+  it('is a second `dsh-tool-subagent` instance with its own tool name', () => {
+    assert.equal(row.name, '@deepseek-ai/dsh-tool-subagent')
+    assert.equal(row.config.toolName, 'subagent_validator')
+    const names = [...ours.values()]
+      .filter(other => other.name === '@deepseek-ai/dsh-tool-subagent')
+      .map(other => other.config.toolName)
+    assert.equal(new Set(names).size, names.length, 'each tool-subagent instance needs a distinct toolName')
+  })
+
+  it('pins the route and model explicitly rather than inheriting the session model', () => {
+    assert.deepEqual(row.config.agentOptions, {
+      provider: 'parametria-vision',
+      model: 'google/gemini-3.6-flash',
+    })
+  })
+
+  it('forbids the validator from delegating further', () => {
+    // A child joins its parent's preset, so without this cap it would reach
+    // every delegation tool in this group and could spawn its own children on
+    // the session model — the blind-validator hole, one level down.
+    assert.equal(row.config.maxDepth, 0)
+  })
+
+  it('runs one-shot, so the parent waits for the verdict', () => {
+    assert.equal(row.config.backgroundMode, 'one-shot')
+  })
+
+  it('is the only tool-subagent row that pins a model', () => {
+    for (const [id, other] of ours) {
+      if (other.name !== '@deepseek-ai/dsh-tool-subagent') continue
+      if (id === 'delegation/tool-subagent-validator') continue
+      assert.equal(
+        other.config.agentOptions, undefined,
+        `row ${id} pins a model; only the validator may, or a plain delegate would stop inheriting the session model`,
+      )
+    }
+  })
+})
+
+describe('the preset-local skill root', () => {
+  it('is mounted from the preset directory, not an absolute path', () => {
+    const dirs = ours.get('skill-filesystem').config.customSkillDirs
+    assert.equal(dirs.length, 1)
+    assert.match(dirs[0].source, /new URL\('skills\/', baseUrl\)/)
+  })
+
+  it('ships empty, so it cannot shadow the operator\'s installed skill', () => {
+    // The preset layer is nearer than the deployment's, and the nearest layer
+    // wins duplicates outright. A placeholder SKILL.md under the real skill's
+    // name would therefore REPLACE the working skill with a stub. Issue #7
+    // migrates the canonical copy in here; until then the root stays empty.
+    const entries = readdirSync(join(PRESET_DIR, 'skills'), { withFileTypes: true })
+    const skills = entries.filter(entry => entry.isDirectory() || entry.name.toLowerCase().endsWith('.md'))
+    assert.deepEqual(
+      skills.map(entry => entry.name), [],
+      'the preset-local skill root must stay empty until issue #7 migrates the canonical skill',
+    )
+  })
+})

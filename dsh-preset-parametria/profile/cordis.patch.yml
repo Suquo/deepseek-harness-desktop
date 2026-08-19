@@ -1,0 +1,97 @@
+# The Parametria profile's own patch layer, applied after every bundle layer
+# (`@deepseek-ai/dsh-base` then `@deepseek-ai/dsh-web-app`) and before the
+# home-level `cordis.patch.yml`, which outranks it.
+#
+# AN ID-TARGETED PATCH REPLACES THE NAMED ENTRY'S WHOLE `config`. There is no
+# deep merge, so every field kept from the bundle layer is restated below and
+# `tests/profile-patch.test.mjs` asserts that restatement against the pinned
+# upstream bundle rather than trusting this comment.
+
+# ── the preset the profile boots on ─────────────────────────────────────────
+#
+# `dsh-web-app` sets `default: standard`; this is the whole config, so naming
+# `default` alone restates it completely. `includeUserRoot` is the plugin's own
+# schema default and stays true, which is what makes `$DSH_HOME/.agent-presets`
+# a scanned root — the installer puts the `parametria` preset directory there,
+# so no `roots` entry is needed and the deployment's read-only shipped install
+# is never touched.
+#
+# `default` is the roster's fallback, not a lock: a session may still select
+# another preset, and switching is refused only once its agent has produced
+# something (`agent-preset-locked`).
+- id: agent-presets
+  config:
+    default: parametria
+
+# ── the validator's model route (issue #1's structural half) ────────────────
+#
+# `dsh-base` mounts `llm-pi-ai` DORMANT with no config at all, so replacing the
+# whole config costs nothing. The adapter merges this composition base with the
+# user's `llm-pi-ai:` settings section PER PROVIDER, so the operator's own
+# `openrouter` route keeps serving the session model untouched while this one
+# is added beside it.
+#
+# WHY A SEPARATE HAND-DECLARED ROUTE rather than a `modelOverrides` entry on
+# `openrouter`: the operator's `openrouter` route is their session-model route,
+# live in `$DSH_HOME/settings.yaml` and rewritten by the web Models page. A
+# validator whose vision guarantee rode that route would inherit every edit
+# made to it. `parametria-vision` is owned by this profile and by nothing else.
+#
+# `input: [text, image]` is the load-bearing declaration, per the owner ruling.
+# Modalities resolve entry `input` -> installed catalog entry -> route
+# `defaultInput` (default `[text]`), and the harness refuses an image BEFORE it
+# is attached when the resolved list omits one, naming the model. The pinned
+# catalog happens to declare `[text, image]` for this model already; stating it
+# here means a future upstream pin that narrows or drops the entry cannot
+# silently strip vision from the validator.
+#
+# The values below are the pinned catalog's own (`openrouter.json`, upstream
+# dsh-v0.1.0-rc.7): a hand-declared route inherits nothing, so an unstated
+# capacity would fall back to the route defaults (262,144 / 32,768) and quietly
+# shrink the model. `tests/vision-route.test.mjs` diffs every one of them
+# against that catalog file, so a pin bump that changes the model's real shape
+# fails the gate.
+- id: llm-pi-ai
+  config:
+    providers:
+      parametria-vision:
+        displayName: Parametria vision (OpenRouter)
+        # A credential REFERENCE, resolved per request through `ctx.credentials`;
+        # no secret enters this file. Discovered read-only from the operator's
+        # live `$DSH_HOME/settings.yaml`, which names the same variable for
+        # their own OpenRouter route.
+        apiKeyEnv: OPENROUTER_API_KEY
+        api: openai-completions
+        baseURL: https://openrouter.ai/api/v1
+        # pi-ai guesses the reasoning dialect from the endpoint URL; this URL
+        # would guess right, but a route that states its dialect keeps working
+        # if the endpoint is ever repointed at a proxy.
+        compat:
+          thinkingFormat: openrouter
+        models:
+          - id: google/gemini-3.6-flash
+            name: 'Google: Gemini 3.6 Flash'
+            contextWindow: 1048576
+            maxTokens: 65536
+            input:
+              - text
+              - image
+            # Key = the level selectors offer, value = its wire spelling. A
+            # hand-declared model that declares none does not reason at all,
+            # which would silently downgrade a model the catalog marks
+            # reasoning-capable. `off:` is valueless on purpose: it offers Off
+            # and sends nothing.
+            reasoningEfforts:
+              off:
+              high: high
+
+# The session's own default model is deliberately NOT patched here.
+#
+# `dsh-base` leaves it at `deepseek-official`/`deepseek-v4-flash` — text-only,
+# which is exactly the first-run configuration where the blind validator was
+# found. Pinning a vision model for the session would hide whether the
+# validator's own pin works, and issue #1's acceptance criterion is precisely
+# "a run whose MAIN model is text-only still produces subagent image reads that
+# succeed". A saved user selection outranks this row anyway, so pinning it
+# would change nothing for the operator and would cost the profile its
+# demonstration. Revisit only if issue #1 closes on different evidence.
