@@ -23,7 +23,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — gen-2 completed #13 (PR #15 merged). #16 is the natural next assignment (same measure-first pattern). All merged worktrees cleaned; registry holds issue-12 only.
+- **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-3 on #16** (marginal budgets, measure-first per PR #15 pattern; branch `claude/issue-16-marginal-budgets`). Expected-touch: the three named spec files + at most workspace vitest configs. Disjoint vs Lane C fix cycle.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 pending-live → #5 → #6; #7 and #9 available, #5/#6/#7 gated on owner items). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — RM-spawned gen-2 on #12** (exhaustive pin guard + `upstream:watch` script rider; branch `up/issue-12-pin-guard`). Expected-touch: `scripts/verify-layout.mjs` + root package.json scripts block. Disjointness vs Lane A gen-2 verified at spawn.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
