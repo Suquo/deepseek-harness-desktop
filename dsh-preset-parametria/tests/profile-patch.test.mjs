@@ -15,7 +15,6 @@ import { describe, it } from 'node:test'
 import {
   PACKAGE_ROOT,
   composeBundles,
-  indexRows,
   readComposition,
   sameValue,
   webProfileBundlePatches,
@@ -74,11 +73,10 @@ describe('the patch layer', () => {
     // A patch entry's every key beyond `id`/`name` is copied onto the target
     // row, so `disabled: true`, a `group`, or an `isolate` realm added to one
     // of these entries would unmount or relocate the plugin rather than
-    // configure it — with the whole config restatement below still passing,
-    // because it only ever looks inside `config`. Riding on this slice for the
-    // `permission` row, which is a permission surface; the two older rows get
-    // it in the same pass because the hazard is identical and the fence is one
-    // loop.
+    // configure it — with the restatement fences below still passing, because
+    // they only ever look inside `config`. A rider from issue #9's sandbox
+    // slice: that slice's own row did not survive its ruling, but the hazard it
+    // exposed belongs to every patch entry and the fence is one loop.
     for (const [id, entry] of patched) {
       assert.deepEqual(
         Object.keys(entry).sort(), ['config', 'id'],
@@ -134,140 +132,34 @@ describe('the `llm-pi-ai` restatement', () => {
   })
 })
 
-describe('the `permission` restatement', () => {
-  const bundlePresets = bundles.get('permission').config.presets
-  const ourPresets = patched.get('permission').config.presets
-
-  it('replaces the whole config, so `presets` is the only key on either side', () => {
-    // The bundle row carries `presets` alone. If a future pin gives it a
-    // second key — `defaultPreset`, a label table, anything — this patch would
-    // silently discard it, which is what this assertion turns into a red gate
-    // rather than a boot-time surprise.
-    assert.deepEqual(Object.keys(bundles.get('permission').config), ['presets'])
-    assert.deepEqual(Object.keys(patched.get('permission').config), ['presets'])
-  })
-
-  it('targets the plugin it means to target, by name and not only by id', () => {
-    // The patch entry carries no `name:`, which upstream would treat as a
-    // mismatch GUARD (a differing name skips the patch with a warning rather
-    // than applying it). Without that guard, an upstream re-point of the id
-    // `permission` to some other plugin would apply this preset table to the
-    // wrong row silently. Pinning the pinned bundle's name here catches the
-    // re-point at gate time instead — the same protection, failing loudly in
-    // CI rather than quietly at someone's boot.
-    assert.equal(bundles.get('permission').name, '@deepseek-ai/dsh-permission-presets')
-  })
-
-  it('carries every shipped preset forward with its exact bundled meaning', () => {
-    // Direction one: nothing the bundle shipped may be dropped or reshaped by
-    // the restatement. Compared per entry rather than as one object so a
-    // failure names the preset that changed.
-    for (const [name, spec] of Object.entries(bundlePresets)) {
-      assert.ok(Object.hasOwn(ourPresets, name), `the restatement drops the shipped preset "${name}"`)
-      assert.ok(
-        sameValue(ourPresets[name], spec),
-        `the restatement changes the shipped preset "${name}":\n`
-        + `  ours:   ${JSON.stringify(ourPresets[name])}\n`
-        + `  bundle: ${JSON.stringify(spec)}`,
-      )
-    }
-  })
-
-  it('adds exactly one preset of its own', () => {
-    // Direction two: an entry that appears here without appearing in this list
-    // is a permission surface nobody reviewed.
-    const added = Object.keys(ourPresets).filter(name => !Object.hasOwn(bundlePresets, name))
-    assert.deepEqual(added, ['parametria-capture'])
-  })
-
-  it('gives that preset full file access with the approval channel LEFT ON', () => {
-    // The whole point of the row. `danger-full-access` alone would be the
-    // shipped preset the live run already selected; `approval: ask` is the
-    // difference, and the shipped entry's `never` is what told that run's model
-    // not to request a per-call escalation at all.
-    assert.ok(sameValue(ourPresets['parametria-capture'], {
-      sandbox: 'danger-full-access',
-      approval: 'ask',
-      name: 'parametria-capture',
-      description: 'Full file access for the Parametria screenshot pass, with approval prompts still enabled. '
-        + 'Switch back to workspace-write when the capture phase ends.',
-    }))
-    assert.notEqual(ourPresets['parametria-capture'].approval, 'never')
-  })
-
-  it('says what it grants where the operator selects it', () => {
-    // The picker labels an option by its `name` and falls back to the bare key
-    // when none is given. The shipped rows omit both fields, which is fine for
-    // names an operator already knows; this is the one entry a RUN asks them to
-    // select mid-task, so the option has to state that it is full file access
-    // and that it should be switched back — this is also the only release the
-    // durable selection has that reaches the person making it.
-    const spec = ourPresets['parametria-capture']
-    assert.match(spec.description, /[Ff]ull file access/)
-    assert.match(spec.description, /approval prompts still enabled/)
-    assert.match(spec.description, /[Ss]witch back to workspace-write/)
-  })
-
-  it('is the same preset name the persona tells the run to ask for', () => {
-    // The two halves of this fix live in different files: the profile patch
-    // declares the entry, the preset's persona tells the model to ask the user
-    // for it by name. Renaming either alone leaves a persona pointing at a
-    // preset that does not exist — a dead instruction the model would follow
-    // into an unknown-preset error, and nothing else here would notice.
-    const persona = indexRows(readComposition(join(PACKAGE_ROOT, 'preset', 'agent.cordis.yml')))
-      .get('persona').config.text
-    const added = Object.keys(ourPresets).filter(name => !Object.hasOwn(bundlePresets, name))
-    for (const name of added) {
-      assert.ok(
-        persona.includes(`\`${name}\` permission preset`),
-        `the profile adds the preset "${name}" but the persona never names it, so the run cannot ask for it`,
-      )
-    }
-  })
-
-  it('does not become the default under ANY composed pair the bundle can produce', () => {
-    // `defaultPreset` is absent on both sides, so the plugin infers it: with no
-    // recorded selection to prefer, `derive()` scans the table and takes the
-    // FIRST entry matching (sandbox, approval). An added entry sharing a
-    // reachable pair and declared above its shipped twin would silently become
-    // the boot default.
-    //
-    // Which pairs are reachable is not one pair. `sandbox-policy`'s mode and
-    // `approval`'s policy both key off the SAME `DSH_PERMISSION_MODE`
-    // expression, so the composed pair is whichever of the three that
-    // environment variable selects — the fence walks all three rather than the
-    // unset case alone, because a deployment that sets it is exactly where an
-    // unnoticed default would land.
-    assert.equal(bundles.get('permission').config.defaultPreset, undefined)
-    assert.equal(patched.get('permission').config.defaultPreset, undefined)
-    assert.equal(bundles.get('sandbox-policy').config.mode.source, "process.env.DSH_PERMISSION_MODE ?? 'workspace-write'")
-    assert.equal(
-      bundles.get('approval').config.policy.source,
-      "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'",
-    )
-    // The pair each `DSH_PERMISSION_MODE` value composes, derived from the two
-    // expressions asserted above, and the preset each must therefore infer.
-    const composed = [
-      { mode: 'read-only', approval: 'ask', expect: 'read-only' },
-      { mode: 'workspace-write', approval: 'ask', expect: 'workspace-write' },
-      { mode: 'danger-full-access', approval: 'never', expect: 'danger-full-access' },
-    ]
-    for (const { mode, approval, expect } of composed) {
-      const matching = Object.entries(ourPresets)
-        .filter(([, spec]) => spec.sandbox === mode && spec.approval === approval)
-        .map(([name]) => name)
-      assert.deepEqual(
-        matching, [expect],
-        `with DSH_PERMISSION_MODE=${mode} the composed pair (${mode}, ${approval}) must infer exactly "${expect}"`,
-      )
-    }
-  })
-})
-
 describe('capabilities the README says the base composition already provides', () => {
   // Each of these is why the patch layer stays as small as it is. The README
   // states them as reasons for NOT configuring something, which makes each one
   // a checkable claim rather than a comment.
+  it('already composes the permission presets, so the profile adds none', () => {
+    // Restated after issue #9 ruled on a proposed fourth entry
+    // (`parametria-capture`: danger-full-access + ask, for the Playwright
+    // capture pass). The owner rejected it, and the reason is what this
+    // assertion now protects rather than mere minimalism: the desktop's
+    // full-access risk acknowledgement is gated on the preset KEY, not on the
+    // sandbox mode it carries —
+    // `packages/client/ui-conversation/src/client/skeleton/PermissionSelect.tsx`
+    // declares `const FULL_ACCESS = 'danger-full-access'` and routes only that
+    // literal id through its confirmation Modal. ANY added entry carrying
+    // `sandbox: danger-full-access` under a different name would therefore
+    // reach unconfined file access from the composer's Access chip without the
+    // acknowledgement step. So this is a two-part fence: the shipped table is
+    // unchanged, and the patch layer does not target the row at all.
+    assert.deepEqual(Object.keys(bundles.get('permission').config.presets).sort(), [
+      'danger-full-access', 'read-only', 'workspace-write',
+    ])
+    assert.equal(
+      patched.has('permission'), false,
+      'the profile patches the permission table: any entry carrying danger-full-access under a non-shipped key '
+      + 'bypasses the desktop full-access acknowledgement, which issue #9 ruled against',
+    )
+  })
+
   it('already defaults the sandbox to workspace-write at the session\'s own root', () => {
     assert.equal(bundles.get('sandbox-policy').config.mode.source, "process.env.DSH_PERMISSION_MODE ?? 'workspace-write'")
     assert.equal(bundles.get('sandbox-policy').config.workspaceRoot.source, 'process.cwd()')

@@ -111,7 +111,7 @@ produces successful subagent image reads — pinning a vision model for the
 session would make that untestable, and a saved user selection outranks the
 composition row anyway.
 
-### 4. A run whose sandbox refusals do not cost the approval channel
+### 4. A run that meets this host's sandbox boundaries without widening the session
 
 The first live run of this profile hit three sandbox refusals under the composed
 `workspace-write` default and ended with the operator typing
@@ -144,53 +144,27 @@ policy answer, and the third has no answer at all short of a wider mode:
 |---|---|---|
 | uv cache at `%LOCALAPPDATA%\uv\cache` | outside the session workspace | persona sets `$env:UV_CACHE_DIR = "$PWD\.uv-cache"` before `uv run` — the live run proved a workspace-local cache works unescalated |
 | uv cache at `C:\tmp\uv-cache` | an arbitrary absolute path is outside both granted roots. Temp *is* writable under `workspace-write` — but only the private per-session directory the runner creates and rewrites `TMP`/`TEMP` to, never an ambient path that merely looks temporary | same |
-| `screenshot-definition.py` (Playwright) | **inference from the live trace, over a documented mechanism.** The win32 ACL backend documents that a confined process's `stdio: 'pipe'` children fail — named pipes carry a default SD that denies the client-end write — while `inherit`/`ignore` spawns work, so *"tools that must capture output cannot run confined"*. That Playwright's sync driver spawn is the piped shape is not stated upstream; it is what the live traceback shows (`asyncio/windows_utils.py`, `PermissionError(13)`), plus every post-escalation call succeeding | persona names the per-call `sandbox_permissions` retry; the profile adds the `parametria-capture` preset for a capture-heavy session |
+| `screenshot-definition.py` (Playwright) | **inference from the live trace, over a documented mechanism.** The win32 ACL backend documents that a confined process's `stdio: 'pipe'` children fail — named pipes carry a default SD that denies the client-end write — while `inherit`/`ignore` spawns work, so *"tools that must capture output cannot run confined"*. That Playwright's sync driver spawn is the piped shape is not stated upstream; it is what the live traceback shows (`asyncio/windows_utils.py`, `PermissionError(13)`), plus every post-escalation call succeeding | persona instructs the **per-call** `sandbox_permissions: danger-full-access` retry, once per capture |
 
-`parametria-capture` is `danger-full-access` **+ `ask`** — the same file access
-the operator reached for, with the approval channel left on. It is a table
-entry, not a default: `defaultPreset` stays absent, so sessions still boot on
-the composed pair `dsh-sandbox-policy` already provides (`workspace-write`,
-rooted at the session's own working directory), and the preset costs nothing
-until a human selects it. The shipped `danger-full-access` entry is restated
-unchanged rather than redefined — an operator typing a shipped preset's name
-must get the meaning that name has everywhere else.
+**Why per-call and not a named preset.** A fourth permission preset was built
+for this and did not survive review — the record is on issue #9. It would have
+been `danger-full-access` + `ask`: the same file access the operator reached
+for, with the approval channel left on. The defect is that the desktop's
+full-access **risk acknowledgement is gated on the preset key, not on the
+sandbox mode it carries** —
+`packages/client/ui-conversation/src/client/skeleton/PermissionSelect.tsx`
+declares `const FULL_ACCESS = 'danger-full-access'` and routes only that literal
+id through its confirmation Modal. Any *other* key carrying the same mode
+therefore reaches unconfined access from the composer's Access chip with no
+acknowledgement. The owner ruled to keep the acknowledgement, so the profile
+patches no permission row at all and
+`tests/profile-patch.test.mjs` fences both halves of that: the shipped table is
+unchanged, and the patch layer does not target the row.
 
-> **⚠ Not settled — a ruling is open on issue #9.** The desktop's full-access
-> risk acknowledgement is gated on the preset **key**, not on the sandbox mode
-> it carries: `PermissionSelect.tsx` declares
-> `const FULL_ACCESS = 'danger-full-access'` and routes only that literal id
-> through its confirmation Modal. `parametria-capture` therefore hands out the
-> same unconfined file access from the composer's Access chip with **no
-> acknowledgement step**. The bypass is not total — the typed
-> `/permission <preset>` path skips that Modal for `danger-full-access` too, and
-> typing is how the live run escalated — but the chip is the default surface.
-> The trade is approvals-stay-on versus acknowledgement-goes-away, and it is the
-> owner's to make.
-
-**How the selection is released**, because selecting it is a durable claim on
-full file access and a claim without a release is not one this repository
-accepts. Within the session: `/permission workspace-write` switches back, the
-selection being a log-only event whose last write wins. (`permissionPresets` is
-the service name; the upstream package README calls the command
-`/permissionPresets` and the registration contradicts it.) Across sessions the
-claim does not travel by itself — a selection is pinned into the session that
-made it, and a new session starts from `defaultPreset`, which this patch leaves
-at `workspace-write`. That is weaker than "nothing to release", though: a new
-table entry also appears in the `permissionPresets` **settings** dropdown, and a
-`defaultPreset` saved there outranks composition for every future session — a
-second durable surface this package cannot fence, because it lives in the
-operator's settings. Nothing covers a long session that simply never switches
-back, so the entry's own `description` says to and the persona has the model say
-so when the capture phase ends. That is the accepted residual.
-
-**What the guarantee is bounded by.** The entry lives in the *profile* patch
-layer while the persona naming it lives in the *agent preset* — and a preset can
-be selected under another profile. Do that and the persona's advice points at a
-preset the table does not contain; `resolve()` throws
-`unknown preset "parametria-capture"`, so the failure is loud rather than
-silent, but it is still dead advice. Both halves want to be installed together.
-The fence proves the two files agree on the name, not that the profile is the
-one mounted.
+That leaves the per-call escalation as the whole answer, which is also the
+narrowest one available: it asks the user per command, and it leaves
+`approval: ask` standing for everything after. The persona states it as the only
+route and is fenced against growing a "switch the session instead" sentence.
 
 **A cost worth naming:** `$PWD\.uv-cache` is real litter in whatever workspace
 the run happens in — typically a user repository, which this package does not
@@ -237,7 +211,7 @@ root chain again.
 |---|---|
 | `tests/preset-drift.test.mjs` | Exhaustive **two-direction** diff against the pinned upstream `standard` preset. Rows added, dropped, or reconfigured must appear in a closed `DECLARED_DELTA` with a stated reason; shared rows must keep the same plugin name, `disabled` expression, group shape, and `isolate` realm. Also holds the validator row's pin and the empty skill root. |
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
-| `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. For `permission` specifically: a two-direction diff of the preset table against the bundle's, the added entry's exact shape, its `approval` never becoming `never`, and exactly one entry matching the composed `(workspace-write, ask)` pair — because with no recorded selection `derive()` falls to a FIRST-match scan of the table, so a mis-ordered entry would silently capture the inferred default. |
+| `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. |
 
 Every drift fence reads the pinned upstream checkout, so
