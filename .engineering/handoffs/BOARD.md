@@ -28,11 +28,15 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **RM**: appointment made 2026-08-19; the bootstrap session set up the fleet. First chartered generation launches with `/loop /repo-manager`.
+- **RM**: AA generation LIVE (`/loop /repo-manager`, this session, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — no generation, no branches.
-- **Lane B (parametria-harness, `pm/*`)**: FREE.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — RM-spawned agent-mode gen-1 on #2** (branch `pm/issue-2-parametria-profile`), spawned 2026-08-19 after the operator's build green-light. Expected-touch: new preset dir at repo root + root package.json + .engineering docs. #7 rides; #1 seam wired placeholder-only.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
+
+## Second run harvested (weaker model, 2026-08-19)
+
+`gemini-3.6-flash` solo built a 119-node cabinet in 9.9 min (vs 20+8 min for run 1) but SKIPPED the per-increment validation discipline; its subagent died with an opaque `Error: subagent run failed` (empty transcript — new harness finding, scoped into #1); orchestrator self-validated via in-context image reads. First A/B datum + protocol implications recorded in `.engineering/research/model-comparison-first-datum.md`, commented onto #6 and #1. RM recommendation pending owner: validator pin = `google/gemini-3.6-flash` (pi-ai route, `input: [text, image]`).
 
 ## Queue (RM-triaged; not yet filed as GitHub issues — filing is the first RM generation's call with the operator)
 
