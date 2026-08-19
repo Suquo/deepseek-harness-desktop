@@ -155,13 +155,31 @@ until a human selects it. The shipped `danger-full-access` entry is restated
 unchanged rather than redefined — an operator typing a shipped preset's name
 must get the meaning that name has everywhere else.
 
+> **⚠ Not settled — a ruling is open on issue #9.** The desktop's full-access
+> risk acknowledgement is gated on the preset **key**, not on the sandbox mode
+> it carries: `PermissionSelect.tsx` declares
+> `const FULL_ACCESS = 'danger-full-access'` and routes only that literal id
+> through its confirmation Modal. `parametria-capture` therefore hands out the
+> same unconfined file access from the composer's Access chip with **no
+> acknowledgement step**. The bypass is not total — the typed
+> `/permission <preset>` path skips that Modal for `danger-full-access` too, and
+> typing is how the live run escalated — but the chip is the default surface.
+> The trade is approvals-stay-on versus acknowledgement-goes-away, and it is the
+> owner's to make.
+
 **How the selection is released**, because selecting it is a durable claim on
 full file access and a claim without a release is not one this repository
-accepts. Within the session: `/permissionPresets workspace-write` switches back,
-the selection being a log-only event whose last write wins. Across sessions:
-nothing to release — a selection is pinned into the session that made it, and a
-new session starts from `defaultPreset`, which this patch leaves at
-`workspace-write`. Neither covers a long session that simply never switches
+accepts. Within the session: `/permission workspace-write` switches back, the
+selection being a log-only event whose last write wins. (`permissionPresets` is
+the service name; the upstream package README calls the command
+`/permissionPresets` and the registration contradicts it.) Across sessions the
+claim does not travel by itself — a selection is pinned into the session that
+made it, and a new session starts from `defaultPreset`, which this patch leaves
+at `workspace-write`. That is weaker than "nothing to release", though: a new
+table entry also appears in the `permissionPresets` **settings** dropdown, and a
+`defaultPreset` saved there outranks composition for every future session — a
+second durable surface this package cannot fence, because it lives in the
+operator's settings. Nothing covers a long session that simply never switches
 back, so the entry's own `description` says to and the persona has the model say
 so when the capture phase ends. That is the accepted residual.
 

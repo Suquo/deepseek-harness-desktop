@@ -116,6 +116,16 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
       'the persona must INSTRUCT the per-call escalation, naming the one wider mode above workspace-write — '
       + 'it is the narrowest path past the one refusal that has no relocation answer',
     )
+    // The whole-run alternative is a durable claim on full file access whose
+    // only in-session release is a human switching back, so the sentence that
+    // asks for the switch-back is load-bearing rather than courtesy — and it is
+    // the stopgap the profile patch's release paragraph explicitly leans on for
+    // the case neither upstream release covers.
+    assert.ok(
+      persona.includes('switch back to `workspace-write`'),
+      'the persona must have the run ask for the switch-back once the capture phase ends: it is the only '
+      + 'release reaching the person who made the selection',
+    )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
 

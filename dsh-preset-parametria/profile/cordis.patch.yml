@@ -137,14 +137,39 @@
 # shipped preset's name must get the meaning that name has everywhere else.
 #
 # HOW THE SELECTION IS RELEASED, since selecting it IS a durable claim on full
-# file access. Two releases, both upstream's: within the session,
-# `/permissionPresets workspace-write` switches back (the selection is a
-# log-only event and the last one wins); across sessions there is nothing to
-# release, because a preset selection is pinned into the session that made it
-# and a new session starts from `defaultPreset` instead — which this patch
-# leaves at the composed `workspace-write`. What neither release covers is a
-# long session that never switches back, so the entry's `description` says to,
-# and the persona asks the model to say so once the capture phase ends.
+# file access. Within the session, `/permission workspace-write` switches back:
+# the selection is a log-only event and the last one wins. (The command is
+# `permission` — `permissionPresets` is the SERVICE name, and the upstream
+# package README calls the command `/permissionPresets`, which the registration
+# at `permission-presets/src/index.ts` contradicts. Source wins.)
+#
+# Across sessions the claim does not travel by itself: a selection is pinned
+# into the session that made it, and a new session starts from `defaultPreset`,
+# which this patch leaves at the composed `workspace-write`. But that is a
+# weaker guarantee than "nothing to release": adding a table entry also adds it
+# to the `permissionPresets` SETTINGS dropdown, and a `defaultPreset` saved
+# there outranks composition for every future session. So a second durable
+# surface now offers this preset — one this package cannot fence, because it
+# lives in the operator's settings rather than in any file here.
+#
+# What no release covers is a long session that never switches back, so the
+# entry's `description` says to, and the persona asks the model to say so once
+# the capture phase ends.
+#
+# ⚠ OPEN QUESTION FOR THE OWNER — do not read the row below as settled. The
+# desktop's full-access RISK ACKNOWLEDGEMENT is gated on the preset KEY, not on
+# the sandbox mode it carries: `PermissionSelect.tsx` declares
+# `const FULL_ACCESS = 'danger-full-access'` and routes only that literal id
+# through its confirmation Modal. `parametria-capture` carries
+# `sandbox: danger-full-access` under a different key, so selecting it from the
+# composer's Access chip grants unconfined file access with NO acknowledgement
+# step, where selecting the shipped preset from the same chip requires ticking
+# one. The bypass is not total — the typed `/permission <preset>` path skips
+# that Modal for `danger-full-access` too, and typing is how the live run
+# actually escalated — but the chip is the default surface, and this row
+# quietly widens what can be reached without the tick. That is the trade the
+# owner owns: approvals stay ON (the row's whole point) at the cost of the
+# acknowledgement. Ruling pending on issue #9.
 #
 # An id-targeted patch REPLACES the whole config, so all three shipped presets
 # are restated verbatim; `tests/profile-patch.test.mjs` diffs that restatement
