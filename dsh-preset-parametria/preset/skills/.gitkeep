@@ -1,0 +1,13 @@
+# Preset-local skill root. Intentionally empty until issue #7 migrates the
+# canonical `suquo-systems-parametria` skill here.
+#
+# An empty or absent skill root discovers nothing (`listSkillRootEntries`
+# returns `[]` on ENOENT/ENOTDIR), so the operator's existing
+# `~/.agents/skills/suquo-systems-parametria` copy keeps resolving unchanged.
+# A placeholder `SKILL.md` under that same name would register into this
+# preset's layer, which is NEARER than the deployment's, and shadow the real
+# skill outright — a regression, not a seed. This file exists only because Git
+# does not track empty directories; the installer creates the directory too.
+#
+# Do NOT put a `README.md` here: a flat `<name>.md` at a skill root IS a skill
+# entry, so a readme would be discovered as a skill called "README".

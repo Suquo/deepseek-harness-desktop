@@ -7256,6 +7256,14 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"dsh-preset-parametria@workspace:dsh-preset-parametria":
+  version: 0.0.0-use.local
+  resolution: "dsh-preset-parametria@workspace:dsh-preset-parametria"
+  dependencies:
+    yaml: "npm:^2.9.0"
+  languageName: unknown
+  linkType: soft
+
 "dts-resolver@npm:^3.0.0":
   version: 3.0.0
   resolution: "dts-resolver@npm:3.0.0"

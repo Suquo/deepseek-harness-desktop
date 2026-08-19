@@ -16,6 +16,7 @@ const upstream = readJson('upstream.json')
 const plugin = readJson('dsh-plugin-desktop/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
+const preset = readJson('dsh-preset-parametria/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
 const noteDirectory = '.agents/notes/implemented/process'
 const noteName = '2026-08-15-pinned-upstream-and-isolated-yarn-workspace'
@@ -29,18 +30,34 @@ if (JSON.stringify(workspace.workspaces) !== JSON.stringify([
   'dsh-plugin-desktop',
   'dsh-community-fabric',
   'dsh-community-market',
+  'dsh-preset-parametria',
 ])) {
-  fail('the root Yarn workspace must contain the desktop, community-fabric, and community-market packages')
+  fail('the root Yarn workspace must contain the desktop, community-fabric, community-market, and preset-parametria packages')
 }
 for (const [name, manifest] of [
   ['dsh-plugin-desktop', plugin],
   ['dsh-community-fabric', fabric],
   ['dsh-community-market', market],
+  ['dsh-preset-parametria', preset],
 ]) {
   if (manifest.packageManager !== undefined) fail(`${name} must inherit the root Yarn release`)
 }
 if (fabric.name !== 'dsh-community-fabric') fail('the Fabric workspace must own dsh-community-fabric')
 if (market.name !== 'dsh-community-market') fail('the market workspace must own dsh-community-market')
+if (preset.name !== 'dsh-preset-parametria') fail('the preset workspace must own dsh-preset-parametria')
+// Every workspace's own gate must run under the root `check`, or a package can
+// be added to the tree and never validated by anything.
+for (const name of ['dsh-community-fabric', 'dsh-community-market', 'dsh-preset-parametria', 'dsh-plugin-desktop']) {
+  if (!workspace.scripts.check.includes(`yarn workspace ${name} check`)) {
+    fail(`the root check script must run the ${name} gate`)
+  }
+}
+// NOTE (tracked on issue #9, item 2): AGENTS.md documents `corepack yarn test`
+// as the unit-test command, but the root `test` and `typecheck` scripts are
+// pinned by exact string in `dsh-plugin-desktop/tests/package.spec.ts`, so the
+// root chain and that pinned string have to move in one change. Until they do,
+// `dsh-preset-parametria` is reached by `corepack yarn check` only, and the
+// guard above is what keeps that true.
 const claudePath = resolve(root, 'CLAUDE.md')
 const claudeStat = lstatSync(claudePath)
 // Windows checkouts materialize the symlink as a regular file holding the
@@ -60,6 +77,11 @@ for (const legacyFile of [
   'dsh-community-fabric/pnpm-workspace.yaml',
   'dsh-community-market/pnpm-lock.yaml',
   'dsh-community-market/pnpm-workspace.yaml',
+  'dsh-preset-parametria/pnpm-lock.yaml',
+  // The preset package emits the profile's pnpm settings from its installer,
+  // into `$DSH_HOME`; a copy in the workspace would mean the file drifted back
+  // into the Yarn tree.
+  'dsh-preset-parametria/pnpm-workspace.yaml',
 ]) {
   if (existsSync(resolve(root, legacyFile))) fail(`${legacyFile} must not exist`)
 }
@@ -78,6 +100,7 @@ for (const [owner, manifest] of [
   ['desktop', plugin],
   ['fabric', fabric],
   ['market', market],
+  ['preset', preset],
 ]) {
   for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies', 'resolutions']) {
     for (const [name, range] of Object.entries(manifest[field] ?? {})) {
