@@ -141,10 +141,111 @@ if (run('git', ['remote', 'get-url', 'origin'], upstreamDir) !== upstream.reposi
 if (upstreamPackage.version !== upstream.sourceVersion) {
   fail('deepseek-harness package version differs from upstream.json')
 }
-for (const name of Object.keys(plugin.dependencies).filter(name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-'))) {
-  if (plugin.dependencies[name] !== upstream.runtimePackageVersion) {
-    fail(`${name} must use the recorded DSH runtime package family`)
+// ------------------------------------------------------- the upstream pin surface
+//
+// Everything a pin bump has to move in one commit, guarded here so a half-done
+// bump cannot pass the gate. Until #12 this covered `dsh-plugin-desktop`'s
+// `dependencies` alone, while `dsh-community-market` carried 61 more entries at
+// the same version across dev+peer and the root carried 9 `resolutions`
+// selectors — none of them guarded by anything.
+//
+// IDENTITY selects what is guarded, never the version. `scripts/upstream-watch.mjs`
+// enumerates the same surface by "range equals the current pin" because it builds
+// a forward worklist; a FENCE written that way would skip precisely the entries a
+// half-done bump left behind on the OLD version, which is the vacuous pass this
+// guard exists to stop. `@deepseek-ai/cordis*` and `@deepseek-ai/schemastery`
+// share the npm scope but not the release train, so the test is a segment-exact
+// `@deepseek-ai/dsh` or a `@deepseek-ai/dsh-` prefix, never the scope.
+const isUpstreamPackage = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')
+const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
+const pinned = []
+for (const [path, manifest] of [
+  ['package.json', workspace],
+  ...workspaces.map(([name, manifest]) => [`${name}/package.json`, manifest]),
+]) {
+  for (const field of dependencyFields) {
+    const entries = Object.entries(manifest[field] ?? {}).filter(([name]) => isUpstreamPackage(name))
+    if (entries.length > 0) pinned.push({ path, field, entries })
   }
+}
+// The second direction. "Every entry matches the pin" is vacuously true of a
+// field that lost its entries, a workspace that stopped depending on the family,
+// or a manifest deleted outright — so the surface itself is snapshotted, exactly
+// as the `workspaces` list above is. An entry appearing, an entry disappearing,
+// or a whole manifest/field joining or leaving fails here before the version
+// assertion gets the chance to pass over nothing. Counts rather than names: the
+// 157 names would be a second copy of two manifests, churned by every release.
+// The gap that leaves is one addition plus one removal of equal size, in the same
+// field, in the same commit — which moves package identity rather than the pin,
+// and whose surviving entries the version assertion below still holds to the pin.
+// These three numbers are the ones `.engineering/upstream-watch.md` quotes as the
+// bump-surface worklist (96 + 61 + 9 = 166); this is the enforced copy.
+const pinSurface = [
+  ['dsh-plugin-desktop/package.json', 'dependencies', 96],
+  ['dsh-community-market/package.json', 'devDependencies', 32],
+  ['dsh-community-market/package.json', 'peerDependencies', 29],
+]
+const observedSurface = pinned.map(({ path, field, entries }) => [path, field, entries.length])
+if (JSON.stringify(observedSurface) !== JSON.stringify(pinSurface)) {
+  fail(`the upstream pin surface moved: expected ${JSON.stringify(pinSurface)}, found ${JSON.stringify(observedSurface)}`)
+}
+for (const { path, field, entries } of pinned) {
+  for (const [name, range] of entries) {
+    if (range !== upstream.runtimePackageVersion) {
+      fail(`${path} ${field}.${name} is ${range}, not the recorded DSH runtime package version ${upstream.runtimePackageVersion}`)
+    }
+  }
+}
+
+// The `resolutions` half of the surface. A selector and the patch it points at
+// are ONE unit that moves together (`handoffs/resolver-charter.md`, ENVIRONMENT):
+// the selector's range, the `patch:` locator's version, and the patch FILENAME
+// all name the pinned release. Half-updating them is silent — Yarn is content to
+// apply a patch through a selector no installed tree ever matches.
+const selectorPattern = /^(?<name>.+)@npm:(?<range>.+)$/u
+const targetPattern = /^patch:(?<name>.+)@npm%3A(?<locator>[^#]+)#\.\/patches\/(?<file>[^#]+)$/u
+const patchedShapes = new Map()
+for (const [selector, target] of Object.entries(workspace.resolutions ?? {})) {
+  const selected = selectorPattern.exec(selector)?.groups
+  if (selected === undefined) fail(`root resolutions selector ${selector} is not a <package>@npm:<range> selector`)
+  if (!isUpstreamPackage(selected.name)) continue
+  const shape = selected.range === upstream.runtimePackageVersion
+    ? 'exact'
+    : selected.range === `^${upstream.runtimePackageVersion}` ? 'caret' : null
+  if (shape === null) {
+    fail(`root resolutions selector ${selector} does not pin the recorded DSH runtime package version ${upstream.runtimePackageVersion}`)
+  }
+  const patched = targetPattern.exec(target)?.groups
+  if (patched === undefined) fail(`root resolutions["${selector}"] must resolve to a patch under ./patches`)
+  if (patched.name !== selected.name) {
+    fail(`root resolutions["${selector}"] patches ${patched.name}, a different package`)
+  }
+  if (patched.locator !== upstream.runtimePackageVersion) {
+    fail(`root resolutions["${selector}"] patches version ${patched.locator}, not the pinned ${upstream.runtimePackageVersion}`)
+  }
+  if (!patched.file.endsWith(`@${upstream.runtimePackageVersion}.patch`)) {
+    fail(`patches/${patched.file} is not named for the pinned version ${upstream.runtimePackageVersion}`)
+  }
+  if (!existsSync(resolve(root, 'patches', patched.file))) {
+    fail(`root resolutions["${selector}"] points at patches/${patched.file}, which does not exist`)
+  }
+  patchedShapes.set(selected.name, [...(patchedShapes.get(selected.name) ?? []), shape].sort())
+}
+// Version-independent, so it survives a pin bump untouched and fences the hazard
+// the pin-bump checklist calls out by name: some packages carry both an exact and
+// a caret selector, some only one, and a half-updated selector set leaves part of
+// the installed tree unpatched without `yarn install` complaining. Snapshotting
+// the SHAPES makes a dropped or added selector a named failure in both directions.
+const patchedPackages = [
+  ['@deepseek-ai/dsh-app-boot', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-client-ui-directory-picker-browse', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-client-ui-workspace', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-llm-deepseek', ['caret']],
+  ['@deepseek-ai/dsh-sandbox-windows-acl', ['caret', 'exact']],
+]
+const observedPatched = [...patchedShapes].sort(([left], [right]) => left.localeCompare(right))
+if (JSON.stringify(observedPatched) !== JSON.stringify(patchedPackages)) {
+  fail(`the patched-package selector set moved: expected ${JSON.stringify(patchedPackages)}, found ${JSON.stringify(observedPatched)}`)
 }
 
 const noteRecord = readFileSync(resolve(root, noteRecordPath), 'utf8')
