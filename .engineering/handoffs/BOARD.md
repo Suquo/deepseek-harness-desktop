@@ -14,7 +14,7 @@
 
 - **Boot reconciliation:** gh default repo initially resolved to the anywhere-labs PARENT (fixed: `gh repo set-default Suquo/deepseek-harness-desktop`); parent repo is highly active (~20 open PRs, 2.0.x bug wave) — Lane C watch data. Fork had issues DISABLED + master 2 ahead unpushed.
 - **Owner rulings (2026-08-19, in-session, recorded):** (1) Issues ENABLED on the fork + seed queue FILED (#1 vision routing · #2 Parametria profile · #3 CI · #4 upstream watch; labels `parametria-harness`/`ci`/`upstream` created). (2) **STANDING PUSH AUTHORITY to origin granted** — bootstrap commits pushed (`e84f95abf8`); never push to the anywhere-labs `upstream` remote. (3) **PRODUCT PRIORITIES: cost + speed per definition are the TOP-LINE metrics; per-step build telemetry is valuable; model-swap cost/performance comparison is high value** — telemetry/metering surfaces are first-class in the harness plan.
-- **Harness-customization research in flight:** skill-needs report LANDED (22 harness pain points W1–W22, incl. the vision-blind validator W1, image-context accumulation W3, dual-skill-root divergence W21, hardcoded Pinecone key hazard); extension-surface report running with a scope addition for metering/telemetry (token-meter, session-stats, session-telemetry, per-model cost). Synthesis → `.engineering/research/` next tick, then issue updates.
+- **RESEARCH COMPLETE + SYNTHESIZED (same generation):** both reports landed and persisted to `.engineering/research/` (synthesis + 2 appendices). Headlines: everything needed composes without forking (preset + profile); vision-validator fix = second `dsh-tool-subagent` row with `agentOptions` model pin + pi-ai `input` modalities for loud refusal; telemetry is 80% upstream (tokens/model/timing in the session log + projections), **money is ours to build**; model A/B supported with exact provenance (`request/context`). Issues updated (#1, #2 comments) and filed: **#5 cost/timing report · #6 model A/B protocol · #7 skill-root consolidation (W21)**. Queue order for Lane B: #2 → #1 → #5 → #6, #7 rides #2.
 
 **FLEET BOOTSTRAPPED (2026-08-19, cjjmaster; operator appointed the RM in-session and ran `/loop /repo-manager`).**
 
@@ -45,5 +45,8 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Owner items (batched, non-blocking)
 
-- **File the queue as GitHub issues?** The board carries the seed queue; say the word and the RM files them with labels (`parametria-harness`, `ci`, `upstream`) at Suquo/deepseek-harness-desktop.
-- **SK-1/SK-2 landing surface**: the skill folder isn't a git repo tracked by this fleet — where should skill changes be reviewed (skills repo? sync-skills flow?).
+- **Vision model/route for the validator pin** (#1): must be a `dsh-llm-pi-ai` route (deepseek adapter has no modality config). Name the provider + model to pin.
+- **Price table seeds** (#5): per-model $/Mtok (uncached-input / cacheRead / cacheWrite / output) for the models you want costed.
+- **Skill-root canonicalization** (#7): OK to make the preset-local copy in this repo canonical and retire/sync-target `~/.claude/skills` + `~/.agents/skills` copies? (Coordinates with your sync-skills fleet flow.)
+- **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` (also reads `OPENAI_API_KEY` from other skills' `.env`s). Recommend rotating the Pinecone key and moving it to `scripts/.env`. Flagging only — the skill folder is outside this repo's fleet surface.
+- **SK-2 landing surface**: node-catalog regeneration belongs to the Parametria app (suquo-systems-rust fleet) — file it there?
