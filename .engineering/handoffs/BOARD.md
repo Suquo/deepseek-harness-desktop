@@ -10,11 +10,11 @@
 
 ## Now
 
+**PR #14 MERGED (2026-08-19 ~18:04): #12 delivered — pin guard exhaustive over the full 166-entry surface.** Names-not-counts snapshots per (manifest, field), generated off the tree; keyed diff failures; the doc's step-3 table is the single surface authority; `yarn upstream:watch` rider landed. Hold-back declaration mechanism deferred until first use (ruling on #12). Gate flake datum posted to #16 (class reaches desktop-plugins.spec.ts). Lane C FREE; all merged worktrees cleaned (registry: issue-16 only).
+
 **PR #15 MERGED (2026-08-19 ~17:48): #13 delivered — profile.spec.ts win32 budget 10s→45s, derivation measured.** The resolver's measurement REFUTED the RM's issue framing (the PR #10 red was a ≥14x external-load stall on a sub-second test, not a headroom problem) — verified and ruled, issue closed on the corrected basis. RM reviewed inline (1-file +12/−1 diff fully read + empirically re-run: 18/18, 14.37s) — proportionality precedent: sub-agent axes are for diffs the RM can't hold whole. New: **#16** (marginal 5s budgets: desktop-plugins ~7.4x, market-pnpm-integration, electron-runtime). Lane A FREE.
 
 **PR #10 MERGED (2026-08-19 ~17:02): #9 item 2 + CI contract doc delivered (closes nothing by design).** Root `test` reaches `dsh-preset-parametria`; verify-layout guards are segment-exact and driven by ONE workspace list; AGENTS.md carries the CI contract with corrected fork-parent attribution. #3 stays open on the owner's two ordered steps (fork Actions opt-in → branch protection). New: **#13** (now closed via PR #15).
-
-**PR #11 MERGED (2026-08-19 ~16:57): issue #4 delivered — upstream watch tooling + protocol.** `scripts/upstream-watch.mjs` (read-only, tri-state gitlink, unknown-surfacing verdicts) + `.engineering/upstream-watch.md` (cadence, eval decision tree, patches checklist, pin-bump-PR rules). RM charter carries the daily watch tick. Today's live delta: harness pin CURRENT (0 behind); overlay 40 commits behind anywhere-labs — no bump trigger. #12 tracks the pin-guard exhaustiveness gap (+ root `upstream:watch` script rider). Lane C FREE; worktree issue-4 pending cleanup.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -24,8 +24,8 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: **BUSY — RM-spawned gen-3 on #16** (marginal budgets, measure-first per PR #15 pattern; branch `claude/issue-16-marginal-budgets`). Expected-touch: the three named spec files + at most workspace vitest configs. Disjoint vs Lane C fix cycle.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged); agent resumable for the next assignment (queue: #1 pending-live → #5 → #6; #7 and #9 available, #5/#6/#7 gated on owner items). Worktree `~/.pm-resolver-worktrees/issue-2` pending cleanup.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — RM-spawned gen-2 on #12** (exhaustive pin guard + `upstream:watch` script rider; branch `up/issue-12-pin-guard`). Expected-touch: `scripts/verify-layout.mjs` + root package.json scripts block. Disjointness vs Lane A gen-2 verified at spawn.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-2 completed #2 (PR #8 merged). Remaining queue (#1 pending-live, #5/#6/#7 owner-gated, #9 items 1+3).
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Next natural slice: none until a bump trigger or #12-class follow-up.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE.
 
 ## Second run harvested (weaker model, 2026-08-19)
@@ -34,8 +34,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Queue (open GitHub issues, RM-triaged; DELIVERED today: #2→PR8, #4→PR11, #13→PR15, #9-item-2→PR10)
 
-- **#12 [Lane C] Exhaustive pin guard** — IN FIX CYCLE (PR #14, one blocker: names-not-counts snapshot).
-- **#16 [Lane A] Marginal 5s test budgets** — claimable now (measure-first pattern per PR #15).
+- **#16 [Lane A] Marginal 5s test budgets** — IN PROGRESS (gen-3; now also owns the desktop-plugins flake datum from PR #14's gate).
 - **#1 [Lane B] Vision routing** — structural half landed in PR #8; stays open PENDING-LIVE (first real run must show `subagent_validator` on `parametria-vision` + the opaque `subagent run failed` finding scoped here).
 - **#5 [Lane B] Cost/timing report** — gated on owner price seeds. **#6 [Lane B] Model A/B protocol** — first datum recorded; buildable after #5's seeds. **#7 [Lane B] Skill-root consolidation** — gated on owner canonicalization OK.
 - **#9 [Lane B] PR #8 follow-ups** — item 2 done (PR #10); items 1 (evidence/sandbox plumbing) + 3 (mount observation, pending-live) remain. **#3 [owner] CI required-checks** — see owner items.
