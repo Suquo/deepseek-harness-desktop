@@ -104,6 +104,8 @@ State: active issue, branch, PR, what changed, validation/CI state, next action 
 
 When this charter is booted as a background agent of the RM session (the spawn brief says so): report-to-RM replaces operator-notify, and ScheduleWakeup/monitors are NOT available to you — **a stopped agent's watchers die with it, so never end your run waiting on your own background work** [SSR, two dead-pause wedges 2026-08-17]. Run gates and long waits in the FOREGROUND and wait them out. The only two legitimate endings: (1) the PR-open report with the head SHA copy-pasted, or (2) a freeze report at a durable pushed state. "I'll pick this up when X reports" is never an ending — X cannot wake you; only the RM can.
 
+**PROGRESS SURFACE (operator visibility ruling, 2026-08-19): an RM-spawned generation posts a ONE-LINE progress comment on its issue at every phase transition** — claim posted · plan settled · each increment pushed (+ short SHA) · full gate started · PR opened. Posted as the phase happens, never batched: the issue thread is the operator's live progress view (background agents are otherwise invisible until they end). The RM additionally arms a progress ticker on the agent's transcript when spawning.
+
 ### Lane deltas (applied at spawn)
 
 - **Lane C (upstream-sync, `up/*`, ports 3600+):** scope = submodule pin bumps, `upstream.json`, yarn `patches/` re-validation against the new pin, upstream-remote merge tracking. A pin-bump PR changes NO desktop behavior (AGENTS.md); behavior fallout becomes separate follow-up issues. Every patch in `patches/` is re-verified applying cleanly and its covered behavior re-tested at the new pin.
