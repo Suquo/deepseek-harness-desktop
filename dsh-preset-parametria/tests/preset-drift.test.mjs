@@ -48,7 +48,8 @@ const DECLARED_DELTA = {
   reconfigured: {
     persona:
       'the run states its own shape: load the skill, delegate visual checks to '
-      + 'subagent_validator rather than subagent, and meet the two sandbox facts this '
+      + 'subagent_validator rather than subagent, keep every artifact under the workspace-local '
+      + '`.parametria-evidence/` run directory, and meet the two sandbox facts this '
       + 'host has (workspace-local uv cache; per-call escalation for the screenshot script)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
@@ -128,6 +129,80 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
       persona, /select the .* permission preset|switch the session|for the whole session/,
       'the persona must not route the run toward a session-wide widening: the full-access preset also '
       + 'switches approval prompts off, which is the state the per-call escalation exists to avoid',
+    )
+    // The evidence half of issue #9 item 1. Where a run's files land is decided
+    // by an argument the model types, and the skill's own examples type an
+    // absolute `C:/tmp/...` that `workspace-write` denies — so a run either
+    // escalates or improvises bare filenames into the workspace root, which is
+    // the litter the issue was filed for. Nothing in composition governs a CLI
+    // argument, so this reaches the run as persona text or not at all.
+    //
+    // Anchored on the whole path, including the run-scoping segment. A bare
+    // /\.parametria-evidence/ would stay green if the run directory lost its
+    // per-run segment, and one shared directory across runs is how a validator
+    // reads the previous run's screenshot and passes the current one.
+    assert.ok(
+      persona.includes('`.parametria-evidence/$env:DSH_SESSION_ID/`'),
+      'the persona must name the run-scoped artifact directory verbatim: the workspace is the root '
+      + 'writable under the standing workspace-write policy and above it, and DSH_SESSION_ID is the '
+      + 'run-scoping token shell calls already carry when an agent owns them',
+    )
+    // The variable is injected only when the execution HAS an agent
+    // (`shell-env/src/index.ts:157-159`), and an unset `$env:X` expands to the
+    // empty string in PowerShell without erroring — which silently collapses
+    // the run directory back to the shared root the segment above exists to
+    // prevent. The persona must therefore carry its own fallback; nothing
+    // downstream can detect the collapse.
+    assert.ok(
+      persona.includes('if it came out empty, put a timestamp there instead'),
+      'the persona must handle an empty session-id segment: DSH_SESSION_ID is absent for an '
+      + 'agent-less execution and PowerShell expands it to nothing, silently sharing one directory '
+      + 'across every run',
+    )
+    // The delegate half, and the reason it is not optional: a subagent runs
+    // under its OWN session id (verified in export dsh-session-60658537, whose
+    // child header reads a different `id` with `parentSession` set), so a
+    // delegate that expands $env:DSH_SESSION_ID for itself resolves a directory
+    // the parent never wrote to. The instruction that closes that gap is
+    // passing absolute paths down, so the instruction is what gets pinned.
+    assert.ok(
+      persona.includes('pass ABSOLUTE paths built from that directory to every command and to every `subagent_validator` prompt'),
+      'the persona must instruct passing absolute paths to the delegate: a child resolves a different '
+      + 'session id, so a path it derives itself is not the path the capture wrote to',
+    )
+    // The persona is inherited by delegate children through `composeFrom()`, so
+    // every imperative in it is read by the validator too. Without this
+    // sentence the paragraph is pure orchestrator voice, and a literal-minded
+    // child creates a second run directory from its OWN session id and then
+    // looks for the screenshot there rather than at the path it was handed —
+    // which is the failure the sentence above exists to prevent, arriving from
+    // the other side.
+    assert.ok(
+      persona.includes('if you ARE the delegate and were handed absolute paths, use them verbatim and derive nothing'),
+      'the persona must address the delegate directly: it inherits this text, and an unaddressed '
+      + 'imperative is one a child follows for itself',
+    )
+    // The third artifact class, and the one this shape was ruled in to reach.
+    // Relocating the generator SCRIPT is not enough: the litter was what the
+    // script WROTE (`gen-tsc-media-wall.js:389` wrote a bare `spec.json`), and a
+    // bare filename inside a script resolves against the process cwd no matter
+    // where the script itself sits. No CLI argument reaches inside a file the
+    // model authors, so this instruction is the only thing covering it.
+    assert.ok(
+      persona.includes('A generator script you write must itself write its output to absolute paths under that same directory'),
+      'the persona must instruct that generator scripts write ABSOLUTE paths: relocating the script '
+      + 'without relocating its output reproduces the exact litter this slice exists to stop',
+    )
+    // The persona MENTIONS `C:/tmp` in both this paragraph and the uv one, so a
+    // keyword assertion cannot tell "ignore both" from an endorsement — and an
+    // endorsement is the skill's own documented behaviour leaking back in. The
+    // overriding sentence is therefore matched whole. Both spellings are named
+    // because the skill documents both: `C:/tmp/...` in its Windows examples
+    // and a POSIX `/tmp/spec.json` as the decompiler's own default.
+    assert.ok(
+      persona.includes('The skill\'s own examples write to `C:/tmp/...` and `/tmp/...`; ignore both.'),
+      'the persona must override the skill\'s documented output locations explicitly: a loaded skill\'s '
+      + 'text competes with this persona, and both spellings are outside the workspace-write grant',
     )
     assert.deepEqual(Object.keys(ours.get('skill-filesystem').config), ['customSkillDirs'])
   })
