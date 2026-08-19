@@ -150,11 +150,16 @@ describe('the vision-pinned validator row', () => {
     })
   })
 
-  it('forbids the validator from delegating further', () => {
-    // A child joins its parent's preset, so without this cap it would reach
-    // every delegation tool in this group and could spawn its own children on
-    // the session model — the blind-validator hole, one level down.
-    assert.equal(row.config.maxDepth, 0)
+  it('states its own delegation cap rather than inheriting upstream\'s default', () => {
+    // Presence only. The VALUE is derived from upstream's own depth arithmetic
+    // in `validator-depth.test.mjs`, which owns that claim whole: a literal
+    // re-asserted here is exactly how this row shipped — and how a fence came
+    // to certify — a cap that refused the delegation the persona mandates
+    // (issue #18).
+    assert.ok(
+      Object.hasOwn(row.config, 'maxDepth'),
+      'the validator row must state a depth cap; omitting it silently takes upstream\'s default of 3',
+    )
   })
 
   it('runs one-shot, so the parent waits for the verdict', () => {
