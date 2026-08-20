@@ -5,11 +5,20 @@
     "noEmit": true,
     "emitDeclarationOnly": false
   },
-  "include": ["scripts/**/*.ts", "src/*.ts", "tests/**/*.ts", "tests/**/*.tsx"],
+  "include": [
+    "scripts/**/*.ts",
+    "src/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
+  ],
   "exclude": [
     "tests/client-boot-health.spec.ts",
     "tests/client-brand.spec.ts",
+    "tests/client-cost-model.spec.ts",
+    "tests/client-cost-parity.spec.ts",
+    "tests/client-cost-rates.spec.ts",
     "tests/client-environment.spec.ts",
+    "tests/client-turn-cost.spec.ts",
     "tests/client-workspace-folder-drop.spec.ts"
   ]
 }

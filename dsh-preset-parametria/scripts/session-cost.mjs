@@ -211,6 +211,34 @@ export function ratesFor(table, provider, model) {
 }
 
 /**
+ * Resolve the rates in force for a prompt of this size.
+ *
+ * Mirrors pi-ai's own tier resolution (`dist/models.js` `calculateCost`) and
+ * the desktop client's `ratesInForce`, which
+ * `dsh-plugin-desktop/tests/client-cost-parity.spec.ts` holds equal to this
+ * one: the threshold is compared against the WHOLE prompt (input + both cache
+ * buckets) and the highest matched threshold wins, so tiers may be listed in
+ * any order. `x-ai/grok-4.5` really does double every rate above 200,000
+ * prompt tokens, and a long-context Parametria run crosses that line
+ * routinely.
+ * @param {object} rates - the model's rate record.
+ * @param {object} usage - the step's token buckets.
+ * @returns {object} the flat rates to multiply by.
+ */
+export function ratesInForce(rates, usage) {
+  const promptTokens = (usage.inputTokens ?? 0) + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+  let winner = rates
+  let matched = -1
+  for (const tier of rates.tiers ?? []) {
+    if (promptTokens > tier.inputTokensAbove && tier.inputTokensAbove > matched) {
+      winner = tier
+      matched = tier.inputTokensAbove
+    }
+  }
+  return winner
+}
+
+/**
  * Price one folded step.
  *
  * A bucket the run actually used but the table does not rate makes the whole
@@ -228,12 +256,13 @@ export function priceStep(row, table) {
     const key = `${row.provider ?? '?'}/${row.model ?? '?'}`
     return { status: UNPRICED, reason: `no price entry for ${key}` }
   }
+  const inForce = ratesInForce(rates, row.usage)
   let usd = 0
   let rated = 0
   for (const [field, rate] of BUCKETS) {
     const tokens = row.usage[field] ?? 0
     if (tokens === 0) continue
-    const perMillion = rates[rate]
+    const perMillion = inForce[rate]
     if (typeof perMillion !== 'number' || !Number.isFinite(perMillion)) {
       return { status: UNPRICED, reason: `${row.provider ?? '?'}/${row.model ?? '?'} has no ${rate} rate, and the step used ${String(tokens)} ${rate} tokens` }
     }
