@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
+import { installCostSurface } from './cost-surface.ts'
 import { installDesktopDirectoryPickerBridge } from './directory-picker.ts'
 import { parseDesktopClientEnvironment } from './environment.ts'
 import { installWorkspaceFolderDrop } from './workspace-folder-drop.ts'
@@ -30,7 +31,21 @@ export const inject = [
   'workspaces',
 ]
 
-/** Register desktop-owned client surfaces for the current BrowserWindow mode. @param ctx - browser Cordis context. */
+/**
+ * Register desktop-owned client surfaces for the current BrowserWindow mode.
+ *
+ * Everything registered unconditionally here reaches BOTH shell modes, so
+ * everything here has to be additive: compatibility mode runs the upstream
+ * default client, and AGENTS.md admits desktop-owned UI there only when it adds
+ * to a documented slot without replacing or altering upstream slots, services or
+ * behaviour. The boot reporter, the folder drop and the directory-picker bridge
+ * met that bar already; the cost surface is the first desktop-owned *visible*
+ * surface to join them, under the owner ruling on issue #36.
+ *
+ * Mode-specific composition — owning the root slot, the window frame's styles,
+ * the theme presenter — stays behind the advanced branch at the end.
+ * @param ctx - browser Cordis context.
+ */
 export function apply(ctx: ClientContext): void {
   const environment = parseDesktopClientEnvironment(window.location.search)
   if (!environment) return
@@ -44,6 +59,13 @@ export function apply(ctx: ClientContext): void {
       startSession: workspaceId => { ctx.workspaces.startSession(workspaceId) },
     }),
     'dsh-plugin-desktop: workspace folder drop',
+  )
+  // Desktop-owned reporting surface, contributed to upstream's own turn-tail
+  // action list. It reads session state and renders; it replaces nothing, so it
+  // belongs to both modes rather than to the advanced shell.
+  ctx.effect(
+    () => installCostSurface(ctx),
+    'dsh-plugin-desktop: turn cost surface',
   )
   if (environment.platform === 'win32') {
     ctx.effect(
