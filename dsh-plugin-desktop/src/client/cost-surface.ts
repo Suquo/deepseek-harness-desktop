@@ -59,7 +59,12 @@ const COST_STYLES = `
 .dshDesktopCostTable th:nth-child(2), .dshDesktopCostTable td:nth-child(2) { text-align: left; }
 .dshDesktopCostTable tbody th { color: var(--dsw-alias-label-tertiary); font-weight: 400; }
 .dshDesktopCostTable tbody td:last-child { color: var(--dsw-alias-label-primary); }
-.dshDesktopCostUnknown { color: var(--dsw-alias-state-error-primary); }
+/* The cost cell already matches \`tbody td:last-child\` (0,2,2). An unqualified
+ * \`.dshDesktopCostUnknown\` (0,1,0) loses to it, which was measured in the
+ * running app: unpriced cells rendered in the ordinary label colour and read as
+ * settled values. The marker has to outrank the column rule to be a marker. */
+.dshDesktopCostTable tbody td.dshDesktopCostUnknown,
+.dshDesktopCostTotals .dshDesktopCostUnknown { color: var(--dsw-alias-state-error-primary); }
 .dshDesktopCostTotals { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 10px 0 0; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l2); }
 .dshDesktopCostTotals dt { color: var(--dsw-alias-label-tertiary); }
 .dshDesktopCostTotals dd { margin: 0; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
