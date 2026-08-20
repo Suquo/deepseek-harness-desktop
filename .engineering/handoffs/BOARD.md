@@ -10,6 +10,8 @@
 
 ## Now
 
+**PR #32 MERGED (2026-08-20 ~06:10, on green dispatch CI): #5 CLOSED — the in-UI cost surface is LIVE.** Per-generation cost chip + per-step cost/TTFT/model-time columns in desktop-composed modes (compat pristine); live OpenRouter list rates with visible provenance timestamp; `unpriced` fail-open with `≥$x` floors; compile-time both-direction status witnesses; parity fence against the offline `session-cost.mjs` join. Real billed cost = #30 (Host-plane, grounded both roads). Validated live: `$5.77 · 6m58s`, 50/50 generations priced. **Owner's top-line metrics (cost + speed per definition) are now on screen.**
+
 **PR #28 MERGED (2026-08-20 ~02:40): in-app Parametria rebrand LIVE.** PARAMETRIA wordmark + mark (both themes; desktop-composed modes only — compat mode stays pristine per AGENTS.md), "Parametric Definitions" headline, ADR H-0002 (upstream-class-selector deviation, Lane C pin-bump obligation: re-run client-brand.spec + re-derive the class table before accepting a new pin). #26 re-scoped OPEN on the Host/packaging remainder (title/favicon/manifest via indexTaps · tray/app icons/windowTitle/productName/installer art · locale copy · aria-label drift-guard one-liner) — Lane A/B, gated partly on the owner's compat-branding ruling. Lane D's `--user-data-dir` discovery closed the charter's userData isolation gap.
 
 **PR #25 MERGED (2026-08-20 ~00:20): #9 CLOSED — evidence plumbing landed per ruling** (run-scoped `.parametria-evidence/<session>/` root, persona-instructed; gitignore + `.uv-cache` rider; derived evidence-hygiene fence; residuals filed as #23/#24).
@@ -24,7 +26,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: **BUSY — gen-4 on #26's remainder** (Host/packaging branding under the brand-everywhere ruling; branch `claude/issue-26-host-branding`). Set: Host/shell/packaging surfaces + client-brand.spec aria guard; client index wiring is gen-7's.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-7 RESUMED on #5's UI increment** (Lane D merged; gen-7 rebases over it; new `--user-data-dir` isolation recipe in use; join script already landed, run cost measured $0.5661). Queue behind: #27 (default profile) · #26-remainder. Owner-gated: #6/#7, compat-branding ruling.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-7 delivered #5 (PR #32 merged on green CI). Queue: #27 (default profile) next · #23/#24/#30 available · #6 buildable (protocol; three datums recorded) · #7 owner-gated.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Standing obligation added by H-0002: on any pin bump, re-run client-brand.spec + re-derive the class table.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-2 delivered the in-app rebrand (PR #28 merged; ADR H-0002; isolation-recipe discovery → charter). #26's remainder is Lane A/B (Host/packaging), not D.
 
