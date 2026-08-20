@@ -697,7 +697,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-agent-loop@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-agent-loop@npm:0.1.0-rc.8, @deepseek-ai/dsh-agent-loop@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-agent-loop@npm:0.1.0-rc.8"
   dependencies:
@@ -3111,7 +3111,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-subagent-spawn-in-process@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-subagent-spawn-in-process@npm:0.1.0-rc.8, @deepseek-ai/dsh-subagent-spawn-in-process@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-subagent-spawn-in-process@npm:0.1.0-rc.8"
   dependencies:
@@ -3615,7 +3615,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-tool-subagent@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-tool-subagent@npm:0.1.0-rc.8, @deepseek-ai/dsh-tool-subagent@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-tool-subagent@npm:0.1.0-rc.8"
   dependencies:
@@ -7203,6 +7203,7 @@ __metadata:
     "@deepseek-ai/dsh": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent-default-model": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-agent-loop": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent-presets": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-anonymous-user-id": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-api-gateway": "npm:0.1.0-rc.8"
@@ -7283,11 +7284,13 @@ __metadata:
     "@deepseek-ai/dsh-storage-domain": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subagent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subagent-in-process-driver": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subprocess": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-system-prompt": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-terminal": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-timeout": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-token-meter": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-tool-subagent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tool-todo": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tool-workflow": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tools": "npm:0.1.0-rc.8"
