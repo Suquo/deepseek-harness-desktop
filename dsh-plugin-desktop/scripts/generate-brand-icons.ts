@@ -13,14 +13,14 @@
  */
 
 import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import {
+  APP_ICON_PATH,
   APP_ICON_SIZE,
+  TRAY_SOURCE_PATH,
   appIconSvg,
-  packageRoot,
   readMarkSource,
   trayIconSvg,
 } from './brand-icon-sources.ts'
@@ -49,8 +49,8 @@ export async function renderAppIcon(source: string): Promise<Buffer> {
  */
 export async function generateBrandIcons(): Promise<void> {
   const source = await readMarkSource()
-  await writeFile(join(packageRoot, 'build', 'tray-icon.svg'), trayIconSvg(source), 'utf8')
-  await writeFile(join(packageRoot, 'build', 'app-icon.png'), await renderAppIcon(source))
+  await writeFile(TRAY_SOURCE_PATH, trayIconSvg(source), 'utf8')
+  await writeFile(APP_ICON_PATH, await renderAppIcon(source))
 }
 
 const invokedPath = process.argv[1]

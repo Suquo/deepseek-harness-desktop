@@ -172,7 +172,9 @@ DSH Desktop 将 UTF-8 日志写入 Electron 用户数据目录：Windows 位于 
 
 ## 打包
 
-`yarn package:dir` 为当前宿主平台创建未封装目录。如果应用归档缺少 desktop 更新与终端模块、DSH CLI bootstrap、内置 pnpm 入口或物理 deployment package，packaged-runtime gate 会拒绝该产物。Electron Builder 会把根 manifest、desktop runtime 与完整依赖树输出到 `app.asar.unpacked`；Host profile boot 与 CLI bootstrap 都会使用这棵物理树，因此 DSH profile fallback 的符号链接不会指向虚拟 ASAR 目录。`build/app-icon.png` 保持为未经修改的 iOS Default 源图，并继续作为 Windows 与 Linux 应用图标。构建过程会运行 `scripts/generate-mac-app-icon.mjs`，把该图缩放为 824 × 824 像素并居中放入透明的 1024 × 1024 画布；macOS 打包与运行中的 Dock 都使用生成的 `build/app-icon-mac.png`。`build/tray-icon.svg` 是品牌蓝托盘源文件：构建过程会派生由 macOS 系统自动着色的模板图，以及固定品牌蓝的 Windows 与 Linux 托盘图。
+`yarn package:dir` 为当前宿主平台创建未封装目录。如果应用归档缺少 desktop 更新与终端模块、DSH CLI bootstrap、内置 pnpm 入口或物理 deployment package，packaged-runtime gate 会拒绝该产物。Electron Builder 会把根 manifest、desktop runtime 与完整依赖树输出到 `app.asar.unpacked`；Host profile boot 与 CLI bootstrap 都会使用这棵物理树，因此 DSH profile fallback 的符号链接不会指向虚拟 ASAR 目录。两个原生图标源文件都由 `scripts/generate-brand-icons.ts` 从本包唯一的品牌素材 `assets/parametria-logo-icon.svg` 派生。该生成器由人手动运行，而不属于 `yarn build`：它的产物是构建随后消费的已提交源文件，而在每台机器上重新编码的 PNG 无法承载 digest pin；修改该 mark 后请运行它，在此之前 `tests/package.spec.ts` 中的 drift guard 会持续失败。本仓库不编写 `.ico` 或 `.icns`——两者都由 Electron Builder 从 PNG 派生。
+
+`build/app-icon.png` 是置于不透明底板上的 Parametria mark，并作为 Windows 与 Linux 应用图标。它的 digest pin 用于确认已提交的字节就是经过评审的字节；旁边的低分辨率渲染比对则确认这些字节仍然画的是该 mark。构建过程会运行 `scripts/generate-mac-app-icon.mjs`，把该图缩放为 824 × 824 像素并居中放入透明的 1024 × 1024 画布；macOS 打包与运行中的 Dock 都使用生成的 `build/app-icon-mac.png`。`build/tray-icon.svg` 是托盘源文件：只保留 mark 的实心元素，压平为单一颜色，并裁切到素材自身的包围盒。单一颜色是必需而非风格选择——构建过程通过把这一种颜色替换为黑色来派生 macOS 模板图，而模板图只携带 alpha 通道；构建同时派生四种缩放比例下固定品牌色的 Windows 与 Linux 托盘图。
 
 ### WSL Linux 无界面检查
 

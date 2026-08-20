@@ -1,10 +1,12 @@
 /**
  * Derive the native icon sources from the one vendored Parametria mark.
  *
- * `assets/parametria-logo-icon.svg` is the single piece of brand artwork this package owns; the
- * client mark module vendors its element list verbatim and `tests/client-brand.spec.ts` re-derives
- * that copy from this file. The two native icon sources are derived from the same file here, so no
- * icon in this package is hand-authored artwork that could drift from the mark the app paints.
+ * `assets/parametria-logo-icon.svg` is the single piece of brand artwork this package owns. The
+ * client mark module vendors its element list verbatim, and `tests/client-brand.spec.ts` re-derives
+ * that copy **through {@link markElements}** — the same reader the two native derivations below
+ * use. That matters: two independent parsers of one file can agree today and disagree the day the
+ * artwork gains an element type one of them does not match, and the drift would be invisible
+ * because each guard would still pass against its own idea of the mark.
  *
  * Two derivations, because the two surfaces have different constraints:
  *
@@ -29,6 +31,12 @@ export const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 
 /** The one vendored piece of Parametria artwork every icon in this package derives from. */
 export const MARK_SOURCE_PATH = join(packageRoot, 'assets', 'parametria-logo-icon.svg')
+
+/** Committed tray source this module derives; consumed by `generate-tray-icons.mjs` at build. */
+export const TRAY_SOURCE_PATH = join(packageRoot, 'build', 'tray-icon.svg')
+
+/** Committed application icon this module derives; the Windows and Linux icon, and the macOS input. */
+export const APP_ICON_PATH = join(packageRoot, 'build', 'app-icon.png')
 
 /** Single flat colour of the tray source, the mark's primary blue. */
 export const TRAY_BRAND_COLOR = '#1a8fc4'
@@ -55,9 +63,6 @@ export const APP_ICON_CORNER_RATIO = 0.2237
  * artwork rather than the view box, this is the visual weight the outgoing icon carried.
  */
 export const APP_ICON_ARTWORK_RATIO = 0.72
-
-/** View box of the vendored mark. */
-export const MARK_VIEW_BOX = '0 0 500 500'
 
 /**
  * Bounding box of the mark's solid elements, in view-box units.
@@ -86,11 +91,33 @@ export function markElements(source: string): string[] {
 }
 
 /**
+ * Every paint value an SVG document names, read from `fill` and `stroke` attributes.
+ *
+ * Values are read by ATTRIBUTE, not by scanning for `#`-prefixed tokens. A token scan sees
+ * `fill="#1a8fc4"` and misses `fill="white"`, `fill="rgb(26,143,196)"`, a `style="fill:…"`, and a
+ * `<style>` rule — every one of which would put a second colour on a surface whose whole contract
+ * is that it has one. `none` is not a paint value and is excluded.
+ * @param svg - an SVG document.
+ * @returns the distinct paint values, lower-cased.
+ */
+export function markColors(svg: string): Set<string> {
+  const values = [...svg.matchAll(/(?:fill|stroke)\s*=\s*"([^"]*)"/giu)]
+    .map(match => (match[1] as string).trim().toLowerCase())
+    .filter(value => value !== 'none' && value !== '')
+  return new Set(values)
+}
+
+/**
  * Build the tray icon source: the mark's solid elements, flattened to one colour.
  *
  * `<line>` elements are the construction grid. They are dropped rather than recoloured because
  * they are `#fff` hairlines that read as grid over the artwork, not as part of the glyph — and a
  * monochrome silhouette cannot express the figure/ground they rely on.
+ *
+ * The single-colour result is enforced here rather than merely intended. The recolouring below
+ * rewrites hex fills; artwork that arrived with a named colour, a functional notation, a `style`
+ * attribute or a `<style>` block would slip past it and produce a source that cannot become a macOS
+ * template image. Refusing at the derivation is what keeps that from reaching a committed file.
  * @param source - contents of `assets/parametria-logo-icon.svg`.
  * @returns an SVG document whose only colour is {@link TRAY_BRAND_COLOR}.
  */
@@ -99,8 +126,18 @@ export function trayIconSvg(source: string): string {
     .filter(element => !element.startsWith('<line'))
     .map(element => element.replace(/fill="#[0-9a-f]{3,8}"/giu, `fill="${TRAY_BRAND_COLOR}"`))
   const { x, y, size } = MARK_ARTWORK_BOX
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="${x} ${y} ${size} ${size}" fill="none">\n`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="${x} ${y} ${size} ${size}" fill="none">\n`
     + `${solid.join('\n')}\n</svg>\n`
+  const colors = markColors(svg)
+  if (colors.size !== 1 || !colors.has(TRAY_BRAND_COLOR)) {
+    throw new Error(
+      `brand-icon-sources: the tray source must carry only ${TRAY_BRAND_COLOR}, derived ${[...colors].join(', ') || 'none'}`,
+    )
+  }
+  if (/<style\b|style\s*=/iu.test(svg)) {
+    throw new Error('brand-icon-sources: the tray source must not carry style rules')
+  }
+  return svg
 }
 
 /**

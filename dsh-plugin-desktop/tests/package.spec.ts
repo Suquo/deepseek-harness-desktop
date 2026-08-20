@@ -6,7 +6,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
-import { TRAY_BRAND_COLOR, markElements, trayIconSvg } from '../scripts/brand-icon-sources.ts'
+import {
+  APP_ICON_PATH,
+  MARK_SOURCE_PATH,
+  TRAY_BRAND_COLOR,
+  TRAY_SOURCE_PATH,
+  markColors,
+  markElements,
+  trayIconSvg,
+} from '../scripts/brand-icon-sources.ts'
 import { renderAppIcon } from '../scripts/generate-brand-icons.ts'
 
 /**
@@ -514,12 +522,12 @@ describe('published package surface', () => {
   it('keeps one fixed brand-colour tray source for generated native assets', () => {
     const source = readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')
 
-    // One colour, and only one. The macOS template variants are produced by replacing this exact
-    // string with black, so a second colour — or a colour chosen by a stylesheet at paint time —
-    // would leave a template image that is not a silhouette.
-    expect(source.match(new RegExp(TRAY_BRAND_COLOR, 'gu'))).toHaveLength(12)
-    expect(source.match(new RegExp(`#(?!${TRAY_BRAND_COLOR.slice(1)}\\b)[0-9a-f]{3,8}`, 'giu'))).toBeNull()
-    expect(source).not.toMatch(/<style\b|prefers-color-scheme/iu)
+    // One paint value, and only one, read by attribute rather than by scanning for `#` tokens —
+    // `fill="white"`, `fill="rgb(…)"` and `style="fill:…"` are all colours a token scan cannot
+    // see. The macOS template variants are produced by replacing that one value with black, so a
+    // second one would leave a template image that is not a silhouette.
+    expect([...markColors(source)]).toEqual([TRAY_BRAND_COLOR])
+    expect(source).not.toMatch(/<style\b|style\s*=|prefers-color-scheme/iu)
     for (const filename of [
       'tray-iconTemplate.png',
       'tray-iconTemplate@2x.png',
@@ -532,6 +540,37 @@ describe('published package surface', () => {
     }
   })
 
+  it('leaves every generated tray bitmap a single-hue silhouette', async () => {
+    // The outcome, not the generator's source text. Whatever the generator is written to do, a
+    // template image that carries anything but black-plus-alpha is not a template image, and a
+    // brand bitmap that carries a second hue has lost the property the whole tray derivation
+    // exists to preserve. Anti-aliasing makes edge pixels partly transparent, never differently
+    // hued, so the check is on hue at full opacity.
+    const [r, g, b] = [1, 3, 5].map(index => Number.parseInt(TRAY_BRAND_COLOR.slice(index, index + 2), 16))
+    for (const [filename, expected] of [
+      ['tray-iconTemplate.png', [0, 0, 0]],
+      ['tray-iconTemplate@2x.png', [0, 0, 0]],
+      ['tray-icon-blue.png', [r, g, b]],
+      ['tray-icon-blue@1.25x.png', [r, g, b]],
+      ['tray-icon-blue@1.5x.png', [r, g, b]],
+      ['tray-icon-blue@2x.png', [r, g, b]],
+    ] as [string, number[]][]) {
+      const { data, info } = await sharp(readFileSync(new URL(`build/${filename}`, packageRoot)))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+      const opaque: number[][] = []
+      for (let offset = 0; offset < data.length; offset += info.channels) {
+        if ((data[offset + 3] as number) === 255) {
+          opaque.push([data[offset] as number, data[offset + 1] as number, data[offset + 2] as number])
+        }
+      }
+
+      expect(opaque.length).toBeGreaterThan(0)
+      for (const pixel of opaque) expect(pixel).toEqual(expected)
+    }
+  })
+
   it('derives the tray source from the vendored mark rather than hand-authoring it', () => {
     // `build/tray-icon.svg` is committed, so nothing at build time would notice it drifting from
     // the artwork the application paints. Re-deriving it here is the guard: edit either the mark or
@@ -541,14 +580,16 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')).toBe(trayIconSvg(mark))
     expect(TRAY_BRAND_COLOR).toBe('#1a8fc4')
 
-    // The bitmap generator reads its replacement colour out of the source instead of restating it,
-    // so "there is exactly one colour to replace" is the thing it actually enforces. That is a
-    // checkable claim, so it is checked: a literal reappearing there would mean it had stopped
-    // deriving, and the two statements of the colour could then drift apart unnoticed.
-    const generator = readFileSync(new URL('scripts/generate-tray-icons.mjs', packageRoot), 'utf8')
-    expect(generator).toContain('colors.size !== 1')
-    expect(generator).not.toMatch(/#(?!000000\b)[0-9a-f]{6}\b/iu)
-    expect(generator).toContain("'#000000'")
+    // The generator writes the two committed sources; these bind the paths it writes to the paths
+    // every guard above reads, so a generator pointed at a different file cannot leave the guards
+    // passing against artwork nothing ships.
+    expect(MARK_SOURCE_PATH).toBe(fileURLToPath(new URL('assets/parametria-logo-icon.svg', packageRoot)))
+    expect(TRAY_SOURCE_PATH).toBe(fileURLToPath(new URL('build/tray-icon.svg', packageRoot)))
+    expect(APP_ICON_PATH).toBe(fileURLToPath(new URL('build/app-icon.png', packageRoot)))
+
+    // The derivation refuses a source it cannot flatten, rather than emitting one and trusting the
+    // build to notice. A named colour is the case a hex-token scan cannot see.
+    expect(() => trayIconSvg(mark.replace('fill="#1a8fc4"', 'fill="white"'))).toThrow(/only #1a8fc4/u)
 
     // The derivation drops the mark's `#fff` construction hairlines and keeps every solid element,
     // which is what makes a single-colour silhouette possible at all.

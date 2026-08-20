@@ -22,15 +22,25 @@ const buildRoot = join(packageRoot, 'build')
 const sourcePath = join(buildRoot, 'tray-icon.svg')
 const source = await readFile(sourcePath, 'utf8')
 
-const colors = new Set(source.match(/#[0-9a-f]{3,8}/giu) ?? [])
-if (colors.size !== 1 || /<style\b/iu.test(source)) {
+// Read by ATTRIBUTE, not by scanning for `#` tokens: a token scan misses `fill="white"`,
+// `fill="rgb(…)"` and `style="fill:…"`, each of which would put a second colour into a template
+// image that can only carry alpha.
+const colors = new Set(
+  [...source.matchAll(/(?:fill|stroke)\s*=\s*"([^"]*)"/giu)]
+    .map(match => match[1].trim().toLowerCase())
+    .filter(value => value !== 'none' && value !== ''),
+)
+const [BRAND_BLUE] = colors
+if (colors.size !== 1 || !/^#[0-9a-f]{3,8}$/u.test(BRAND_BLUE ?? '')) {
   throw new Error(
-    `generate-tray-icons: tray-icon.svg must use exactly one fixed brand color, found ${
+    `generate-tray-icons: tray-icon.svg must name exactly one hex paint value, found ${
       colors.size === 0 ? 'none' : [...colors].join(', ')
     }`,
   )
 }
-const [BRAND_BLUE] = colors
+if (/<style\b|style\s*=|prefers-color-scheme/iu.test(source)) {
+  throw new Error('generate-tray-icons: tray-icon.svg must not carry style rules')
+}
 
 const variants = [
   ['tray-iconTemplate.png', '#000000', 16],

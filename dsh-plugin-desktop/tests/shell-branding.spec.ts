@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs'
+import { relative } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
@@ -28,14 +29,50 @@ const PRODUCT_NAME = 'Parametria'
  * Every TypeScript file under a directory, recursively.
  *
  * The consolidation fence sweeps the package's whole source tree rather than the two modules that
- * carry the name today, so a third surface that restates it is caught the day it appears.
+ * carry the name today, so a third surface that restates it is caught the day it appears. Both
+ * extensions are swept: the client face ships `.tsx`, and a wordmark restated in a component would
+ * be exactly the drift this is for.
  * @param root - absolute directory to walk.
- * @returns absolute paths of the `.ts` files found beneath it.
+ * @returns absolute paths of the TypeScript files found beneath it.
  */
 function sourceFiles(root: string): string[] {
   return readdirSync(root, { withFileTypes: true, recursive: true })
-    .filter(entry => entry.isFile() && entry.name.endsWith('.ts'))
+    .filter(entry => entry.isFile() && /\.tsx?$/u.test(entry.name))
     .map(entry => `${entry.parentPath}/${entry.name}`)
+}
+
+/**
+ * Every string-literal value in a TypeScript source, with comments excluded.
+ *
+ * Written as a scanner rather than a regex on purpose. A regex that looks for a quoted name has to
+ * choose between two failure modes: anchored to the exact string it misses `'Parametria Terminal'`
+ * and `'Parametr' + 'ia'`, and loosened to span quote characters it starts matching prose — this
+ * package's own doc comments are full of the word, and full of apostrophes that a naive tokenizer
+ * reads as opening quotes. Walking the source once with a mode is the only version that answers
+ * the question actually being asked: which *values* does this code state?
+ * @param source - TypeScript or TSX source text.
+ * @returns the contents of every string and template literal, comments dropped.
+ */
+function stringLiterals(source: string): string[] {
+  const found: string[] = []
+  let mode: 'code' | 'line' | 'block' | '"' | "'" | '`' = 'code'
+  let value = ''
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] as string
+    const next = source[index + 1]
+    if (mode === 'code') {
+      if (char === '/' && next === '/') { mode = 'line'; index += 1 }
+      else if (char === '/' && next === '*') { mode = 'block'; index += 1 }
+      else if (char === '"' || char === "'" || char === '`') { mode = char; value = '' }
+      continue
+    }
+    if (mode === 'line') { if (char === '\n') mode = 'code'; continue }
+    if (mode === 'block') { if (char === '*' && next === '/') { mode = 'code'; index += 1 } continue }
+    if (char === '\\') { value += next ?? ''; index += 1; continue }
+    if (char === mode) { found.push(value); mode = 'code'; continue }
+    value += char
+  }
+  return found
 }
 
 const UPSTREAM_INDEX_PATH = fileURLToPath(
@@ -230,6 +267,14 @@ describe('Parametria shell identity', () => {
     // The `Allow` value and the accepted set are one list read twice, so this asserts the two
     // against a third statement of the same fact: every method named is served, and a method that
     // is not named is refused.
+    //
+    // OPTIONS is in the refused list deliberately, and it is the one place this route departs from
+    // what RFC 9110 §9.3.7 would prefer. These two routes exist to displace the upstream dist
+    // server on two paths, and matching its method semantics is the whole point of the branch —
+    // adding an OPTIONS responder here would make the branded paths behave differently from every
+    // other path that server answers. The refusal at least carries `Allow`, which is the field an
+    // OPTIONS response would have been asked for. Pinned so the deviation is a decision on the
+    // record rather than an accident nobody re-examines.
     const advertised = SHELL_ASSET_ALLOW.split(', ')
     expect(advertised).toEqual(['GET', 'HEAD'])
 
@@ -247,21 +292,33 @@ describe('Parametria shell identity', () => {
   })
 
   it('states the product display name once, and reads it everywhere else', () => {
-    // The consolidation fence. Four user-visible surfaces carry the name — the served title, the
-    // manifest's two name fields, and the native shell's productName/windowTitle — reached from two
-    // modules. A quoted `'Parametria'` anywhere in `src/` other than the one declaration in
-    // `client/brand.ts` is a surface that has stopped reading the constant, which is exactly how
-    // three of four surfaces get renamed and the fourth does not.
+    // The consolidation fence. Five user-visible surfaces carry the name over six read sites — the
+    // served title (two arms of the transform), the manifest's `name` and `short_name`, and the
+    // native shell's productName and windowTitle — reached from two modules. Any string literal in
+    // `src/` that CONTAINS the name, other than the one declaration in `client/brand.ts`, is a
+    // surface that has stopped reading the constant: that is exactly how four of five get renamed
+    // and the fifth does not. Containment rather than equality, so `'Parametria Terminal'` and a
+    // concatenated half both count.
+    const root = fileURLToPath(new URL('..', import.meta.url))
     const declarations: string[] = []
     for (const file of sourceFiles(fileURLToPath(new URL('../src', import.meta.url)))) {
-      const occurrences = readFileSync(file, 'utf8').match(/(['"`])Parametria\1/gu) ?? []
-      declarations.push(...occurrences.map(() => file.replaceAll('\\', '/')))
+      const stated = stringLiterals(readFileSync(file, 'utf8'))
+        .filter(literal => literal.includes(PRODUCT_NAME))
+      // Relative, because a fence's failure message is a result: an absolute path here would name
+      // this machine in a report meant to be read anywhere.
+      declarations.push(...stated.map(() => relative(root, file).replaceAll('\\', '/')))
     }
 
-    expect(declarations).toHaveLength(1)
-    expect(declarations[0]).toContain('src/client/brand.ts')
+    expect(declarations).toEqual(['src/client/brand.ts'])
     expect(PRODUCT_NAME).toBe('Parametria')
     expect(parametriaWebManifest()).toContain(`"name": "${PRODUCT_NAME}"`)
+
+    // The scanner reads values, not prose: a comment mentioning Parametria is not a restatement,
+    // and a literal that merely contains the name is. Both directions asserted, because a scanner
+    // that silently returned nothing would make the sweep above vacuous.
+    expect(stringLiterals('// Parametria\nconst a = 1\n')).toEqual([])
+    expect(stringLiterals('/* it\'s Parametria */\nconst a = "Parametria Terminal"\n'))
+      .toEqual(['Parametria Terminal'])
   })
 
   it('is a pure transform, so every index response gets the same document', () => {
