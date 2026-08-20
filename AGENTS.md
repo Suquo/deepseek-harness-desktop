@@ -24,7 +24,7 @@ This repository owns the desktop product around an unmodified DeepSeek Harness c
 - The outer repository and all owned packages use the root Yarn release with `nodeLinker: node-modules`.
 - The upstream submodule keeps its own pnpm workspace. Run upstream commands through the root `upstream:*` scripts, whose Yarn portable-shell commands enter the submodule before invoking Corepack.
 - Compatibility mode must run the upstream default client without BEHAVIOR overrides. **Permitted in compatibility mode (owner rulings 2026-08-20, issues #26 and #5/#36): visual branding overrides (styles, marks, wordmarks, titles/icons) and ADDITIVE desktop-owned UI that alters no upstream behavior** (e.g. injecting a read-only surface into a documented slot) — never replacing or altering upstream slots, services, or behavior there. Replacing documented slots or services remains profile-composition territory (advanced mode).
-- Keep graphical application launch explicit. Builds, typechecks, unit tests, and Loader smokes must remain headless-safe.
+- Keep graphical application launch explicit. NO step of the headless gate may launch a GUI or reach the operator browser — builds, typechecks, unit tests, and every smoke (Loader, profile, CLI, or any added later) included; the list is examples, not a boundary (lesson: rc.8 openBrowser, issue #49 — the standard could not name its own incident).
 - Commit before major changes of direction and keep the submodule pin update separate from desktop behavior changes.
 - Keep the repository topology and package-manager split consistent with the [owning Agent Note](.agents/notes/implemented/process/2026-08-15-pinned-upstream-and-isolated-yarn-workspace.md).
 
