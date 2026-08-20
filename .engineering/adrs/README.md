@@ -29,6 +29,7 @@ If a decision is easy to reverse, skip it. If it's not surprising, nobody will w
 
 - [H-0001 Fork strategy — Suquo Parametria harness as an overlay on pinned upstream](H-0001-fork-strategy-parametria-harness-overlay.md) (2026-08-19)
 - [H-0002 Brand presentation overrides upstream client marks by class selector](H-0002-brand-override-by-upstream-class-selectors.md) (2026-08-20)
+- [H-0003 The preset installer may seed the desktop profile selection, once, only when it is absent](H-0003-installer-seeds-desktop-profile-selection.md) (2026-08-20)
 
 ## File naming
 
