@@ -127,54 +127,45 @@ describe('desktop lifecycle events', {
   // tolerance band (1.4-1.8x over compound worst) instead of drifting apart.
   //
   // No ceiling constraint: this file declares no hooks, so its temp-dir work runs
-  // inside this same budget. Exactly one number moves. Deferred deliberately: at
-  // 15s a ~15x regression in the evidence-write path would still pass green. The
-  // POSIX arm keeps the 5s default — the load characteristic sized here is
-  // NTFS/Defender and was not measured on a POSIX host.
+  // inside this same budget. The POSIX arm keeps the 5s default — the load
+  // characteristic sized here is NTFS/Defender and was not measured on a POSIX host.
   //
   // ---------------------------------------------------------------------------
-  // TEMPORARY ACCOMMODATION (a80c504f7f overlay merge) — RETIRE WITH ISSUE #41.
+  // The TEMPORARY 300_000 accommodation the a80c504f7f overlay merge carried here
+  // is RETIRED: issue #41 removed the per-append whole-file read it was holding at
+  // arm's length, and the budget is back to 15s. What that accommodation recorded
+  // (merged tree: 4044-4610ms full-suite quiet, 6993-33729ms isolated, 19452ms in a
+  // quiet gate, 183942ms in a loaded one) is history; it lives in PR #42 and #41.
   //
-  // The deferral the paragraph above named came true, larger than it allowed for.
-  // The overlay merge rewrote src/lifecycle-events.ts, and `appendOwned` now calls
-  // `readOwnedDescriptor` — a readFileSync of the WHOLE evidence file — before
-  // every append. It is upstream's mechanism for generation isolation (see the
-  // sibling test 'keeps a newer recorder generation isolated from a delayed older
-  // recorder'), and it makes the write path quadratic in transitions. The 900
-  // transitions this one test drives are what turns that into wall time.
+  // Re-measured at the fixed tree, same host, `replaces stale run evidence…`:
   //
-  // Measured on one host, back to back, same machine, merged tree vs the pre-merge
-  // parent ffce58c63b in its own installed worktree:
+  //   isolated, 3 runs:                   265 / 257 / 260 ms
+  //   full-suite, quiet, 2 runs:          315 / 328 ms
+  //   full-suite, 8-worker contention:    874 / 961 ms
+  //   pre-merge parent ffce58c63b, same host, same day, isolated: 429 / 431 / 446 ms
   //
-  //   pre-merge, isolated:        572 / 644 / 578 ms
-  //   merged, full-suite quiet:   4044 / 4280 / 4610 ms
-  //   merged, isolated:           6993 / 6993 / 7119 / 7136 / 7477 / 17810 / 33729 ms
-  //   merged, full gate quiet:    19452 ms   <- reds the 15s budget above
-  //   merged, full gate loaded:   183942 ms  <- observed, with a packaging gate concurrent
+  // So the write path is cheaper than the pre-merge side this budget was derived
+  // from, not merely restored: the append path no longer reads the file back at all.
+  // Re-running the derivation on these numbers: the quiet full-suite worst of 328ms
+  // against the 14.9x stall factor this file already cites gives a 4.9s compound
+  // worst, which 15s clears by 3.1x, and the heaviest observed datum (961ms under
+  // eight concurrent write/read workers) sits 15.6x below it.
   //
-  // That is 12x at the quiet floor and ~58x at the isolated worst against the
-  // pre-merge median. 183942ms is a datum in hand, and the rule this file's own
-  // derivation states is that a budget which reds on a datum in hand is mis-sized
-  // however rare that datum is. So the anchor is the observed compound worst,
-  // 183.9s — not a derived one this time, because the load actually produced it.
-  // 300s clears it 1.63x, inside the 1.4-1.8x band the four budgets share, and the
-  // quiet-gate 19.5s sits 15x below it.
+  // Disclosed rather than acted on: a band-faithful re-derivation (1.4-1.8x over the
+  // 4.9s compound worst) would put this at 7-9s, tighter than the 15s restored here.
+  // 15s is kept because it is the value this file's own retirement condition named,
+  // and because the budget is no longer what detects a regression in this path —
+  // 'appends startup transitions without reading the evidence file back' asserts the
+  // mechanism directly (zero whole-file reads across 600 appends), which is what the
+  // old comment's "at 15s a ~15x regression would still pass green" deferral wanted
+  // and could not express in a timeout. Retighten on the RM's word, not silently.
   //
-  // This number is NOT a claim about how expensive this test should be. It is the
-  // cost of an inherited quadratic read, held at arm's length so the gate stays
-  // honest about the tree it actually has. Issue #41 removes the per-append whole
-  // file read; when it lands, this whole block reverts to the 15s above and the
-  // measurements below it become history. Accepted while it stands: a genuine hang
-  // in the evidence-write path now sits for five minutes before failing, and the
-  // regression itself is invisible to the gate. Both are why #41 is not optional.
-  //
-  // Not accommodated, deliberately: tests/install-recovery.spec.ts took collateral
-  // timeouts (7 tests, vitest's 5s default, no measured budget of its own) in the
-  // loaded run. That file is byte-identical to the pre-merge side, green 4/4 on the
-  // pre-merge baseline and green in the quiet gate — it reds only when contention
-  // meets this file's new cost, so #41 is its fix too, not a budget here.
+  // Also retired: tests/install-recovery.spec.ts kept vitest's 5s default through
+  // all of this rather than take a budget for a cost that was not its own. Re-checked
+  // at this head — 753 passed / 11 skipped with zero `Test timed out`, in a quiet
+  // full gate AND in a full gate run under the eight-worker contention above.
   // ---------------------------------------------------------------------------
-  timeout: process.platform === 'win32' ? 300_000 : 5_000,
+  timeout: process.platform === 'win32' ? 15_000 : 5_000,
 }, () => {
   it.each([
     ['schema version', { schemaVersion: 2 }],
