@@ -18,6 +18,7 @@
     "tests/client-environment.spec.ts",
     "tests/client-trajectory-view.spec.ts",
     "tests/client-turn-cost.spec.ts",
-    "tests/client-workspace-folder-drop.spec.ts"
+    "tests/client-workspace-folder-drop.spec.ts",
+    "tests/theme-presenter.spec.ts"
   ]
 }
