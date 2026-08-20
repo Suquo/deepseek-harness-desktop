@@ -318,9 +318,10 @@
     #    child's creation window, so it fails the DELEGATION — every
     #    `subagent_validator` call, the issue #18 failure class again — while
     #    the app and session keep running. Hence: this list names only tools
-    #    rows in THIS file actually register and leave ENABLED. The disabled
-    #    `subagent_codex` / `subagent_claude_code` rows are deliberately absent
-    #    — a disabled row registers nothing, so naming it would throw.
+    #    rows in THIS file actually register and leave ENABLED. The
+    #    `subagent_codex` / `subagent_claude_code` rows are enabled in this
+    #    preset (the desktop profile mounts both providers on the host plane),
+    #    so both names are denied below.
     # 3. `deny`, not `allow`. An allow-list would be a closed enumeration of
     #    every tool the validator is permitted, and every row added upstream
     #    would silently disappear from the child. A deny-list states exactly
@@ -353,18 +354,18 @@
             - subagent
             - subagent_fork
             - subagent_validator
+            - subagent_codex
+            - subagent_claude_code
             - ralph
             - workflow
         agentOptions:
           provider: parametria-vision
           model: google/gemini-3.6-flash
 
-    # Production dsh does not install these optional providers. An opting-in
-    # Profile mounts each provider once on the host plane; copy this preset,
-    # then remove `disabled` from the matching tool row.
+    # Optional product subagent providers, mounted on the host plane by the
+    # desktop profile patch (`profiles/desktop/cordis.patch.yml`).
     - id: tool-subagent-codex
       name: '@deepseek-ai/dsh-tool-subagent'
-      disabled: true
       config:
         provider: codex
         toolName: subagent_codex
@@ -373,7 +374,6 @@
 
     - id: tool-subagent-claude-code
       name: '@deepseek-ai/dsh-tool-subagent'
-      disabled: true
       config:
         provider: claude-code
         toolName: subagent_claude_code

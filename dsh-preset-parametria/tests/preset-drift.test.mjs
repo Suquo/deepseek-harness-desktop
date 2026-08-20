@@ -55,6 +55,15 @@ const DECLARED_DELTA = {
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
       + 'and registers into this preset\'s nearer registry layer',
   },
+  /** Rows kept, enabled where upstream ships them disabled. Key = flattened row id, value = the reason. */
+  enabled: {
+    'delegation/tool-subagent-codex':
+      'opt-in: the desktop profile mounts the codex provider on the host plane, so this preset '
+      + 'exposes the subagent_codex delegation tool',
+    'delegation/tool-subagent-claude-code':
+      'opt-in: the desktop profile mounts the claude-code provider on the host plane, so this preset '
+      + 'exposes the subagent_claude_code delegation tool',
+  },
 }
 
 const ours = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml')))
@@ -223,10 +232,12 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     // upstream row that gains a new top-level key — `when:`, `optional:`, some
     // future loader field — would drift in silently, because nothing looks at
     // the keys nobody thought to name. `config` is excluded here only because
-    // the two assertions above own it.
+    // the two assertions above own it; rows declared in `DECLARED_DELTA.enabled`
+    // are excluded because the test below owns their `disabled` difference.
     for (const [id, row] of ours) {
       const other = upstream.get(id)
       if (other === undefined) continue
+      if (Object.hasOwn(DECLARED_DELTA.enabled, id)) continue
       const { config: _ourConfig, ...ourRest } = row
       const { config: _upstreamConfig, ...upstreamRest } = other
       assert.ok(
@@ -236,6 +247,19 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
         + `  upstream: ${JSON.stringify(upstreamRest)}`,
       )
     }
+  })
+
+  it('enables exactly the declared rows and no others', () => {
+    // The `disabled` half of the drift fence, split out so the equality case
+    // above can keep comparing the whole row: a shared row whose `disabled`
+    // differs from upstream must be declared here, with a reason, or fail.
+    const enabled = []
+    for (const [id, row] of ours) {
+      const other = upstream.get(id)
+      if (other === undefined) continue
+      if (!sameValue(row.disabled, other.disabled)) enabled.push(id)
+    }
+    assert.deepEqual(enabled.sort(), Object.keys(DECLARED_DELTA.enabled).sort())
   })
 
   it('states a reason for every declared difference', () => {
