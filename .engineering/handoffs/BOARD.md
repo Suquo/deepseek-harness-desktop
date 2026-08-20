@@ -25,10 +25,10 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — gen-5 on #31** (icon rasterization + literal consolidation + Allow header; branch `claude/issue-31-icon-set`). Disjoint vs Lane B gen-8.
+- **Lane A (general, `claude/*`)**: FREE — gen-5 delivered #31 (PR #34 merged on green CI: full native icon set derived from the vendored mark, ADR H-0004; name consolidation; Allow header).
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-8 delivered #27 (PR #33 merged on green CI: opt-in --default seeds only never-chosen state, wx-refusal, ADR H-0003). Queue: #23/#24/#30 available, #6 buildable, #7 owner-gated.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Standing obligation added by H-0002: on any pin bump, re-run client-brand.spec + re-derive the class table.
-- **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-2 delivered the in-app rebrand (PR #28 merged; ADR H-0002; isolation-recipe discovery → charter). #26's remainder is Lane A/B (Host/packaging), not D.
+- **Lane D (design, `dg/*`, RM-spawned)**: **BUSY — gen-3 on the #26 sidebar-mark rider** (mark left of the wide wordmark; branch `dg/issue-26-sidebar-mark`; non-closing PR).
 
 ## Second run harvested (weaker model, 2026-08-19)
 
