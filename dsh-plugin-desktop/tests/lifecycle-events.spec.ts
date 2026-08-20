@@ -25,6 +25,41 @@ import {
   type DesktopLifecycleSummary,
 } from '../src/lifecycle-events.ts'
 
+// Counts what the recorder reads, and can hide the file system's file id, so the
+// append path's cost and its content fallback are both assertable rather than timed.
+const fsProbe = vi.hoisted(() => ({
+  counting: false,
+  wholeFileReads: 0,
+  bytesRead: 0,
+  hideFileId: false,
+}))
+
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  return {
+    ...actual,
+    default: actual,
+    readFileSync: ((...args: Parameters<typeof actual.readFileSync>) => {
+      if (fsProbe.counting) fsProbe.wholeFileReads += 1
+      return actual.readFileSync(...args)
+    }) as typeof actual.readFileSync,
+    readSync: ((...args: Parameters<typeof actual.readSync>) => {
+      const bytes = actual.readSync(...args)
+      if (fsProbe.counting) fsProbe.bytesRead += bytes
+      return bytes
+    }) as typeof actual.readSync,
+    fstatSync: ((...args: Parameters<typeof actual.fstatSync>) => {
+      const stats = actual.fstatSync(...args) as object
+      if (!fsProbe.hideFileId) return stats
+      return new Proxy(stats, {
+        get: (target, property, receiver) => property === 'ino'
+          ? (typeof Reflect.get(target, property, receiver) === 'bigint' ? 0n : 0)
+          : Reflect.get(target, property, receiver),
+      })
+    }) as typeof actual.fstatSync,
+  }
+})
+
 interface CapturedLogger extends DesktopLogger {
   readonly error: ReturnType<typeof vi.fn<(message: string) => void>>
   readonly errorCause: ReturnType<typeof vi.fn<(cause: unknown) => void>>
@@ -403,6 +438,107 @@ describe('desktop lifecycle events', {
         operationId: 'cap-op',
       })
     }
+  })
+
+  it('appends startup transitions without reading the evidence file back', () => {
+    const userDataDir = tempUserData('dsh-lifecycle-append-cost-')
+    const logger = createLogger()
+    const recorder = createDesktopLifecycleRecorder({
+      userDataDir,
+      appVersion: '2.0.1-test',
+      platform: 'win32',
+      arch: 'x64',
+      logger,
+      now: () => FIXED_NOW,
+    })
+    recorder.startStartup('electron-ready')
+    const stages: DesktopStartupFailureStage[] = [
+      'shell-environment',
+      'runtime-bootstrap',
+      'profile-selection',
+      'install-recovery',
+      'profile-composition',
+      'host-boot',
+      'renderer-startup',
+      'health-commit',
+    ]
+
+    const transitions = 300
+    fsProbe.wholeFileReads = 0
+    fsProbe.bytesRead = 0
+    fsProbe.counting = true
+    try {
+      for (let index = 0; index < transitions; index += 1) {
+        recorder.transitionStartupStage(stages[index % stages.length] as DesktopStartupFailureStage)
+      }
+    } finally {
+      fsProbe.counting = false
+    }
+
+    // Each transition closes one stage and opens the next: two appended events.
+    const appendedEvents = transitions * 2
+    const evidence = readFileSync(desktopLifecycleEvidencePath(userDataDir))
+    const generationLineBytes = evidence.indexOf(0x0a) + 1
+    expect(evidence.subarray(0, generationLineBytes).toString('utf8')).toContain('startup.run.started')
+    // Every append landed, and none of them hit the trimming path, which is the only
+    // path allowed to read the file: this is the plain append regime, end to end.
+    expect(evidence.toString('utf8').split('\n').filter(line => line.length > 0)).toHaveLength(appendedEvents + 2)
+    expect(evidence.byteLength).toBeLessThan(MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES)
+
+    // What #41 fixed: appending re-read the whole file every time, so the write path
+    // cost grew with the evidence already written. Reading nothing back is the fix;
+    // the fallback arm reads at most the generation line per append, never the file.
+    expect(fsProbe.wholeFileReads).toBe(0)
+    expect(fsProbe.bytesRead).toBeLessThanOrEqual(appendedEvents * generationLineBytes)
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
+  it('isolates generations by content when the file system reports no file id', () => {
+    const userDataDir = tempUserData('dsh-lifecycle-no-file-id-')
+    const olderLogger = createLogger()
+    const newerLogger = createLogger()
+    fsProbe.hideFileId = true
+    try {
+      const olderIds = ['older-run', 'older-operation']
+      const older = createDesktopLifecycleRecorder({
+        userDataDir,
+        appVersion: '2.0.1-test',
+        platform: 'win32',
+        arch: 'x64',
+        logger: olderLogger,
+        now: () => FIXED_NOW,
+        randomId: () => olderIds.shift() ?? 'older-extra',
+      })
+      older.startStartup('electron-ready')
+
+      const newerIds = ['newer-run', 'newer-operation']
+      const newer = createDesktopLifecycleRecorder({
+        userDataDir,
+        appVersion: '2.0.1-test',
+        platform: 'win32',
+        arch: 'x64',
+        logger: newerLogger,
+        now: () => FIXED_NOW,
+        randomId: () => newerIds.shift() ?? 'newer-extra',
+      })
+      newer.startStartup('runtime-bootstrap')
+      older.failStartup('electron-ready', 'startup-failed')
+      newer.completeStartup('runtime-bootstrap', { status: 'healthy' })
+    } finally {
+      fsProbe.hideFileId = false
+    }
+
+    // Same outcome as the file-id path above, reached by comparing the generation line.
+    const events = readEvents(userDataDir)
+    expect(events.map(event => event.runId)).toEqual(Array.from({ length: events.length }, () => 'newer-run'))
+    expect(events.map(event => event.eventName)).toEqual([
+      'startup.run.started',
+      'startup.stage.started',
+      'startup.stage.completed',
+      'startup.run.completed',
+    ])
+    expect(olderLogger.error).toHaveBeenCalledWith(expect.stringContaining('failed to persist lifecycle evidence'))
+    expect(newerLogger.error).not.toHaveBeenCalled()
   })
 
   it('treats linked or unsafe evidence targets as best-effort logger-only failures', () => {

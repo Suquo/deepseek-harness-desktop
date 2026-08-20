@@ -10,6 +10,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   unlinkSync,
   writeSync,
 } from 'node:fs'
@@ -76,6 +77,11 @@ export type DesktopLifecycleEventName =
   | 'renderer.boot.completed'
   | 'renderer.boot.failed'
   | 'renderer.boot.timeout'
+
+interface DesktopLifecycleEvidenceIdentity {
+  readonly dev: bigint
+  readonly ino: bigint
+}
 
 type DesktopLifecycleDetailValue = string | number | readonly string[]
 type DesktopLifecycleDetails = Readonly<Record<string, DesktopLifecycleDetailValue>>
@@ -255,6 +261,7 @@ export class DesktopLifecycleRecorder {
   private readonly monotonicNow: () => number
   private readonly startTime: number
   private generationLine: Buffer | undefined
+  private ownedIdentity: DesktopLifecycleEvidenceIdentity | undefined
   private currentStage: DesktopStartupFailureStage | undefined
   private currentStageStartedAt: number | undefined
   private rendererStartedAt: number | undefined
@@ -443,14 +450,17 @@ export class DesktopLifecycleRecorder {
         unlinkSync(this.evidencePath)
       }
       const descriptor = openSync(this.evidencePath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | noFollowFlag(), PRIVATE_FILE_MODE)
+      let identity: DesktopLifecycleEvidenceIdentity | undefined
       try {
         if (writeSync(descriptor, generationLine) !== generationLine.byteLength) {
           throw new Error('lifecycle evidence generation write was incomplete')
         }
+        identity = ownedIdentityOf(descriptor)
       } finally {
         closeSync(descriptor)
       }
       this.generationLine = generationLine
+      this.ownedIdentity = identity
       try { chmodSync(this.evidencePath, PRIVATE_FILE_MODE) } catch {}
     } catch (cause) {
       this.evidenceUnavailable = true
@@ -460,13 +470,44 @@ export class DesktopLifecycleRecorder {
 
   private writeEvent(event: DesktopLifecycleEvent): void {
     if (this.evidenceUnavailable) return
-    const generationLine = this.requireGenerationLine()
     const line = this.renderEvent(event)
-    const existing = this.readOwned()
-    if (existing.byteLength + line.byteLength <= MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES) {
-      this.appendOwned(line)
-      return
+    if (this.appendOwnedWithinCap(line)) return
+    this.trimOwned(line)
+  }
+
+  /**
+   * Appends one rendered event when the evidence file stays inside the byte cap, and
+   * reports `false` — having written nothing — when it would not, leaving the caller
+   * to take the trimming path.
+   *
+   * Nothing here reads the evidence file: ownership comes from the descriptor's own
+   * stat and the size decision from the same stat, so the append path costs the same
+   * whether the file holds one event or the full 256 KiB (#41). The check and the
+   * write it authorizes share one descriptor, so no window opens between them.
+   */
+  private appendOwnedWithinCap(line: Buffer): boolean {
+    const descriptor = openSync(this.evidencePath, this.appendFlags())
+    try {
+      const size = this.verifyOwnedDescriptor(descriptor)
+      if (size + line.byteLength > MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES) return false
+      if (writeSync(descriptor, line) !== line.byteLength) {
+        throw new Error('lifecycle evidence append was incomplete')
+      }
+      return true
+    } finally {
+      closeSync(descriptor)
     }
+  }
+
+  /**
+   * Rewrites the evidence file as generation line + retained tail + the new event,
+   * keeping it inside the byte cap. This is the only path that needs the existing
+   * bytes, so it is the only one that reads them, and both of its descriptors are
+   * ownership-checked in their own right rather than trusting the other's check.
+   */
+  private trimOwned(line: Buffer): void {
+    const generationLine = this.requireGenerationLine()
+    const existing = this.readOwned()
     const keepBytes = Math.max(0, MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES - generationLine.byteLength - line.byteLength)
     const priorEvents = existing.subarray(generationLine.byteLength)
     const tail = keepBytes === 0 ? Buffer.alloc(0) : priorEvents.subarray(Math.max(0, priorEvents.byteLength - keepBytes))
@@ -484,9 +525,30 @@ export class DesktopLifecycleRecorder {
     }
   }
 
+  /**
+   * Truncating on open is only safe once ownership can be established without the
+   * file's own bytes: the content fallback has to read the generation line BEFORE
+   * anything is truncated, so that arm opens read-write and truncates after checking.
+   */
+  private replaceOwned(content: Buffer): void {
+    const truncateOnOpen = this.ownedIdentity !== undefined
+    const flags = truncateOnOpen
+      ? constants.O_WRONLY | constants.O_TRUNC | noFollowFlag()
+      : constants.O_RDWR | noFollowFlag()
+    const descriptor = openSync(this.evidencePath, flags)
+    try {
+      this.verifyOwnedDescriptor(descriptor)
+      if (!truncateOnOpen) ftruncateSync(descriptor)
+      if (writeSync(descriptor, content, 0, content.byteLength, 0) !== content.byteLength) {
+        throw new Error('lifecycle evidence replacement was incomplete')
+      }
+    } finally {
+      closeSync(descriptor)
+    }
+  }
+
   private readOwnedDescriptor(descriptor: number): Buffer {
-    const stats = fstatSync(descriptor)
-    if (!stats.isFile() || stats.nlink > 1) throw new Error('lifecycle evidence file is invalid')
+    this.verifyOwnedDescriptor(descriptor)
     const content = readFileSync(descriptor)
     const generationLine = this.requireGenerationLine()
     if (content.byteLength < generationLine.byteLength
@@ -496,29 +558,64 @@ export class DesktopLifecycleRecorder {
     return content
   }
 
-  private appendOwned(line: Buffer): void {
-    const descriptor = openSync(this.evidencePath, constants.O_RDWR | constants.O_APPEND | noFollowFlag())
-    try {
-      this.readOwnedDescriptor(descriptor)
-      if (writeSync(descriptor, line) !== line.byteLength) {
-        throw new Error('lifecycle evidence append was incomplete')
-      }
-    } finally {
-      closeSync(descriptor)
+  /**
+   * Establishes, on an already-open descriptor, that this recorder still owns the
+   * evidence file — a regular file, no second hard link, and the same file this
+   * recorder created — and returns its current byte length.
+   *
+   * Ownership is identity, not content. A recorder only ever writes the file it
+   * created for itself with `O_CREAT | O_EXCL` over a freshly unlinked path, so a
+   * newer generation always produces a DIFFERENT file, and a delayed older recorder
+   * sees a file id that is not the one it recorded and refuses to write. Measured on
+   * this file system: the id is stable across opens, survives appends, and changed on
+   * all 101 unlink-and-recreate cycles probed — while `birthtimeMs` did NOT change,
+   * because NTFS file tunneling restores it, which is why the check is not timestamps.
+   *
+   * The content equivalent — re-reading the generation line before every append — is
+   * what made the write path quadratic (#41); on Windows it also forces the open to
+   * request read access, measured here at 0.949 ms against 0.125 ms write-only,
+   * because an antivirus filter scans the file on every read-opening. The generation
+   * line is still compared byte-for-byte on the trimming path, where the bytes are
+   * read anyway, so in-place tampering with the head of the file is still caught
+   * there; between trims this check sees identity only.
+   *
+   * A file system that reports no usable file id leaves `ownedIdentity` unset, and
+   * the check falls back to upstream's content comparison (`appendFlags` keeps read
+   * access on the descriptor for exactly that case).
+   */
+  private verifyOwnedDescriptor(descriptor: number): number {
+    const stats = fstatSync(descriptor, { bigint: true })
+    if (!stats.isFile() || stats.nlink > 1n) throw new Error('lifecycle evidence file is invalid')
+    const size = Number(stats.size)
+    const identity = this.ownedIdentity
+    if (identity === undefined) {
+      this.verifyOwnedPrefix(descriptor, size)
+      return size
     }
+    if (stats.dev !== identity.dev || stats.ino !== identity.ino) {
+      throw new Error('lifecycle evidence belongs to another recorder')
+    }
+    return size
   }
 
-  private replaceOwned(content: Buffer): void {
-    const descriptor = openSync(this.evidencePath, constants.O_RDWR | noFollowFlag())
-    try {
-      this.readOwnedDescriptor(descriptor)
-      ftruncateSync(descriptor)
-      if (writeSync(descriptor, content, 0, content.byteLength, 0) !== content.byteLength) {
-        throw new Error('lifecycle evidence replacement was incomplete')
-      }
-    } finally {
-      closeSync(descriptor)
+  /** Compares only the generation-line prefix, for descriptors opened with read access. */
+  private verifyOwnedPrefix(descriptor: number, size: number): void {
+    const generationLine = this.requireGenerationLine()
+    if (size < generationLine.byteLength) throw new Error('lifecycle evidence belongs to another recorder')
+    const prefix = Buffer.alloc(generationLine.byteLength)
+    let read = 0
+    while (read < prefix.byteLength) {
+      const chunk = readSync(descriptor, prefix, read, prefix.byteLength - read, read)
+      if (chunk === 0) throw new Error('lifecycle evidence belongs to another recorder')
+      read += chunk
     }
+    if (!prefix.equals(generationLine)) throw new Error('lifecycle evidence belongs to another recorder')
+  }
+
+  /** Write-only when ownership is checkable by file id; read-write when it is not. */
+  private appendFlags(): number {
+    const access = this.ownedIdentity === undefined ? constants.O_RDWR : constants.O_WRONLY
+    return access | constants.O_APPEND | noFollowFlag()
   }
 
   private requireGenerationLine(): Buffer {
@@ -539,6 +636,17 @@ export class DesktopLifecycleRecorder {
 
 function noFollowFlag(): number {
   return process.platform === 'win32' ? 0 : constants.O_NOFOLLOW
+}
+
+/**
+ * The file this recorder owns, as the file system identifies it. Undefined when the
+ * file system reports no usable id (`ino` of zero), which sends every ownership check
+ * back to comparing the generation line itself.
+ */
+function ownedIdentityOf(descriptor: number): DesktopLifecycleEvidenceIdentity | undefined {
+  const stats = fstatSync(descriptor, { bigint: true })
+  if (stats.ino === 0n) return undefined
+  return { dev: stats.dev, ino: stats.ino }
 }
 
 function parseEventStage(
