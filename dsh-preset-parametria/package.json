@@ -15,6 +15,7 @@
   },
   "type": "module",
   "files": [
+    "machine/**",
     "preset/**",
     "profile/**",
     "scripts/**",

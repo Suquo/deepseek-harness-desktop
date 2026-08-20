@@ -126,9 +126,13 @@ describe('the `llm-pi-ai` restatement', () => {
     assert.equal(bundles.get('llm-pi-ai').config, undefined)
   })
 
-  it('adds the validator route without touching the operator\'s own routes', () => {
-    const providers = patched.get('llm-pi-ai').config.providers
-    assert.deepEqual(Object.keys(providers), ['parametria-vision'])
+  it('leaves that row alone in the PROFILE layer, where the route no longer lives', () => {
+    // The route moved to the machine-wide layer on issue #1's owner ruling —
+    // the plane the preset that pins it already sits on. Presence there and
+    // absence here are fenced in both directions by
+    // `tests/machine-patch.test.mjs`; this is the profile-side half, stated
+    // where a reader of the profile patch will look for it.
+    assert.equal(patched.get('llm-pi-ai'), undefined)
   })
 })
 

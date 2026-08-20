@@ -6,6 +6,13 @@
 # deep merge, so every field kept from the bundle layer is restated below and
 # `tests/profile-patch.test.mjs` asserts that restatement against the pinned
 # upstream bundle rather than trusting this comment.
+#
+# The validator's `parametria-vision` route is deliberately NOT here. It lives
+# in this package's `machine/cordis.patch.yml`, which the installer merges into
+# the operator's machine-wide `$DSH_HOME/cordis.patch.yml`, because the preset
+# that pins it is itself machine-wide — see that file's header, and issue #1. A
+# copy here would be outranked by the home layer anyway, so it could only ever
+# drift into a lie; `tests/profile-patch.test.mjs` fails if one reappears.
 
 # ── the preset the profile boots on ─────────────────────────────────────────
 #
@@ -22,70 +29,6 @@
 - id: agent-presets
   config:
     default: parametria
-
-# ── the validator's model route (issue #1's structural half) ────────────────
-#
-# `dsh-base` mounts `llm-pi-ai` DORMANT with no config at all, so replacing the
-# whole config costs nothing. The adapter merges this composition base with the
-# user's `llm-pi-ai:` settings section PER PROVIDER, so the operator's own
-# `openrouter` route keeps serving the session model untouched while this one
-# is added beside it.
-#
-# WHY A SEPARATE HAND-DECLARED ROUTE rather than a `modelOverrides` entry on
-# `openrouter`: the operator's `openrouter` route is their session-model route,
-# live in `$DSH_HOME/settings.yaml` and rewritten by the web Models page. A
-# validator whose vision guarantee rode that route would inherit every edit
-# made to it. `parametria-vision` is owned by this profile and by nothing else.
-#
-# `input: [text, image]` is the load-bearing declaration, per the owner ruling.
-# Modalities resolve entry `input` -> installed catalog entry -> route
-# `defaultInput` (default `[text]`). `assertImageCapableRoute` resolves the
-# calling agent's route and refuses an image read outright unless that list
-# includes `image`, so this is what lets the validator open a screenshot at all
-# — the gate itself is upstream's and is already fail-closed. The pinned
-# catalog happens to declare `[text, image]` for this model already; stating it
-# here means a future upstream pin that narrows or drops the entry cannot
-# silently strip vision from the validator.
-#
-# The values below are the pinned catalog's own (`openrouter.json`, upstream
-# dsh-v0.1.0-rc.8): a hand-declared route inherits nothing, so an unstated
-# capacity would fall back to the route defaults (262,144 / 32,768) and quietly
-# shrink the model. `tests/vision-route.test.mjs` diffs every one of them
-# against that catalog file, so a pin bump that changes the model's real shape
-# fails the gate.
-- id: llm-pi-ai
-  config:
-    providers:
-      parametria-vision:
-        displayName: Parametria vision (OpenRouter)
-        # A credential REFERENCE, resolved per request through `ctx.credentials`;
-        # no secret enters this file. Discovered read-only from the operator's
-        # live `$DSH_HOME/settings.yaml`, which names the same variable for
-        # their own OpenRouter route.
-        apiKeyEnv: OPENROUTER_API_KEY
-        api: openai-completions
-        baseURL: https://openrouter.ai/api/v1
-        # pi-ai guesses the reasoning dialect from the endpoint URL; this URL
-        # would guess right, but a route that states its dialect keeps working
-        # if the endpoint is ever repointed at a proxy.
-        compat:
-          thinkingFormat: openrouter
-        models:
-          - id: google/gemini-3.6-flash
-            name: 'Google: Gemini 3.6 Flash'
-            contextWindow: 1048576
-            maxTokens: 65536
-            input:
-              - text
-              - image
-            # Key = the level selectors offer, value = its wire spelling. A
-            # hand-declared model that declares none does not reason at all,
-            # which would silently downgrade a model the catalog marks
-            # reasoning-capable. `off:` is valueless on purpose: it offers Off
-            # and sends nothing.
-            reasoningEfforts:
-              off:
-              high: high
 
 # The session's own default model is deliberately NOT patched here.
 #
