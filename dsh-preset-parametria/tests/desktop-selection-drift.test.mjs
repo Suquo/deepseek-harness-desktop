@@ -2,16 +2,18 @@
  * Drift fences over everything the installer MIRRORS from the desktop launcher.
  *
  * `--default` writes one file that belongs to another package:
- * `<userData>/profile-selection/state.json`. Four separate facts have to stay
- * true for that write to land where the launcher will read it, and every one
- * of them lives in `dsh-plugin-desktop/src`:
+ * `<userData>/profile-selection/state.json`. Six values have to stay true for
+ * that write to land where the launcher will read it, in the form it expects,
+ * and every one of them lives in `dsh-plugin-desktop/src`:
  *
  *   1. the application name that names `userData`  (`main.ts` PRODUCT_NAME)
  *   2. how that name becomes a directory           (`bin.ts`)
  *   3. the path of the state file under it         (`main.ts` selectionStatePath)
- *   4. the document's version and default profile  (`profile-manager.ts`)
+ *   4. the document's format version               (`profile-manager.ts`)
+ *   5. the fallback profile name                   (`profile-manager.ts`)
+ *   6. the directory and file modes                (`profile-manager.ts`)
  *
- * The installer cannot import any of them: it is dependency-free `.mjs` and
+ * The installer cannot import any of them: it imports only node builtins, and
  * `yarn check` runs this package BEFORE `dsh-plugin-desktop` is built, so there
  * is no compiled module to reach for. The values are therefore duplicated, and
  * these fences are what make the duplication safe — they read the launcher's
@@ -36,9 +38,12 @@ import { REPO_ROOT } from './helpers.mjs'
 import {
   DESKTOP_PRODUCT_NAME,
   DESKTOP_PROFILE_NAME,
+  SELECTION_DIRECTORY_MODE,
+  SELECTION_FILE_MODE,
   SELECTION_STATE_SEGMENTS,
   SELECTION_STATE_VERSION,
   defaultDesktopUserDataDirectory,
+  defaultSelectionState,
   selectionStatePath,
 } from '../scripts/install-profile.mjs'
 
@@ -48,24 +53,38 @@ function launcherSource(name) {
 }
 
 /**
- * The source text of one exported function, from its declaration to the next
- * top-level declaration.
+ * The source text of one exported function, from its declaration to its
+ * column-zero closing brace.
  *
  * Anchoring the search this way is what keeps the captures below honest: a
  * literal matched anywhere in the file could belong to an unrelated string,
- * while a literal matched inside the named function is the one that function
- * actually uses.
+ * while one matched inside the named function is the one that function uses.
+ *
+ * The span itself has to be anchored too, or the anchoring is a fiction. Two
+ * of the field patterns further down (`version: STATE_VERSION,` and
+ * `lastKnownGood: current.lastKnownGood,`) also occur in sibling functions of
+ * `profile-manager.ts`, so a span that over-shot its target would keep
+ * matching those from the next function down and fail only partially — a fence
+ * passing on text that happened to survive, which is precisely what this file
+ * claims to prevent. Hence the declaration is matched at column zero, the end
+ * is the first column-zero `}`, and over-shoot is asserted against rather than
+ * assumed away.
  * @param source - the file text.
  * @param name - the exported function name.
  * @returns the function's source span.
  */
 function functionSpan(source, name) {
-  const start = source.indexOf(`export function ${name}(`)
-  assert.notEqual(start, -1, `${name} is no longer an exported function declaration`)
-  const rest = source.slice(start + 1)
-  const end = rest.search(/\n\}\n/)
+  const start = source.search(new RegExp(`^(?:export )?(?:async )?function ${name}\\(`, 'm'))
+  assert.notEqual(start, -1, `${name} is no longer a top-level function declaration`)
+  const rest = source.slice(start)
+  const end = rest.search(/^\}$/m)
   assert.notEqual(end, -1, `${name} has no recognizable end`)
-  return rest.slice(0, end)
+  const span = rest.slice(0, end)
+  assert.ok(
+    !/^(?:export |async function |function |const |class )/m.test(span.slice(1)),
+    `${name}'s span overshot into a following declaration — assertions would match the wrong function`,
+  )
+  return span
 }
 
 /** The single capture of one anchored pattern, asserted to exist. */
@@ -84,10 +103,34 @@ describe('the application name that names userData', () => {
       DESKTOP_PRODUCT_NAME,
       'main.ts renamed the Electron application: userData moved, and --default now writes to the old location',
     )
-    // The value is only the userData name because it reaches app.setName before
-    // the first getPath('userData'). Without this line the constant would be
-    // display text and the mirror would be resting on nothing.
-    assert.match(main, /\bapp\.setName\(PRODUCT_NAME\)/)
+    // The value only names userData because it reaches app.setName BEFORE the
+    // first getPath('userData'); asserting the call merely exists would leave
+    // a refactor free to move it below bootstrap and relocate userData
+    // silently. This ordering is also what makes the packaged
+    // electron-builder `productName` irrelevant to the installer.
+    //
+    // Textual position is NOT execution order here — every getPath('userData')
+    // inside `start()` sits earlier in the file than `run()` and executes
+    // later. So the claim is checked where it actually holds: inside `run()`,
+    // which is the entry point, setName must come before both the first
+    // userData read and the call into `start()`; and `start()` must have no
+    // other caller that could beat it.
+    const run = functionSpan(main, 'run')
+    const setName = run.indexOf('app.setName(PRODUCT_NAME)')
+    assert.notEqual(setName, -1, 'run() no longer passes PRODUCT_NAME to app.setName')
+    assert.ok(
+      setName < run.indexOf('await start()'),
+      'app.setName no longer precedes start(): userData would be named by Electron, not PRODUCT_NAME',
+    )
+    assert.ok(
+      setName < run.indexOf("app.getPath('userData')"),
+      "app.setName no longer precedes run()'s own getPath('userData')",
+    )
+    assert.equal(
+      main.split('await start()').length - 1,
+      1,
+      'start() gained a second call site — one of them may now run before app.setName',
+    )
   })
 
   it('is the same name in every platform branch of the launcher\'s headless mirror', () => {
@@ -98,7 +141,24 @@ describe('the application name that names userData', () => {
       /return path\.join\(homeDirectory, 'Library', 'Application Support', '([^']*)'\)/,
       'the darwin branch',
     )
+    // The linux branch needs its whole shape pinned, not just the trailing
+    // name. Capturing only `: config, '<name>')` would leave the XDG read and
+    // the `.config` fallback unasserted — so a launcher that moved to, say,
+    // `.local/share` would keep this green while the installer went on seeding
+    // the old directory forever.
+    const linuxBase = capture(
+      span,
+      /const config = environment\.(\w+)\n/,
+      'the linux XDG environment read',
+    )
+    const linuxFallback = capture(
+      span,
+      /path\.join\(homeDirectory, '([^']*)'\)\n?\s*: config,/,
+      'the linux fallback directory',
+    )
     const linux = capture(span, /: config, '([^']*)'\)/, 'the linux branch')
+    assert.equal(linuxBase, 'XDG_CONFIG_HOME')
+    assert.equal(linuxFallback, '.config')
     assert.deepEqual([windows, macos, linux], Array(3).fill(DESKTOP_PRODUCT_NAME))
   })
 
@@ -153,23 +213,54 @@ describe('the selection state file', () => {
       DESKTOP_PROFILE_NAME,
     )
   })
+
+  it('is written as privately as the launcher declares it must be', () => {
+    // These two are mirrored in the installer as well, so leaving them out of
+    // the fence would let the launcher tighten its own state while the
+    // installer kept writing the looser mode — with every test still green,
+    // because the mode test asserts a literal rather than deriving it.
+    const manager = launcherSource('profile-manager.ts')
+    assert.equal(
+      capture(manager, /^const STATE_DIRECTORY_MODE = (0o\d+)$/m, 'profile-manager.ts STATE_DIRECTORY_MODE'),
+      `0o${SELECTION_DIRECTORY_MODE.toString(8)}`,
+    )
+    assert.equal(
+      capture(manager, /^const STATE_FILE_MODE = (0o\d+)$/m, 'profile-manager.ts STATE_FILE_MODE'),
+      `0o${SELECTION_FILE_MODE.toString(8)}`,
+    )
+  })
 })
 
 describe('the shape a first picker selection writes', () => {
   it('is the shape the installer seeds: pending set, active and last-known-good untouched', () => {
     // The installer's claim is that `--default` writes nothing the picker
-    // would not write itself on a pristine machine. That claim is only true
-    // while selectDesktopProfile's non-reselect branch keeps this shape, so
-    // the sentence is checked rather than asserted in a comment.
+    // would not write itself on a pristine machine — so the claim is checked
+    // rather than asserted in a comment.
+    //
+    // The check is over a CLOSED key set taken from one object literal, not a
+    // set of independent field matches. Matching fields individually against
+    // the whole function would let a new key (say `selectedAt`) appear in the
+    // launcher's document with every assertion still green, quietly falsifying
+    // the "byte-for-byte" claim; and two of these field patterns also occur in
+    // sibling literals, so "found somewhere" is not "found here".
     const span = functionSpan(launcherSource('profile-manager.ts'), 'selectDesktopProfile')
-    for (const field of [
-      /\bversion: STATE_VERSION,/,
-      /\bactive: current\.active,/,
-      /\bpending: name,/,
-      /\blastKnownGood: current\.lastKnownGood,/,
-    ]) {
-      assert.match(span, field, 'selectDesktopProfile no longer writes a first selection as a pending one')
-    }
+    const branch = span.match(/\n\s*: \{\n([\s\S]*?)\n\s*\}/)
+    assert.ok(
+      branch !== null,
+      'selectDesktopProfile no longer writes a first selection as a distinct object literal',
+    )
+    const fields = [...branch[1].matchAll(/^\s*(\w+): (.+?),?$/gm)].map(match => [match[1], match[2]])
+    assert.deepEqual(fields, [
+      ['version', 'STATE_VERSION'],
+      ['active', 'current.active'],
+      ['pending', 'name'],
+      ['lastKnownGood', 'current.lastKnownGood'],
+    ], 'selectDesktopProfile no longer writes a first selection as a pending one, unchanged elsewhere')
+
+    // The reverse direction: the installer's own document must carry exactly
+    // that key set, in that order. Without this the fence would only watch the
+    // launcher, and the installer could drift alone.
+    assert.deepEqual(Object.keys(defaultSelectionState()), fields.map(([key]) => key))
   })
 
   it('is adopted only through the launcher\'s own rollback contract', () => {

@@ -30,7 +30,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, posix, resolve, sep, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -51,11 +51,17 @@ const RECEIPT_VERSION = 1
  * rather than a rebrand — `dsh-plugin-desktop/src/index.ts` says so at the
  * `productName` it sets.
  *
- * Duplicated rather than imported because this package is dependency-free
- * `.mjs` run before `dsh-plugin-desktop` is built (`yarn check` orders the
- * preset ahead of it), so there is nothing to import from. The duplication is
- * held by `tests/desktop-selection-drift.test.mjs`, which fails if this string,
- * `main.ts`, and `bin.ts` stop agreeing.
+ * Duplicated rather than imported because this script imports only node
+ * builtins and runs before `dsh-plugin-desktop` is built (`yarn check` orders
+ * the preset ahead of it), so there is nothing to import from. The duplication
+ * is held by `tests/desktop-selection-drift.test.mjs`, which fails if this
+ * string, `main.ts`, and `bin.ts` stop agreeing.
+ *
+ * The packaged app's electron-builder `productName` is a DIFFERENT string and
+ * is deliberately not mirrored here: `app.setName(PRODUCT_NAME)` runs before
+ * the first `getPath('userData')` read, so `main.ts` names this directory in
+ * packaged builds too. The drift fence asserts that ordering, which is what
+ * makes the builder name irrelevant to us.
  */
 const DESKTOP_PRODUCT_NAME = 'DSH Desktop'
 /** Selection-state location under `userData`, mirroring `main.ts`'s `selectionStatePath`. */
@@ -177,17 +183,34 @@ export function planDefaultSelection(statePath) {
  * `flag: 'wx'` is what actually enforces "only when absent": the check in
  * `planDefaultSelection` produces the readable diagnostic, but it is this flag
  * that makes the guarantee independent of it, so a selection created between
- * the two cannot be clobbered. Directory and file modes match what the
- * launcher enforces on its own private state.
+ * the two cannot be clobbered.
+ *
+ * `mkdirSync`'s `mode` applies only to directories it creates, so an existing
+ * `profile-selection/` keeps whatever permissions it had. The launcher solves
+ * that with an explicit `chmodSync` after its own `mkdirSync`, and this does
+ * the same — otherwise the claim that these modes match the launcher's would
+ * be false for exactly the case that matters, a directory left behind by an
+ * interrupted write.
  * @param statePath - the selection-state file.
+ * @param whenLate - context appended to a failure raised after other writes.
  * @returns the state document written.
  */
-export function writeDefaultSelection(statePath) {
+export function writeDefaultSelection(statePath, whenLate = '') {
   const stateDir = dirname(statePath)
-  mkdirSync(stateDir, { recursive: true, mode: SELECTION_DIRECTORY_MODE })
-  const directoryStat = lstatSync(stateDir)
-  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
-    throw new InstallError(`${BIN}: profile selection state directory is not private: ${stateDir}`)
+  // Directory preparation is wrapped separately from the state write, and
+  // deliberately does NOT map EEXIST to the "a selection already exists"
+  // refusal: an EEXIST here means something occupies the DIRECTORY path (a
+  // file where `profile-selection/` belongs), which is a different fault with
+  // a different remedy. Only the state write below can prove a selection.
+  try {
+    mkdirSync(stateDir, { recursive: true, mode: SELECTION_DIRECTORY_MODE })
+    const directoryStat = lstatSync(stateDir)
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+      throw new InstallError(`${BIN}: profile selection state directory is not private: ${stateDir}`)
+    }
+    chmodSync(stateDir, SELECTION_DIRECTORY_MODE)
+  } catch (cause) {
+    throw new InstallError(seedFailedMessage(statePath, cause) + whenLate)
   }
   const state = defaultSelectionState()
   try {
@@ -197,10 +220,20 @@ export function writeDefaultSelection(statePath) {
       mode: SELECTION_FILE_MODE,
     })
   } catch (cause) {
-    if (cause?.code === 'EEXIST') throw new InstallError(refuseDefaultMessage(statePath))
-    throw cause
+    if (cause?.code === 'EEXIST') throw new InstallError(refuseDefaultMessage(statePath) + whenLate)
+    // Every other failure is the seed's, not the profile install's. Rethrowing
+    // it raw would surface a bare errno with no indication of which step
+    // failed — and, on the late path, none that the profile is already in
+    // place. Naming the step is what keeps the exit code readable.
+    throw new InstallError(seedFailedMessage(statePath, cause) + whenLate)
   }
   return state
+}
+
+/** One diagnostic for every non-refusal seed failure, naming the step. */
+function seedFailedMessage(statePath, cause) {
+  const detail = cause instanceof InstallError ? cause.message : String(cause)
+  return `${BIN}: could not seed the desktop profile selection at ${statePath}: ${detail}`
 }
 
 /** The refusal `--default` prints, naming the surface that still works. */
@@ -211,6 +244,19 @@ function refuseDefaultMessage(statePath) {
     + 'deliberate choice from a default one. Select the profile in the desktop tray picker\n'
     + `instead — that choice persists — or remove the file to seed ${PRESET_NAME} as the default.`
 }
+
+/**
+ * The sentence appended when the seed fails AFTER the profile files landed.
+ *
+ * The pre-check keeps the common refusal all-or-nothing, but it cannot cover a
+ * selection that appears mid-run: the seed is written last, on purpose, so the
+ * profile it names exists by the time it is named. A failure there leaves a
+ * correctly installed profile that simply is not the default, and saying so is
+ * the difference between a readable exit 1 and one that reads as "nothing
+ * happened".
+ */
+const SEED_FAILED_LATE = '\n'
+  + `${BIN}: the profile itself installed successfully — only the default selection was not set.`
 
 /**
  * Every file this package installs, as posix-style destination paths relative
@@ -303,13 +349,19 @@ export function planFile(destinationPath, contents, recordedHash, force) {
 /**
  * Install into `home`.
  *
- * `setDefault` additionally seeds the desktop launcher's selection state. Its
- * refusal is raised BEFORE any file is written, alongside the managed-file
- * conflicts, so the run stays all-or-nothing: a `--default` that cannot be
- * honoured never leaves a half-applied install behind. The state itself is
- * written LAST, once the profile it names actually exists on disk — a
- * `pending` selection pointing at a profile that is not there yet would just
- * be rolled back by the launcher.
+ * `setDefault` additionally seeds the desktop launcher's selection state. An
+ * already-existing selection is refused BEFORE any file is written, alongside
+ * the managed-file conflicts, so the ordinary refusal leaves nothing behind.
+ * The state itself is written LAST, once the profile it names actually exists
+ * on disk — a `pending` selection pointing at a profile that is not there yet
+ * would just be rolled back by the launcher.
+ *
+ * Those two facts bound the guarantee precisely, and it is narrower than
+ * "all-or-nothing": a selection that appears BETWEEN the check and the write
+ * is refused at the syscall, after the profile files have landed. That run
+ * exits non-zero with the profile correctly installed and simply not the
+ * default, and the message says exactly that rather than reading as though
+ * nothing happened.
  *
  * `--force` is deliberately NOT a release for this claim. It releases this
  * installer's own claim over files it wrote under `$DSH_HOME`; the selection
@@ -325,6 +377,11 @@ export function install({
   setDefault = false,
   userDataDir,
 } = {}) {
+  // The CLI refuses this pair in `parseArgs`; an API caller gets the same
+  // answer rather than a silently inert argument.
+  if (userDataDir !== undefined && !setDefault) {
+    throw new InstallError(`${BIN}: userDataDir only applies with setDefault`)
+  }
   const files = managedFiles(packageRoot)
   const receiptPath = join(home, 'profiles', PRESET_NAME, RECEIPT_NAME)
   const receipt = readReceipt(receiptPath, force)
@@ -369,12 +426,14 @@ export function install({
     mkdirSync(dirname(receiptPath), { recursive: true })
     writeFileSync(receiptPath, JSON.stringify(nextReceipt, undefined, 2) + '\n')
   }
+  // `action` is the discriminator, not the caller's memory of `dryRun`: a
+  // consumer that only sees `{ statePath, state }` cannot tell a durable write
+  // from a rehearsal, and would report a default that was never set.
   let defaultSelection
   if (statePath !== undefined) {
-    defaultSelection = {
-      statePath,
-      state: dryRun ? defaultSelectionState() : writeDefaultSelection(statePath),
-    }
+    defaultSelection = dryRun
+      ? { statePath, action: 'would-write', state: defaultSelectionState() }
+      : { statePath, action: 'written', state: writeDefaultSelection(statePath, SEED_FAILED_LATE) }
   }
   return {
     home,
@@ -408,18 +467,46 @@ export function parseArgs(argv) {
   return options
 }
 
+/**
+ * Refuse a `--default` that seeds a selection the launcher would roll back.
+ *
+ * The launcher resolves its own Harness home from `$DSH_HOME` and never sees
+ * `--home`. So `--home <elsewhere> --default` installs the profile into one
+ * home and points the real `userData` at a profile the app cannot find: the
+ * next start rolls straight back to `desktop` and shows a recovery banner,
+ * while this script has already printed that the next start selects
+ * Parametria. Refusing is the only way to keep that sentence true.
+ *
+ * An explicit `--user-data-dir` means the caller is deliberately pairing a
+ * home with a matching data root — an isolated instance — so the pair is
+ * allowed.
+ * @param options - parsed options.
+ * @param home - the resolved install home.
+ */
+function assertDefaultTargetsTheLauncherHome(options, home) {
+  if (!options.setDefault || options.userDataDir !== undefined) return
+  const launcherHome = resolveHome(undefined)
+  if (home === launcherHome) return
+  throw new InstallError(
+    `${BIN}: --default seeds the selection the desktop launcher reads, and the launcher\n`
+    + `resolves its home from $DSH_HOME (${launcherHome}), not from --home (${home}).\n`
+    + 'Set $DSH_HOME instead, or pass a matching --user-data-dir for an isolated instance.',
+  )
+}
+
 if (process.argv[1] !== undefined
   && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   try {
     const { homeOverride, ...options } = parseArgs(process.argv.slice(2))
     const home = resolveHome(homeOverride)
+    assertDefaultTargetsTheLauncherHome(options, home)
     const result = install({ ...options, home })
     const verb = options.dryRun ? 'would write' : 'wrote'
     const marker = options.dryRun ? '~' : '+'
     const selection = result.defaultSelection === undefined
       ? `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`
-      : `${BIN}: ${options.dryRun ? 'would seed' : 'seeded'} the desktop profile selection`
-        + ` at ${result.defaultSelection.statePath}\n`
+      : `${BIN}: ${result.defaultSelection.action === 'written' ? 'seeded' : 'would seed'}`
+        + ` the desktop profile selection at ${result.defaultSelection.statePath}\n`
         + `${BIN}: the next DSH Desktop start selects ${PRESET_NAME};`
         + ` the tray picker overrides it at any time\n`
     process.stdout.write(
@@ -440,6 +527,9 @@ export {
   PRESET_NAME,
   PROFILE_PNPM_WORKSPACE,
   RECEIPT_NAME,
+  SELECTION_DIRECTORY_MODE,
+  SELECTION_FILE_MODE,
   SELECTION_STATE_SEGMENTS,
   SELECTION_STATE_VERSION,
+  assertDefaultTargetsTheLauncherHome,
 }

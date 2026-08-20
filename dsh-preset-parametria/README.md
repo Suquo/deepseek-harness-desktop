@@ -87,10 +87,32 @@ default, so once the file exists nothing can tell "never chose" from "chose the
 other one". Absence is the only unambiguous permission, so absence is the whole
 permission. The refusal names the file and points at the tray picker.
 
-`--user-data-dir <dir>` overrides where that state is looked for, for a
-non-default Electron data root (`--user-data-dir` on the app, isolated test
-instances). It only means anything with `--default`, and says so rather than
-being ignored.
+That refusal is raised before anything else is written, so the ordinary "you
+already have a selection" case leaves no half-applied install. The guarantee
+stops exactly there, and the code says so: the seed is written *last*, once the
+profile it names exists, so a selection appearing between the check and the
+write is refused at the syscall with the profile already on disk. That run
+exits non-zero saying the profile installed and only the default was not set —
+not as though nothing happened.
+
+One race is not defended and is not worth defending: if DSH Desktop is starting
+at that exact moment, its own startup write can land on top of the seed
+(`renameSync` ignores our exclusivity), and the seed is lost. The running app
+winning is the safe direction — it is the picker's own state — but the success
+line is optimistic in that window.
+
+`--default` also refuses when `--home` points somewhere the launcher will never
+read. The launcher resolves its home from `$DSH_HOME`; `--home` is invisible to
+it, so the pair would seed a selection naming a profile the app cannot find,
+which it would roll back at the next start. Set `$DSH_HOME`, or pair `--home`
+with an explicit `--user-data-dir` for a genuinely isolated instance.
+
+`--user-data-dir <dir>` overrides where the state is looked for, for a
+non-default Electron data root — an isolated instance started by invoking the
+packaged Electron binary directly with Chromium's `--user-data-dir` switch.
+(The `dsh-plugin-desktop` launcher CLI does not accept that switch: it rejects
+any argument it does not enumerate.) It only means anything with `--default`,
+and says so rather than being ignored.
 
 ## The five things it composes
 
@@ -378,8 +400,8 @@ root chain again.
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/evidence-hygiene.test.mjs` | The **dot-prefixed** workspace directories the persona tells a run to create, **derived** from the persona text rather than restated, each asserted ignored by *this repository's own* `.gitignore` via `git check-ignore --no-index --verbose` with `core.excludesFile` emptied — so a persona naming a new dot-prefixed directory fails until `.gitignore` covers it, and a rule inherited from a developer's global excludes cannot stand in for one that travels. A non-dot name is not separable from prose and stays a review question, which the fence documents. Two counter-assertions (a plain tracked file and a dot-prefixed one) keep an over-broad rule — `*` or `.*` — from making it vacuous. |
-| `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. For `--default`: the whole seeded document (not a probe for the profile name), that an ordinary install leaves the state absent, that the refusal fires **before any other write** so a rejected `--default` cannot half-apply an install, that `--force` does *not* release it, and that the exclusivity survives the check being bypassed — `flag: 'wx'` is asserted separately from `planDefaultSelection`, because the check only produces the message while the flag makes the guarantee. |
-| `tests/desktop-selection-drift.test.mjs` | The four values `--default` **mirrors** from `dsh-plugin-desktop/src`, each read back from that source and anchored to its declaration: the `PRODUCT_NAME` passed to `app.setName` (which is what names `userData`, asserted in all three platform branches of the launcher's own headless mirror *and* against this installer's resolver output), the two `selectionStatePath` segments, and `STATE_VERSION` / `DEFAULT_PROFILE_NAME`. Plus the two claims the installer's design rests on: that `selectDesktopProfile` still writes a first selection as a `pending` one, and that startup still rolls an unselectable `pending` back. The values are duplicated because this package is dependency-free `.mjs` that `yarn check` runs *before* `dsh-plugin-desktop` is built, so there is nothing to import; this fence is what makes the duplication safe. It is also the tripwire for the pending `app.setName` rebrand migration, which moves `userData` wholesale. |
+| `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. For `--default`: the whole seeded document (not a probe for the profile name), that an ordinary install leaves the state absent, that the refusal fires **before any other write**, that `--force` does *not* release it, and that exclusivity survives the check being bypassed — `flag: 'wx'` and `planDefaultSelection` are asserted separately, because the check only produces the message while the flag makes the guarantee. Also the bound on that: a seed failing *after* the files land says so rather than reading as a no-op, no failure leaks a bare errno, an occupied directory path is not mis-reported as an existing selection, a pre-existing state directory is tightened to `0o700` the way the launcher tightens its own, and the dry-run result carries an `action` discriminator so a caller cannot mistake a rehearsal for a durable write. |
+| `tests/desktop-selection-drift.test.mjs` | The six values `--default` **mirrors** from `dsh-plugin-desktop/src`, each read back from that source and anchored to its declaration: the `PRODUCT_NAME` passed to `app.setName` — asserted in all three platform branches of the launcher's headless mirror (each branch's *whole* shape, since pinning only the trailing name would let the Linux `XDG_CONFIG_HOME` / `.config` base move unnoticed), against this installer's resolver output, and for the **ordering** that makes it load-bearing at all: `setName` must precede both `start()` and the first `getPath('userData')` inside `run()`, and `start()` must keep a single call site — the two `selectionStatePath` segments; `STATE_VERSION`; `DEFAULT_PROFILE_NAME`; and the `0o700`/`0o600` modes. Plus the claims the design rests on: that `selectDesktopProfile` still writes a first selection as a `pending` one — checked as a **closed key set** taken from that one object literal, in both directions, so a new field on either side fails rather than passing on four surviving matches — and that startup still rolls an unselectable `pending` back. Duplicated because the installer imports only node builtins and `yarn check` runs it *before* `dsh-plugin-desktop` is built; this fence is what makes the duplication safe, and the tripwire for the pending `app.setName` rebrand migration. |
 
 Every drift fence except `desktop-selection-drift` reads the pinned upstream
 checkout, so `git submodule update --init deepseek-harness` is a prerequisite —
