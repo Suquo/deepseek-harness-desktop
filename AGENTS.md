@@ -51,7 +51,7 @@ Four jobs read the `product` output, and they skip documentation-only diffs by t
 
 Only *part* of the workflow is fenced. `dsh-plugin-desktop/tests/package.spec.ts` pins the packaging jobs' shape (`runs the full gate once before reusing native packaging outputs on Windows`) and the documentation-only classifier's behaviour (`skips product packaging only for documentation-only changes`), so edits there must move those assertions in the same change. Nothing asserts the existence of the `check` job, any runner choice, or any `submodules: recursive` line — the submodule rule above is enforced only by the gate failing on a runner that omits it, not by a test.
 
-CI is headless throughout — no job launches the GUI, per the headless-safety rule above. `master` currently carries no branch protection or ruleset, so CI results are advisory rather than blocking; until required status checks are configured, the resolver charter's rule stands that "required CI" means the full local gate pasted in the pull-request body.
+CI is headless throughout — no job launches the GUI, per the headless-safety rule above. `master` carries the ruleset `master-required-checks` (owner-ruled 2026-08-19: required checks `check` + `desktop-windows`, deletion and force-push blocked, repository-admin bypass). Fork Actions EVENT triggers remain dormant pending the operator's Actions-tab click (#3), so PR rollups stay empty and the RM merges on RM-dispatched `workflow_dispatch` runs (admin bypass) — the dispatch run is the evidence of record until events fire.
 
 ## Fleet roles (Suquo fork — charter + live-board succession model)
 
