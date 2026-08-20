@@ -24,7 +24,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, cjjmaster).
 - **Lane A (general, `claude/*`)**: **BUSY — gen-8 on #53 (cross-lane RM assignment, priority)** — reasoning-400 hardening, branch `claude/issue-53-reasoning-400`; HARD FREEZE FENCE: must not touch `patches/` or root package.json patch entries (Lane B's surface this cycle — freeze and report instead). #55 next when free; #45 low.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-11 on #40** (parent-side error laundering; branch `pm/issue-40-error-surface`; post-rc.8 re-ground required; upstream-shaped patch preferred, anywhere-labs report stays owner-gated). #1 OPEN pending-live (install done — operator runs once). Queue after #40: #24 → #23 → #52 → #53 → #54; #30/#45 available, #6 buildable, #7 owner-gated.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-11 delivered #40 (**PR #57 MERGED on green CI, 2026-08-21 ~00:19**, all 5 jobs): parent tool results now carry the child's `{code} — {message} (child session id)` on both one-shot paths. #58 (continuable-path hole) filed from its deferral. Queue: #24 → #23 → #52 → #54 → #58; #30/#45 available, #6 buildable, #7 owner-gated. #1 pending on #53 (Lane A).
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
 

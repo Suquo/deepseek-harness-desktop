@@ -820,4 +820,46 @@ describe('published package surface', () => {
     expect(installedRuntime).toContain('api.createProcessAsUserW(token, null, commandLine, null, null, 1, 4, null')
     expect(installedRuntime).not.toContain('134217728')
   })
+
+  it('patches every copy of the subagent packages that surface a child failure', () => {
+    const seamResolution = 'patch:@deepseek-ai/dsh-subagent@npm%3A0.1.0-rc.8#./patches/dsh-subagent@0.1.0-rc.8.patch'
+    const driverResolution = 'patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.0-rc.8#./patches/dsh-subagent-in-process-driver@0.1.0-rc.8.patch'
+    const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
+    const workspaceRequire = createRequire(new URL('package.json', packageRoot))
+    const seamManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent/package.json')
+    const driverManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent-in-process-driver/package.json')
+
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-subagent@npm:0.1.0-rc.8': seamResolution,
+      '@deepseek-ai/dsh-subagent@npm:^0.1.0-rc.8': seamResolution,
+      '@deepseek-ai/dsh-subagent-in-process-driver@npm:0.1.0-rc.8': driverResolution,
+      '@deepseek-ai/dsh-subagent-in-process-driver@npm:^0.1.0-rc.8': driverResolution,
+    })
+    expect(lockfile).toContain(`@deepseek-ai/dsh-subagent@${seamResolution}`)
+    expect(lockfile).toContain(`@deepseek-ai/dsh-subagent-in-process-driver@${driverResolution}`)
+
+    // The caret resolution is the load-bearing half: other upstream packages
+    // carry a real `^0.1.0-rc.8` edge on the seam, so dropping it installs an
+    // UNPATCHED nested copy that ships while every behavioural test stays
+    // green (those resolve from this workspace root).
+    for (const consumer of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-host-apiproxy']) {
+      const consumerRequire = createRequire(workspaceRequire.resolve(`${consumer}/package.json`))
+      expect(consumerRequire.resolve('@deepseek-ai/dsh-subagent/package.json')).toBe(seamManifest)
+    }
+    for (const provider of [
+      '@deepseek-ai/dsh-subagent-spawn-in-process',
+      '@deepseek-ai/dsh-subagent-fork-in-process',
+    ]) {
+      const providerRequire = createRequire(workspaceRequire.resolve(`${provider}/package.json`))
+      expect(providerRequire.resolve('@deepseek-ai/dsh-subagent-in-process-driver/package.json'))
+        .toBe(driverManifest)
+    }
+
+    // Declaration-anchored: the producer function and the export the driver
+    // imports, read from the INSTALLED tree rather than the patch text.
+    const installedDriver = readFileSync(join(dirname(driverManifest), 'lib/index.js'), 'utf8')
+    const installedSeam = readFileSync(join(dirname(seamManifest), 'lib/index.js'), 'utf8')
+    expect(installedDriver).toContain('function childFailureDiagnostic(reason, sessionId) {')
+    expect(installedSeam).toMatch(/^export \{[^}]*\blimitSubagentDiagnostic\b/mu)
+  })
 })

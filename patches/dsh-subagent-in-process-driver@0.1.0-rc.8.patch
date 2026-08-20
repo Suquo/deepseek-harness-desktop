@@ -1,0 +1,62 @@
+diff --git a/lib/index.js b/lib/index.js
+index 6266e34478ba8ef00629f52473b8e0adc6bec1e3..888ccbe4db1c83b332992b48fb8620dec16c9dd7 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
+ import { foldConsumedWork } from "@deepseek-ai/dsh-agent";
+ import { SessionId } from "@deepseek-ai/dsh-session";
+ import { createUserMessage } from "@deepseek-ai/dsh-llm";
+-import { appendDelegatedPolicyOverrides, applyChildComposition, assertSubagentMaxDepth, captureDelegatedPolicyOverrides, childSessionMeta, finalAssistantOutput, resolveChildAgentOptions, resolveChildDepth } from "@deepseek-ai/dsh-subagent";
++import { appendDelegatedPolicyOverrides, applyChildComposition, assertSubagentMaxDepth, captureDelegatedPolicyOverrides, childSessionMeta, finalAssistantOutput, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildDepth } from "@deepseek-ai/dsh-subagent";
+ import { ToolArgsError, validateJsonSchemaValue } from "@deepseek-ai/dsh-tools";
+ //#region lib/types/structured.js
+ /**
+@@ -130,6 +130,26 @@ function toStopReason(reason) {
+ 		default: return "error";
+ 	}
+ }
++/**
++* Render the child's terminal turn failure as the run's `diagnostic` so the
++* parent's tool result names the cause instead of a bare stop reason. The
++* harness records that cause as a structured `LlmFailure` on `turn/end`, and
++* the seam already carries and presents `SubagentResult.diagnostic` on both the
++* foreground tool result and the background task outcome — without a producer
++* the parent only ever sees "subagent run failed".
++* The child session id travels with the text: a failed child contributes no
++* output to the parent's result, so its own log is otherwise unfindable.
++* @param reason - the child's terminal `turn/end` reason, when it recorded one.
++* @param sessionId - the child's session id.
++* @returns bounded diagnostic text, or `undefined` when the turn did not fail.
++*/
++function childFailureDiagnostic(reason, sessionId) {
++	if (reason?.kind !== "error") return void 0;
++	const failure = reason.error;
++	const code = typeof failure?.code === "string" && failure.code.length > 0 ? failure.code : "UNKNOWN";
++	const message = typeof failure?.message === "string" && failure.message.length > 0 ? failure.message : "no failure message recorded";
++	return limitSubagentDiagnostic(`${code} — ${message} (child session ${sessionId})`);
++}
+ /** Error used when cancellation wins before the child publication boundary. */
+ function prePublicationAbort() {
+ 	return /* @__PURE__ */ new Error("subagent request was aborted before child publication");
+@@ -231,10 +251,13 @@ function readResult(child, boundary, cancelled, structured) {
+ 	const output = finalAssistantOutput(own) ?? [];
+ 	const recorded = toStopReason(lastEnd?.data.reason);
+ 	const stopReason = cancelled && recorded !== "completed" ? "aborted" : recorded;
++	const diagnostic = childFailureDiagnostic(lastEnd?.data.reason, child.session.id);
++	const detail = diagnostic === void 0 ? {} : { diagnostic };
+ 	if (structured !== void 0) {
+ 		if (structured.captured !== void 0) return {
+ 			output,
+ 			structured: structured.captured.value,
++			...detail,
+ 			stopReason
+ 		};
+ 		if (stopReason === "completed") return {
+@@ -244,6 +267,7 @@ function readResult(child, boundary, cancelled, structured) {
+ 	}
+ 	return {
+ 		output,
++		...detail,
+ 		stopReason
+ 	};
+ }

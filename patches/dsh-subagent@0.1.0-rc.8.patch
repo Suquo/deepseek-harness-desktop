@@ -1,0 +1,30 @@
+diff --git a/lib/index.js b/lib/index.js
+index bcbbb7b4de1e7573ee3459164dd1eed5013170ff..81da35d7a2645532a0fb99ddac750190842372be 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -2646,4 +2646,4 @@ var SubagentRuntime = class extends Service {
+ 	}
+ };
+ //#endregion
+-export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
++export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
+diff --git a/lib/types/out-of-process.d.ts b/lib/types/out-of-process.d.ts
+index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..1d1c5700fcf915f4caf40a0a7e7879a0c186fcfd 100644
+--- a/lib/types/out-of-process.d.ts
++++ b/lib/types/out-of-process.d.ts
+@@ -19,6 +19,15 @@ import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopRea
+  * request needing any of them before `start` runs — never accepted-then-ignored.
+  */
+ export declare const NO_START_CAPABILITIES: SubagentCapabilities;
++/**
++ * Limit provider-authored failure detail to {@link SubagentResult.diagnostic}'s
++ * documented 4096-byte budget without splitting a UTF-8 sequence. Exported so
++ * IN-PROCESS backends bound their diagnostics through the same seam-owned rule
++ * the out-of-process settlement already applies, instead of restating it.
++ * @param diagnostic - safe diagnostic text produced by the provider.
++ * @returns the original text, or a visibly truncated value within the limit.
++ */
++export declare function limitSubagentDiagnostic(diagnostic: string): string;
+ /**
+  * Assert a configured timing bound is a positive finite number (it bounds a
+  * teardown or shutdown wait; zero, negative, or NaN would skip or wedge it).

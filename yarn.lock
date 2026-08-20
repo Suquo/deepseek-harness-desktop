@@ -697,7 +697,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-agent-loop@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-agent-loop@npm:0.1.0-rc.8, @deepseek-ai/dsh-agent-loop@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-agent-loop@npm:0.1.0-rc.8"
   dependencies:
@@ -3095,7 +3095,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-subagent-spawn-in-process@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-subagent-in-process-driver@patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.0-rc.8#./patches/dsh-subagent-in-process-driver@0.1.0-rc.8.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.8
+  resolution: "@deepseek-ai/dsh-subagent-in-process-driver@patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.0-rc.8#./patches/dsh-subagent-in-process-driver@0.1.0-rc.8.patch::version=0.1.0-rc.8&hash=95b7ea&locator=deepseek-harness-desktop%40workspace%3A."
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-agent": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-llm": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-session": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-subagent": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-system-prompt": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-tools": ^0.1.0-rc.8
+  checksum: 10c0/afe49736e47223d92cbb1ceaa7e09a9d3705c25d41a2644543288d671cf9cf2f63c276b7be0ead6d5218d0066d4c77725a88cee931a5e3bf76c56c311921d8ed
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-subagent-spawn-in-process@npm:0.1.0-rc.8, @deepseek-ai/dsh-subagent-spawn-in-process@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-subagent-spawn-in-process@npm:0.1.0-rc.8"
   dependencies:
@@ -3109,7 +3125,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-subagent@npm:0.1.0-rc.8, @deepseek-ai/dsh-subagent@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-subagent@npm:0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-subagent@npm:0.1.0-rc.8"
   dependencies:
@@ -3149,6 +3165,49 @@ __metadata:
     "@deepseek-ai/dsh-user-approval":
       optional: true
   checksum: 10c0/fd9261a1698e14ecae88795b4c0bafae20b741de9c5ce81c8e4913f9a3e9658d6374ef0786e84e6de770c337a825ed3c5e62442c399f10dec083b4e94f699c8c
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-subagent@patch:@deepseek-ai/dsh-subagent@npm%3A0.1.0-rc.8#./patches/dsh-subagent@0.1.0-rc.8.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.0-rc.8
+  resolution: "@deepseek-ai/dsh-subagent@patch:@deepseek-ai/dsh-subagent@npm%3A0.1.0-rc.8#./patches/dsh-subagent@0.1.0-rc.8.patch::version=0.1.0-rc.8&hash=92ef41&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    zod: "npm:^4.4.3"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-agent": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-agent-presets": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-brand": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-invariants": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-jobs": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-llm": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-sandbox": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-sandbox-policy": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-scope": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-session": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-session-persistence": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-session-projection": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-session-projection-cache": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-tools": ^0.1.0-rc.8
+    "@deepseek-ai/dsh-user-approval": ^0.1.0-rc.8
+  peerDependenciesMeta:
+    "@deepseek-ai/dsh-agent-presets":
+      optional: true
+    "@deepseek-ai/dsh-jobs":
+      optional: true
+    "@deepseek-ai/dsh-sandbox":
+      optional: true
+    "@deepseek-ai/dsh-sandbox-policy":
+      optional: true
+    "@deepseek-ai/dsh-session-persistence":
+      optional: true
+    "@deepseek-ai/dsh-session-projection":
+      optional: true
+    "@deepseek-ai/dsh-session-projection-cache":
+      optional: true
+    "@deepseek-ai/dsh-user-approval":
+      optional: true
+  checksum: 10c0/665684d225cff28ef3129734605ab5c7d045018cae594743d54541f99a2bd6f18f46a20e24679ceaabfcc3fdcc41a07192ddd4c28e03d4024141d24bcd676cb6
   languageName: node
   linkType: hard
 
@@ -3556,7 +3615,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-tool-subagent@npm:^0.1.0-rc.8":
+"@deepseek-ai/dsh-tool-subagent@npm:0.1.0-rc.8, @deepseek-ai/dsh-tool-subagent@npm:^0.1.0-rc.8":
   version: 0.1.0-rc.8
   resolution: "@deepseek-ai/dsh-tool-subagent@npm:0.1.0-rc.8"
   dependencies:
@@ -7144,6 +7203,7 @@ __metadata:
     "@deepseek-ai/dsh": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent-default-model": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-agent-loop": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-agent-presets": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-anonymous-user-id": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-api-gateway": "npm:0.1.0-rc.8"
@@ -7224,11 +7284,13 @@ __metadata:
     "@deepseek-ai/dsh-storage-domain": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subagent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subagent-in-process-driver": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-subagent-spawn-in-process": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-subprocess": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-system-prompt": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-terminal": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-timeout": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-token-meter": "npm:0.1.0-rc.8"
+    "@deepseek-ai/dsh-tool-subagent": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tool-todo": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tool-workflow": "npm:0.1.0-rc.8"
     "@deepseek-ai/dsh-tools": "npm:0.1.0-rc.8"
