@@ -6,6 +6,12 @@
  * treatment is reproduced here wherever there is room for text. The two upstream sites that can
  * only carry a graphic — the 56px collapsed sidebar rail and the inline hero mark — take the
  * Parametria icon instead, from `./parametria-mark.ts`.
+ *
+ * The expanded sidebar lockup carries BOTH: the mark, then the wordmark. That is upstream's own
+ * arrangement at that site rather than an addition to it — `BrandWordmark` is a single 182x24 svg
+ * whose left 24 units are the whale and whose remainder is the letterforms, so replacing it with a
+ * wordmark alone dropped a graphic the lockup had. It is restored beside the wordmark, not in place
+ * of it.
  */
 
 import { parametriaMarkDataUri } from './parametria-mark.ts'
@@ -83,6 +89,16 @@ export const UPSTREAM_BRAND_CLASSES = {
  * rail, and the empty-state hero headline. Each upstream mark is an `aria-hidden` decorative
  * `<svg>`, so hiding it and repainting the box costs no accessible name.
  *
+ * The lockup's replacement is a mark-then-wordmark pair, and its geometry is measured from the
+ * upstream svg it supersedes rather than chosen. In `BrandWordmark` (`ui-primitives/src/
+ * BrandWordmark.tsx`) the whale's clip box is 23.16 wide by 17.04 tall inside a 24-tall viewBox, and
+ * the leftmost letterform path starts at x 26.96 — so upstream drew 17.0px of mark ink with a 3.7px
+ * optical gap before the text. The Parametria mark's ink spans 74.6..425.4 of its 500-unit box
+ * (70.2%), so a 24px box renders 16.8px of ink with 3.6px of its own padding to the right of it.
+ * Both numbers land within a fifth of a pixel of upstream's, which is why the rule below sets a 24px
+ * box and no gap: the gap is already inside the artwork, and adding one on top would open the pair
+ * to roughly double what this lockup ever had.
+ *
  * The wordmark that takes the lockup's place is decorative too, and deliberately so. The lockup is
  * a `<button>` carrying `aria-label={t('session.new.label')}` (`ui-sidebar/src/client/
  * SidebarRoot.tsx:137`), so its accessible name is the "New session" action it performs, not a
@@ -93,6 +109,17 @@ export const UPSTREAM_BRAND_CLASSES = {
  * announcing the wordmark. The button therefore keeps announcing its action exactly as before —
  * the same arrangement upstream already had, where its own wordmark was an `aria-hidden` image
  * inside that button — conditional on upstream's label continuing to exist.
+ *
+ * The mark's `::before` is exempt from that conditional, and its `content: ""` is what makes it so.
+ * Name-from-content gathers the *text* of generated content, and an empty string has none, so this
+ * box contributes nothing to the accessible name whether or not the label above it survives. The
+ * emptiness is therefore load-bearing rather than idiomatic: giving the mark a textual `content`
+ * would put a second brand string behind the same upstream-label dependency the wordmark already
+ * rests on.
+ *
+ * Both generated boxes are qualified by `.hHd-Xa_wide`, upstream's own expanded-state class. The
+ * rail renders no `.hHd-Xa_brand` element at all, so its icon-only resting state is reached by a
+ * different rule entirely (`.hHd-Xa_railFish` below) and cannot pick either of these up.
  *
  * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
  * hidden, so the superseded string leaves the accessibility tree instead of being announced
@@ -111,6 +138,7 @@ export function parametriaBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
+${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; background: ${mark}; }
 ${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }
 body[data-ds-dark-theme] ${lockup}.hHd-Xa_wide::after { color: ${PARAMETRIA_ACCENT_DARK}; }
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }

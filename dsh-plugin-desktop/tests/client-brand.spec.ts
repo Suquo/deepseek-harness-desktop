@@ -74,15 +74,50 @@ describe('Parametria brand presentation', () => {
     const css = parametriaBrandStyles()
     const mark = `url("${parametriaMarkDataUri()}") no-repeat center / contain`
 
-    // Sidebar brand lockup: the wordmark, with upstream's own svg hidden.
+    // Sidebar brand lockup: the mark, then the wordmark, with upstream's own svg hidden. Upstream's
+    // BrandWordmark is a single svg carrying whale AND letterforms, so the mark is not an addition
+    // to this site — a wordmark alone is what dropped a graphic the lockup already had.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
+    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; background: ${mark}; }`)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }`)
+
+    // Left of the wordmark, not right of it: both boxes are flex children of the same lockup, so
+    // their order is source order, and this is the whole of what the site asks for.
+    expect(css.indexOf('.hHd-Xa_wide::before')).toBeLessThan(css.indexOf('.hHd-Xa_wide::after'))
 
     // Collapsed sidebar rail and empty-state hero: the mark, painted over the hidden svg.
     expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railFish > \* \{ display: none; \}/)
     expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_fishHitbox \.pXSMma_fish > \* \{ display: none; \}/)
+  })
+
+  it('confines the lockup boxes to the expanded state and gives the mark no text to announce', () => {
+    const sidebar = UPSTREAM_BRAND_CLASSES['@deepseek-ai/dsh-client-ui-sidebar']
+    const lockupRules = parametriaBrandStyles()
+      .split('}')
+      .map(block => (block.split('{')[0] ?? '').trim())
+      .filter(selector => selector.includes(`.${sidebar.brand}`))
+
+    // Exhaustive: the two rules that reshape the button, and the three that generate boxes in it. A
+    // fourth generated box appearing here without a decision is exactly what this count catches.
+    expect(lockupRules).toHaveLength(5)
+
+    // Every generated box is qualified by upstream's expanded-state class. The rail renders no
+    // `.brand` element at all, so this is defence in depth rather than the only thing keeping the
+    // 56px rail icon-only — but it is the difference between "cannot happen" and "does not today".
+    const generated = lockupRules.filter(selector => selector.includes('::'))
+    expect(generated).toHaveLength(3)
+    for (const selector of generated) {
+      expect(selector).toContain(`.${sidebar.brand}.${sidebar.wide}`)
+    }
+
+    // The mark's box must stay textless. Name-from-content gathers generated TEXT, so an empty
+    // `content` keeps this box out of the accessible name unconditionally — unlike the wordmark,
+    // whose silence depends on upstream's `aria-label` continuing to pre-empt name-from-content.
+    const markContent = new RegExp(`\\.${sidebar.brand}\\.${sidebar.wide}::before \\{ content: "([^"]*)"`)
+      .exec(parametriaBrandStyles())
+    expect(markContent?.[1]).toBe('')
   })
 
   it('carries an accent for each theme and pins no other colour', () => {
