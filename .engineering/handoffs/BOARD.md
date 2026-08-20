@@ -23,7 +23,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — gen-3 completed #16 (PR #17 merged). No claimable general issues remain open.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-4 on #26's remainder** (Host/packaging branding under the brand-everywhere ruling; branch `claude/issue-26-host-branding`). Set: Host/shell/packaging surfaces + client-brand.spec aria guard; client index wiring is gen-7's.
 - **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-7 RESUMED on #5's UI increment** (Lane D merged; gen-7 rebases over it; new `--user-data-dir` isolation recipe in use; join script already landed, run cost measured $0.5661). Queue behind: #27 (default profile) · #26-remainder. Owner-gated: #6/#7, compat-branding ruling.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-2 completed #12 (PR #14 merged). Standing obligation added by H-0002: on any pin bump, re-run client-brand.spec + re-derive the class table.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-2 delivered the in-app rebrand (PR #28 merged; ADR H-0002; isolation-recipe discovery → charter). #26's remainder is Lane A/B (Host/packaging), not D.
