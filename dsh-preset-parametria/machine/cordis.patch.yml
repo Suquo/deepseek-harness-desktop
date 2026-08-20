@@ -121,16 +121,15 @@
             # anything is sent. That is the honest surface here — OpenRouter
             # mandates reasoning on this endpoint, so Off was never a capability
             # this route had, only a control that produced a mid-turn 400.
-            # Upstream's "send nothing" semantics
-            # do hold for the plain `openai` dialect
-            # (`openai-completions.js:636-641` guards on
+            # Upstream's "send nothing" semantics do hold for the plain
+            # `openai` dialect (`openai-completions.js:636-641` guards on
             # `typeof offValue === 'string'`); they do not hold for
             # `openrouter`, `deepseek`, `zai`, `qwen`, `together`, or
             # `string-thinking`. Hence the rule this block now follows, and
-            # `tests/vision-route.test.mjs` enforces for every model on every
-            # route this preset declares: NEVER declare a valueless `off:` —
-            # either give it a real wire spelling, meaning you intend to send a
-            # disable, or leave it out.
+            # `tests/reasoning-disable.test.mjs` enforces over every YAML this
+            # package ships: NEVER declare a valueless `off:` — either give it a
+            # real wire spelling, meaning you intend to send a disable, or leave
+            # it out.
             #
             # The whole matrix is measured end-to-end (installer -> profile
             # composition -> llm registry -> pi-ai -> captured HTTP body) in
