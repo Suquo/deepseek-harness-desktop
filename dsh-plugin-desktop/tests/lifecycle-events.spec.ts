@@ -25,6 +25,42 @@ import {
   type DesktopLifecycleSummary,
 } from '../src/lifecycle-events.ts'
 
+// Counts what the recorder reads, and can hide the file system's file id, so the
+// append path's cost and its content fallback are both assertable rather than timed.
+const fsProbe = vi.hoisted(() => ({
+  counting: false,
+  wholeFileReads: 0,
+  bytesRead: 0,
+  hideFileId: false,
+}))
+
+vi.mock('node:fs', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs')>()
+  const wrapped = {
+    readFileSync: ((...args: Parameters<typeof actual.readFileSync>) => {
+      if (fsProbe.counting) fsProbe.wholeFileReads += 1
+      return actual.readFileSync(...args)
+    }) as typeof actual.readFileSync,
+    readSync: ((...args: Parameters<typeof actual.readSync>) => {
+      const bytes = actual.readSync(...args)
+      if (fsProbe.counting) fsProbe.bytesRead += bytes
+      return bytes
+    }) as typeof actual.readSync,
+    fstatSync: ((...args: Parameters<typeof actual.fstatSync>) => {
+      const stats = actual.fstatSync(...args) as object
+      if (!fsProbe.hideFileId) return stats
+      return new Proxy(stats, {
+        get: (target, property, receiver) => property === 'ino'
+          ? (typeof Reflect.get(target, property, receiver) === 'bigint' ? 0n : 0)
+          : Reflect.get(target, property, receiver),
+      })
+    }) as typeof actual.fstatSync,
+  }
+  // The default export carries the same wrappers, so a default import cannot quietly
+  // detach the counters and make the assertions below pass while measuring nothing.
+  return { ...actual, ...wrapped, default: { ...actual, ...wrapped } }
+})
+
 interface CapturedLogger extends DesktopLogger {
   readonly error: ReturnType<typeof vi.fn<(message: string) => void>>
   readonly errorCause: ReturnType<typeof vi.fn<(cause: unknown) => void>>
@@ -75,71 +111,66 @@ describe('desktop lifecycle events', {
   // class its siblings document — its cost is synchronous evidence-file I/O. One
   // test ('replaces stale run evidence and keeps current evidence within byte
   // caps') drives 900 transitionStartupStage calls, each of which rewrites the
-  // byte-capped lifecycle JSONL under a fresh temp user-data dir; that single test
-  // measures 359-472ms over twelve isolated runs (median 390) against a
-  // second-worst of <=28ms, and 347-556ms over seven full-suite runs.
+  // byte-capped lifecycle JSONL under a fresh temp user-data dir.
   //
-  // It is in this PR because it demonstrably reds: a full-suite run at this branch
-  // head killed it with `Test timed out in 5000ms`, which puts the stall it met at
-  // >=12.8x its isolated median — the same class measured directly at 14.9x in
-  // desktop-plugins.spec.ts. On the loaded worst, 556ms x 14.9 = 8.3s, so the 5s
-  // default cannot cover the load this host produces.
+  // HISTORY, kept because the numbers below are meaningless without it. PR #17 sized
+  // this budget to 15s from 359-472ms isolated / 347-556ms full-suite measurements,
+  // and the a80c504f7f overlay merge raised it to a TEMPORARY 300s for an inherited
+  // quadratic read (PR #42: 6993-33729ms isolated, 183942ms in a loaded gate). BOTH
+  // sets of pre-merge numbers were measuring a recorder that had stopped recording.
+  // `replaceOwned` opened with `O_WRONLY | O_TRUNC`, which libuv rejects without
+  // `O_CREAT` on Windows: at ffce58c63b this test's run logs 'failed to persist
+  // lifecycle evidence (EINVAL)' at its FIRST trim, latches evidenceUnavailable, and
+  // drops the remaining ~826 events — 976 lines written of 1802 events driven, last
+  // retained event 'renderer-startup' where the 900th transition is 'install-recovery'.
+  // The overlay merge fixed that accidentally (upstream opens O_RDWR and truncates
+  // separately), so the merge is the first tree on which this test's trimming work
+  // ran on win32 at all, and issue #41 is the first budget derived from a run that
+  // does it. Nothing here is comparable to a number recorded before that.
   //
-  // Sized to 15s rather than the 20s its siblings carry, because it is genuinely
-  // cheaper and the number is derived, not copied: 15s clears the 8.3s compound
-  // worst by 1.8x — the same clearance electron-runtime.spec.ts was ruled to — and
-  // sits 27x above the 556ms loaded worst, keeping all four budgets inside one
-  // tolerance band (1.4-1.8x over compound worst) instead of drifting apart.
+  // Measured at this head, same host, back to back:
+  //
+  //   isolated, 3 runs:                 1424 / 1466 / 1399 ms
+  //   full-suite, quiet, 2 runs:        2015 / 2203 ms
+  //   full-suite, 8-worker contention:  3070 / 3352 ms
+  //
+  // Same load, same day, on the merged tree without #41's fix: 35601 ms — so the fix
+  // is a 10.6x improvement measured against the tree it actually replaces, and the
+  // dominant remaining cost is not the append path (which now reads nothing back;
+  // see 'appends startup transitions without reading the evidence file back') but
+  // the trimming path, which rewrites the full 256 KiB once the cap is reached and
+  // does so for every event after that. That is pre-existing, in-scope for nobody
+  // here, and worth its own issue.
+  //
+  // Sized to 30s. The stall factor this file cites for the load-contention class is
+  // 14.9x, measured in desktop-plugins.spec.ts against an ISOLATED median: applied
+  // to this head's isolated median of 1424ms that gives a 21.2s compound worst, and
+  // 30s clears it 1.41x, inside the 1.4-1.8x tolerance band the four budgets share.
+  // It sits 9x above the heaviest datum actually observed (3352ms, under eight
+  // concurrent write/read workers — a load heavier than the gate produces on its own,
+  // under which unbudgeted 5s tests elsewhere in the suite red on BOTH this tree and
+  // the pre-fix tree, rotating by position rather than by name).
+  //
+  // Disclosed: PR #17's arithmetic applied that same 14.9x to a LOADED worst rather
+  // than to an isolated median. Read that way, this head would want 46-59s. The
+  // consistent-with-definition reading is used here and the inconsistency is named
+  // rather than silently inherited; the RM can rule the other way, and it is one
+  // number. What this budget is NOT is a regression detector for the quadratic read
+  // it replaced — the append-cost test asserts that mechanism directly, which is what
+  // PR #17's "at 15s a ~15x regression would still pass green" deferral wanted and
+  // could not express as a timeout.
   //
   // No ceiling constraint: this file declares no hooks, so its temp-dir work runs
-  // inside this same budget. Exactly one number moves. Deferred deliberately: at
-  // 15s a ~15x regression in the evidence-write path would still pass green. The
-  // POSIX arm keeps the 5s default — the load characteristic sized here is
-  // NTFS/Defender and was not measured on a POSIX host.
+  // inside this same budget. The POSIX arm keeps the 5s default — the load
+  // characteristic sized here is NTFS/Defender and was not measured on a POSIX host.
+  // (POSIX takes the content-comparison arm, which reads a fixed prefix per append
+  // where win32 reads nothing; that arm is measured only under the mocked file-id
+  // case in this suite, never on a real POSIX host.)
   //
-  // ---------------------------------------------------------------------------
-  // TEMPORARY ACCOMMODATION (a80c504f7f overlay merge) — RETIRE WITH ISSUE #41.
-  //
-  // The deferral the paragraph above named came true, larger than it allowed for.
-  // The overlay merge rewrote src/lifecycle-events.ts, and `appendOwned` now calls
-  // `readOwnedDescriptor` — a readFileSync of the WHOLE evidence file — before
-  // every append. It is upstream's mechanism for generation isolation (see the
-  // sibling test 'keeps a newer recorder generation isolated from a delayed older
-  // recorder'), and it makes the write path quadratic in transitions. The 900
-  // transitions this one test drives are what turns that into wall time.
-  //
-  // Measured on one host, back to back, same machine, merged tree vs the pre-merge
-  // parent ffce58c63b in its own installed worktree:
-  //
-  //   pre-merge, isolated:        572 / 644 / 578 ms
-  //   merged, full-suite quiet:   4044 / 4280 / 4610 ms
-  //   merged, isolated:           6993 / 6993 / 7119 / 7136 / 7477 / 17810 / 33729 ms
-  //   merged, full gate quiet:    19452 ms   <- reds the 15s budget above
-  //   merged, full gate loaded:   183942 ms  <- observed, with a packaging gate concurrent
-  //
-  // That is 12x at the quiet floor and ~58x at the isolated worst against the
-  // pre-merge median. 183942ms is a datum in hand, and the rule this file's own
-  // derivation states is that a budget which reds on a datum in hand is mis-sized
-  // however rare that datum is. So the anchor is the observed compound worst,
-  // 183.9s — not a derived one this time, because the load actually produced it.
-  // 300s clears it 1.63x, inside the 1.4-1.8x band the four budgets share, and the
-  // quiet-gate 19.5s sits 15x below it.
-  //
-  // This number is NOT a claim about how expensive this test should be. It is the
-  // cost of an inherited quadratic read, held at arm's length so the gate stays
-  // honest about the tree it actually has. Issue #41 removes the per-append whole
-  // file read; when it lands, this whole block reverts to the 15s above and the
-  // measurements below it become history. Accepted while it stands: a genuine hang
-  // in the evidence-write path now sits for five minutes before failing, and the
-  // regression itself is invisible to the gate. Both are why #41 is not optional.
-  //
-  // Not accommodated, deliberately: tests/install-recovery.spec.ts took collateral
-  // timeouts (7 tests, vitest's 5s default, no measured budget of its own) in the
-  // loaded run. That file is byte-identical to the pre-merge side, green 4/4 on the
-  // pre-merge baseline and green in the quiet gate — it reds only when contention
-  // meets this file's new cost, so #41 is its fix too, not a budget here.
-  // ---------------------------------------------------------------------------
-  timeout: process.platform === 'win32' ? 300_000 : 5_000,
+  // tests/install-recovery.spec.ts, whose 7 collateral timeouts PR #42 deliberately
+  // did not accommodate, keeps vitest's 5s default and is green at this head in the
+  // quiet full gate and in every loaded run above.
+  timeout: process.platform === 'win32' ? 30_000 : 5_000,
 }, () => {
   it.each([
     ['schema version', { schemaVersion: 2 }],
@@ -358,12 +389,13 @@ describe('desktop lifecycle events', {
     const evidencePath = desktopLifecycleEvidencePath(userDataDir)
     mkdirSync(join(userDataDir, 'lifecycle-events'))
     writeFileSync(evidencePath, 'stale run evidence\n')
+    const logger = createLogger()
     const recorder = createDesktopLifecycleRecorder({
       userDataDir,
       appVersion: '2.0.1-test',
       platform: 'win32',
       arch: 'x64',
-      logger: createLogger(),
+      logger,
       now: () => FIXED_NOW,
       randomId: (() => {
         const ids = ['cap-run', 'cap-op']
@@ -384,7 +416,8 @@ describe('desktop lifecycle events', {
       'renderer-startup',
       'health-commit',
     ]
-    for (let index = 0; index < 900; index += 1) {
+    const transitions = 900
+    for (let index = 0; index < transitions; index += 1) {
       recorder.transitionStartupStage(stages[index % stages.length] as DesktopStartupFailureStage)
     }
 
@@ -396,6 +429,18 @@ describe('desktop lifecycle events', {
       operationId: 'cap-op',
       eventName: 'startup.run.started',
     })
+
+    // A recorder that GAVE UP at its first trim also satisfies every assertion above:
+    // it leaves a capped file whose head is the generation line and whose lines all
+    // carry this run's ids. It differs in the two things asserted here — it reports
+    // the failure, and its evidence stops at the abort instead of ending on the last
+    // transition driven. Both were needed to catch an `O_TRUNC` open that is EINVAL
+    // on win32, which silently dropped the last 826 events with the suite still green.
+    expect(logger.error).not.toHaveBeenCalled()
+    expect(JSON.parse(retainedEvents.at(-1) ?? '{}')).toMatchObject({
+      eventName: 'startup.stage.started',
+      stageId: stages[(transitions - 1) % stages.length],
+    })
     for (const line of retainedEvents) {
       expect(Buffer.byteLength(line) + 1).toBeLessThanOrEqual(MAX_DESKTOP_LIFECYCLE_EVENT_BYTES)
       expect(parseDesktopLifecycleEvent(JSON.parse(line) as unknown)).toMatchObject({
@@ -403,6 +448,116 @@ describe('desktop lifecycle events', {
         operationId: 'cap-op',
       })
     }
+  })
+
+  // Both ownership arms, because both must stay off the file: win32 checks the file
+  // id (nothing read at all), every other platform and any file system reporting no
+  // id compares the generation line (a fixed prefix read, never the file).
+  it.each([
+    ['file identity', false],
+    ['content comparison', true],
+  ])('appends startup transitions without reading the evidence file back (%s)', (_label, hideFileId) => {
+    const userDataDir = tempUserData('dsh-lifecycle-append-cost-')
+    const logger = createLogger()
+    fsProbe.hideFileId = hideFileId
+    const recorder = createDesktopLifecycleRecorder({
+      userDataDir,
+      appVersion: '2.0.1-test',
+      platform: 'win32',
+      arch: 'x64',
+      logger,
+      now: () => FIXED_NOW,
+    })
+    recorder.startStartup('electron-ready')
+    const stages: DesktopStartupFailureStage[] = [
+      'shell-environment',
+      'runtime-bootstrap',
+      'profile-selection',
+      'install-recovery',
+      'profile-composition',
+      'host-boot',
+      'renderer-startup',
+      'health-commit',
+    ]
+
+    const transitions = 300
+    fsProbe.wholeFileReads = 0
+    fsProbe.bytesRead = 0
+    fsProbe.counting = true
+    try {
+      for (let index = 0; index < transitions; index += 1) {
+        recorder.transitionStartupStage(stages[index % stages.length] as DesktopStartupFailureStage)
+      }
+    } finally {
+      fsProbe.counting = false
+      fsProbe.hideFileId = false
+    }
+
+    // Each transition closes one stage and opens the next: two appended events.
+    const appendedEvents = transitions * 2
+    const evidence = readFileSync(desktopLifecycleEvidencePath(userDataDir))
+    const generationLineBytes = evidence.indexOf(0x0a) + 1
+    expect(evidence.subarray(0, generationLineBytes).toString('utf8')).toContain('startup.run.started')
+    // Every append landed, and none of them hit the trimming path, which is the only
+    // path allowed to read the file: this is the plain append regime, end to end.
+    expect(evidence.toString('utf8').split('\n').filter(line => line.length > 0)).toHaveLength(appendedEvents + 2)
+    expect(evidence.byteLength).toBeLessThan(MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES)
+
+    // What #41 fixed: appending re-read the whole file every time, so the write path
+    // cost grew with the evidence already written. Neither arm reads it back now, and
+    // the content arm's reading is bounded by the generation line per append — which
+    // is a real bound here, not a vacuous one, because the second case drives it.
+    expect(fsProbe.wholeFileReads).toBe(0)
+    expect(fsProbe.bytesRead).toBeLessThanOrEqual(appendedEvents * generationLineBytes)
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
+  it('isolates generations by content when the file system reports no file id', () => {
+    const userDataDir = tempUserData('dsh-lifecycle-no-file-id-')
+    const olderLogger = createLogger()
+    const newerLogger = createLogger()
+    fsProbe.hideFileId = true
+    try {
+      const olderIds = ['older-run', 'older-operation']
+      const older = createDesktopLifecycleRecorder({
+        userDataDir,
+        appVersion: '2.0.1-test',
+        platform: 'win32',
+        arch: 'x64',
+        logger: olderLogger,
+        now: () => FIXED_NOW,
+        randomId: () => olderIds.shift() ?? 'older-extra',
+      })
+      older.startStartup('electron-ready')
+
+      const newerIds = ['newer-run', 'newer-operation']
+      const newer = createDesktopLifecycleRecorder({
+        userDataDir,
+        appVersion: '2.0.1-test',
+        platform: 'win32',
+        arch: 'x64',
+        logger: newerLogger,
+        now: () => FIXED_NOW,
+        randomId: () => newerIds.shift() ?? 'newer-extra',
+      })
+      newer.startStartup('runtime-bootstrap')
+      older.failStartup('electron-ready', 'startup-failed')
+      newer.completeStartup('runtime-bootstrap', { status: 'healthy' })
+    } finally {
+      fsProbe.hideFileId = false
+    }
+
+    // Same outcome as the file-id path above, reached by comparing the generation line.
+    const events = readEvents(userDataDir)
+    expect(events.map(event => event.runId)).toEqual(Array.from({ length: events.length }, () => 'newer-run'))
+    expect(events.map(event => event.eventName)).toEqual([
+      'startup.run.started',
+      'startup.stage.started',
+      'startup.stage.completed',
+      'startup.run.completed',
+    ])
+    expect(olderLogger.error).toHaveBeenCalledWith(expect.stringContaining('failed to persist lifecycle evidence'))
+    expect(newerLogger.error).not.toHaveBeenCalled()
   })
 
   it('treats linked or unsafe evidence targets as best-effort logger-only failures', () => {
