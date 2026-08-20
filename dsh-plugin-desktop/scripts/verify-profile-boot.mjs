@@ -1,9 +1,10 @@
 /** Headless smoke for the complete published DSH Web profile and renderer manifest. */
 
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { boot } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import {
@@ -72,6 +73,20 @@ try {
     environment: process.env,
   })
   releasePackageResolver = installProfilePackageResolver(prepared.bareModuleBaseUrl)
+
+  // Headless safety (#49): this smoke boots the real composed Web profile, so a
+  // reachable default-browser handoff would open the operator's browser on every
+  // gate run — which is exactly what rc.8 did before the desktop patch restated
+  // `openBrowser: false`. Take over upstream's own test hook (web-app exports
+  // `internals` for this) through the profile resolver, so the module identity is
+  // the one the booted tree imports, and record instead of launching. The record
+  // must stay empty; a non-empty one fails the gate loudly rather than silently
+  // stealing the operator's screen.
+  const browserHandoffs = []
+  const profileRequire = createRequire(prepared.bareModuleBaseUrl)
+  const webApp = await import(pathToFileURL(profileRequire.resolve('@deepseek-ai/dsh-web-app')).href)
+  webApp.internals.openBrowser = async (url) => { browserHandoffs.push(url) }
+
   const runtime = {
     platform: 'win32',
     locale: 'en',
@@ -253,6 +268,16 @@ try {
     '@deepseek-ai/dsh-client-ui-directory-picker-native',
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
+  }
+
+  // The web-app row announces after the Loader tree settles, so the handoff can
+  // still be queued behind this point; drain the queue before reading the record.
+  await new Promise(resolve => { setImmediate(resolve) })
+  if (browserHandoffs.length > 0) {
+    throw new Error(
+      `assembled desktop profile reached the default-browser handoff for ${browserHandoffs.join(', ')}`
+      + ': the desktop cordis.patch.yml web-runtime row must restate openBrowser: false',
+    )
   }
 } finally {
   await ctx?.fiber.dispose()

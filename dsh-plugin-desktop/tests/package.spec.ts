@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 import {
@@ -147,6 +148,29 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
+  })
+
+  it('restates every web-runtime field the desktop patch replaces, browser handoff off', () => {
+    // An id-targeted patch REPLACES per top-level key (dsh-app-boot applyEntryPatches
+    // assigns `target[key] = value`), so this row's `config` stands in for upstream's
+    // whole object and every field it omits silently takes the web-app schema default.
+    // rc.8 added `openBrowser` defaulting to true; the omission opened the operator's
+    // browser on every desktop launch and every verify:profile run (#49). This
+    // assertion is exhaustive in both directions on purpose: a field dropped here
+    // fails, and a field upstream adds that this row has not been re-derived against
+    // fails too, instead of quietly inheriting a new default.
+    const patches = loadOverlayPatches(
+      'dsh-plugin-desktop',
+      fileURLToPath(new URL('cordis.patch.yml', packageRoot)),
+    )
+    const webRuntime = patches.find(patch => patch.id === 'web-runtime')
+    expect(webRuntime).toBeDefined()
+    expect(webRuntime?.config).toEqual({
+      openBrowser: false,
+      printUrl: false,
+      surfaceContext: true,
+      trustedHosts: [],
+    })
   })
 
   it('keeps unaudited marketplace packages out of the published runtime', () => {

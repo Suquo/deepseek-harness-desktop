@@ -21,9 +21,21 @@
     - id: desktop-updates
       name: dsh-plugin-desktop/updates
 
-# A desktop launch has no terminal operator waiting for the Web readiness line.
+# A desktop launch has no terminal operator waiting for the Web readiness line,
+# and no browser to hand the URL to: the Electron shell IS the client.
+#
+# This row config REPLACES upstream's whole config object (an id-targeted patch
+# assigns per top-level key, so `config` lands as one value) — every field the
+# upstream row sets must be restated here, and any field left out silently takes
+# the schema default. `openBrowser` is the standing proof: rc.8 added it to the
+# web-app schema defaulting to true, our omission took that default, and every
+# desktop launch and every `verify:profile` gate run opened the operator's
+# default browser. Restating it false also means `--no-open` on the command line
+# is inert for desktop profiles — upstream's `!!js ctx.webStartup.openBrowser`
+# binding is exactly what this replacement removes.
 - id: web-runtime
   config:
+    openBrowser: false
     printUrl: false
     surfaceContext: true
     trustedHosts: []
