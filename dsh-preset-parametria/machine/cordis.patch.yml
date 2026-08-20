@@ -1,0 +1,88 @@
+# The validator's model route (issue #1's structural half), as the block this
+# preset merges into the operator's MACHINE-WIDE patch layer,
+# `$DSH_HOME/cordis.patch.yml`.
+#
+# WHY MACHINE-WIDE RATHER THAN IN THE PROFILE (owner ruling, 2026-08-20 on #1).
+# The agent preset installs into `$DSH_HOME/.agent-presets/`, which EVERY
+# profile scans, and it pins `subagent_validator` to provider
+# `parametria-vision`. While this route lived in `profiles/parametria/` only
+# that one profile could serve the pin, so any other profile ran the persona,
+# spawned the validator with the right route config, and killed every child at
+# its first request with `no adapter registered for provider
+# "parametria-vision"`. Runs 3 and 4 were lost to exactly that, on a machine
+# whose real working profile is `desktop` (modlens, codex and claude-code
+# subagents, the session-cost tab). The route is an additive, dormant provider
+# block — it costs nothing where nothing asks for it — so the plane that
+# carries it is now the same plane that carries the preset needing it.
+#
+# Upstream applies this file AFTER every bundle layer and after the profile's
+# own `cordis.patch.yml`, in the desktop launcher (`prepareDesktopProfile`) and
+# in the CLI alike (`apps/cli/README.md`: "then the profile's
+# `cordis.patch.yml`, then the home-level `$DSH_HOME/cordis.patch.yml`"). One
+# declaration therefore reaches every profile and both surfaces, which is why
+# the profile-level copy is retired rather than kept as a fallback: an
+# id-targeted patch replaces the row's whole config, so the home layer would
+# outrank a profile copy anyway and a drifted copy could only ever be a lie.
+#
+# `dsh-base` mounts `llm-pi-ai` DORMANT with no config at all, so replacing the
+# whole config costs nothing, and the adapter merges this composition base with
+# the user's `llm-pi-ai:` settings section PER PROVIDER — verified live, not
+# assumed: `dsh-settings` merges layers key by key
+# (`packages/settings/settings/src/index.ts`), and a boot with the operator's
+# own `openrouter` route present registers both routes side by side.
+#
+# WHY A SEPARATE HAND-DECLARED ROUTE rather than a `modelOverrides` entry on
+# `openrouter`: the operator's `openrouter` route is their session-model route,
+# live in `$DSH_HOME/settings.yaml` and rewritten by the web Models page. A
+# validator whose vision guarantee rode that route would inherit every edit
+# made to it. `parametria-vision` is owned by this preset and by nothing else.
+#
+# `input: [text, image]` is the load-bearing declaration, per the owner ruling.
+# Modalities resolve entry `input` -> installed catalog entry -> route
+# `defaultInput` (default `[text]`). `assertImageCapableRoute` resolves the
+# calling agent's route and refuses an image read outright unless that list
+# includes `image`, so this is what lets the validator open a screenshot at all
+# — the gate itself is upstream's and is already fail-closed. The pinned
+# catalog happens to declare `[text, image]` for this model already; stating it
+# here means a future upstream pin that narrows or drops the entry cannot
+# silently strip vision from the validator.
+#
+# The values below are the pinned catalog's own (`openrouter.json`, upstream
+# dsh-v0.1.0-rc.8): a hand-declared route inherits nothing, so an unstated
+# capacity would fall back to the route defaults (262,144 / 32,768) and quietly
+# shrink the model. `tests/vision-route.test.mjs` diffs every one of them
+# against that catalog file, so a pin bump that changes the model's real shape
+# fails the gate.
+- id: llm-pi-ai
+  config:
+    providers:
+      parametria-vision:
+        displayName: Parametria vision (OpenRouter)
+        # A credential REFERENCE, resolved per request through `ctx.credentials`;
+        # no secret enters this file. Discovered read-only from the operator's
+        # live `$DSH_HOME/settings.yaml`, which names the same variable for
+        # their own OpenRouter route.
+        apiKeyEnv: OPENROUTER_API_KEY
+        api: openai-completions
+        baseURL: https://openrouter.ai/api/v1
+        # pi-ai guesses the reasoning dialect from the endpoint URL; this URL
+        # would guess right, but a route that states its dialect keeps working
+        # if the endpoint is ever repointed at a proxy.
+        compat:
+          thinkingFormat: openrouter
+        models:
+          - id: google/gemini-3.6-flash
+            name: 'Google: Gemini 3.6 Flash'
+            contextWindow: 1048576
+            maxTokens: 65536
+            input:
+              - text
+              - image
+            # Key = the level selectors offer, value = its wire spelling. A
+            # hand-declared model that declares none does not reason at all,
+            # which would silently downgrade a model the catalog marks
+            # reasoning-capable. `off:` is valueless on purpose: it offers Off
+            # and sends nothing.
+            reasoningEfforts:
+              off:
+              high: high

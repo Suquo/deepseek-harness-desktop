@@ -25,12 +25,32 @@ $DSH_HOME/profiles/parametria/           the desktop profile
   package.json                           dsh.profile.bundles: base, then web-app
   cordis.patch.yml                       the profile's own patch layer
   pnpm-workspace.yaml                    the pnpm settings a profile directory needs
+
+$DSH_HOME/cordis.patch.yml               YOUR machine-wide patch layer —
+  # >>> ... managed >>>                  one delimited block inside it, carrying
+  # <<< ... managed <<<                  the parametria-vision route
 ```
 
-Both land in directories upstream already scans — `includeUserRoot` makes
-`$DSH_HOME/.agent-presets` a preset root, and `profiles/` is where
+The first two land in directories upstream already scans — `includeUserRoot`
+makes `$DSH_HOME/.agent-presets` a preset root, and `profiles/` is where
 `resolveProfileDir` looks — so the deployment's read-only shipped install is
 never touched.
+
+The third is not this package's file. `$DSH_HOME/cordis.patch.yml` is upstream's
+machine-wide layer, applied after every profile's own, and the installer is a
+guest between its own markers there: it creates the file when absent, appends
+its block when the file exists without one, replaces its own block when the
+receipt still matches what it wrote, and refuses otherwise — a hand-edited
+block, an unterminated one, or a machine patch that already targets the
+`llm-pi-ai` row itself. Everything outside the markers is never read as its own
+and never rewritten.
+
+`--force` releases *this installer's claim over its own block* — a block edited
+since it was written, or one carrying no receipt. It is deliberately not a
+release for the other two refusals, and those refusals say so rather than
+advertising a flag that would refuse again: an `llm-pi-ai` row of your own is
+your configuration, not this installer's to replace, and a block whose closing
+marker is missing has no known extent for a forced write to overwrite.
 
 ```sh
 yarn workspace dsh-preset-parametria install:profile            # install
@@ -39,8 +59,45 @@ yarn workspace dsh-preset-parametria install:profile --force    # overwrite loca
 yarn workspace dsh-preset-parametria install:profile --default  # ...and boot into it
 ```
 
-Then pick **Parametria** in the desktop profile picker (selecting a profile
-restarts the app), or run `dsh --profile parametria`.
+Selecting the Parametria profile is optional. **The validator's route works
+under whatever profile you already boot** — keep `desktop`, with whatever you
+have added to it, and the preset still validates with vision. Pick Parametria in
+the profile picker (or `dsh --profile parametria`) only if you want the
+profile's own defaults as well.
+
+### Why the route is machine-wide
+
+Because the preset is. That asymmetry, when it existed, was the sharpest edge in
+this package and it cost issue #1 two live runs:
+
+| what | where it lands | which profiles see it |
+|---|---|---|
+| the agent preset (persona, delegation, `subagent_validator` pinned to `parametria-vision`) | `$DSH_HOME/.agent-presets/parametria/` | **every** profile — `includeUserRoot` scans this root whatever boots |
+| the `parametria-vision` route that pin needs | *was* `profiles/parametria/cordis.patch.yml` — **now** `$DSH_HOME/cordis.patch.yml` | *was* the `parametria` profile alone — **now** every profile |
+
+While the two planes disagreed, any other profile loaded the persona, spawned
+the validator, and handed each child the right route config — and each one died
+at its first request with
+
+```
+no adapter registered for provider "parametria-vision"   (NO_ADAPTER)
+```
+
+Both lost runs were booting `desktop`
+(`%APPDATA%\DSH Desktop\profile-selection\state.json` read `"active": "desktop"`
+throughout) while every other signal looked right — because every other signal
+*was* right, and home-level. Upstream applies the machine-wide layer after every
+profile's own, in the desktop launcher and the CLI alike, so one declaration now
+reaches every profile on both surfaces; the profile-level copy is retired rather
+than kept, since the home layer would outrank it and a drifted copy could only
+ever be a lie.
+
+The installer still reports which profile the launcher will boot — it is the
+first thing anyone debugging a run wants — but it no longer refuses over it, and
+it keeps its three answers apart: a recorded selection, none recorded yet
+(`--default` can still seed that), and a state file it could not read. An
+install whose `--home` is not the launcher's home skips that report entirely, so
+test and evidence harnesses are never judged against the operator's machine.
 
 ### Making it the profile the app boots into
 
@@ -141,8 +198,8 @@ carries a second `dsh-tool-subagent` instance, `subagent_validator`, whose
 `agentOptions` pin the route and model explicitly — explicit values override
 what a child would inherit. Child model policy is fixed per instance and
 per-call model selection does not exist, so "another model" means "another
-distinctly named tool", which is exactly what this row is. The profile declares
-a `parametria-vision` pi-ai route whose model entry states
+distinctly named tool", which is exactly what this row is. The machine-wide
+patch layer declares a `parametria-vision` pi-ai route whose model entry states
 `input: [text, image]`, which is what makes that route pass the gate. The
 modality field exists only on `dsh-llm-pi-ai`; `dsh-llm-deepseek` exposes none,
 which is why the vision route has to be a pi-ai route.
@@ -401,12 +458,25 @@ root chain again.
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/evidence-hygiene.test.mjs` | The **dot-prefixed** workspace directories the persona tells a run to create, **derived** from the persona text rather than restated, each asserted ignored by *this repository's own* `.gitignore` via `git check-ignore --no-index --verbose` with `core.excludesFile` emptied — so a persona naming a new dot-prefixed directory fails until `.gitignore` covers it, and a rule inherited from a developer's global excludes cannot stand in for one that travels. A non-dot name is not separable from prose and stays a review question, which the fence documents. Two counter-assertions (a plain tracked file and a dot-prefixed one) keep an over-broad rule — `*` or `.*` — from making it vacuous. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. For `--default`: the whole seeded document (not a probe for the profile name), that an ordinary install leaves the state absent, that the refusal fires **before any other write**, that `--force` does *not* release it, and that exclusivity survives the check being bypassed — `flag: 'wx'` and `planDefaultSelection` are asserted separately, because the check only produces the message while the flag makes the guarantee. Also the bound on that: a seed failing *after* the files land says so rather than reading as a no-op, no failure leaks a bare errno, an occupied directory path is not mis-reported as an existing selection, a pre-existing state directory is tightened to `0o700` the way the launcher tightens its own, and the dry-run result carries an `action` discriminator so a caller cannot mistake a rehearsal for a durable write. |
+| `tests/machine-patch.test.mjs` | **Which plane declares the route**, in both directions — the machine block declares `parametria-vision`, the profile layer does not declare `llm-pi-ai` at all, and the profile layer's row set is exactly `agent-presets`. That pair is the fix for issue #1's root cause, so a revert of either half fails here. Plus the guest discipline over the operator's `$DSH_HOME/cordis.patch.yml`, branch by branch on the pure planner: create when absent, append leaving an operator-authored file byte-identical above the block, report `unchanged` rather than rewrite, replace only its own block on a version bump while the surrounding entries survive, and refuse — never clobber — on a foreign `llm-pi-ai` row (legal upstream, and the reason appending would silently delete one of two intents), a block edited since it was written, a block with no receipt, and an opening marker with no closing one. Then the install-level halves: the receipt records the block digest, a conflicting machine patch refuses **before any file lands**, and a rehearsal writes nothing while saying `would-create`. |
+| `tests/profile-selection-readiness.test.mjs` | What the installer says about the profile this machine boots — a report since the route went machine-wide, not a gate. The retired refusal is fenced as retired: the exact selection document read off the operator's machine during runs 3 and 4 must now produce a *notice* that names the profile, names the state file, and says the route is machine-wide — never a refusal, because sending an operator to switch profiles would cost them the toolchain their own profile carries. The discipline that made the original failure invisible stays: absent, unreadable, and recorded remain three distinct outcomes (absence is `--default`'s whole permission, so nothing may impersonate it), `pending` outranks `active` in both directions (it names what the next start will try), and the report skips — never throws, never judges — for an install whose `--home` is not the launcher's home or on a platform that hides `userData`. |
 | `tests/desktop-selection-drift.test.mjs` | The six values `--default` **mirrors** from `dsh-plugin-desktop/src`, each read back from that source and anchored to its declaration: the `PRODUCT_NAME` passed to `app.setName` — asserted in all three platform branches of the launcher's headless mirror (each branch's *whole* shape, since pinning only the trailing name would let the Linux `XDG_CONFIG_HOME` / `.config` base move unnoticed), against this installer's resolver output, and for the **ordering** that makes it load-bearing at all: `setName` must precede both `start()` and the first `getPath('userData')` inside `run()`, and `start()` must keep a single call site — the two `selectionStatePath` segments; `STATE_VERSION`; `DEFAULT_PROFILE_NAME`; and the `0o700`/`0o600` modes. Plus the claims the design rests on: that `selectDesktopProfile` still writes a first selection as a `pending` one — checked as a **closed key set** taken from that one object literal, in both directions, so a new field on either side fails rather than passing on four surviving matches — and that startup still rolls an unselectable `pending` back. Duplicated because the installer imports only node builtins and `yarn check` runs it *before* `dsh-plugin-desktop` is built; this fence is what makes the duplication safe, and the tripwire for the pending `app.setName` rebrand migration. |
 
 Every drift fence except `desktop-selection-drift` reads the pinned upstream
 checkout, so `git submodule update --init deepseek-harness` is a prerequisite —
 the same one `yarn check:layout` already has. That one fence looks the other
 way, at this repository's own `dsh-plugin-desktop/src`.
+
+Every fence above reads source files. The one property none of them can state is
+whether the route survives *composition*, which is precisely what issue #1 broke
+while they all stayed green — so it is fenced next door, in
+`dsh-plugin-desktop/tests/parametria-machine-route.spec.ts`: it runs this
+installer into a temp home, composes both the `desktop` and `parametria`
+profiles through `prepareDesktopProfile`, and asserts the route is declared for
+both, absent exactly when the machine layer is, and beside an operator's own
+machine-patch entries rather than instead of them. The boot-level evidence — the
+real `boot()` and the live `llm` registry — is
+`.engineering/research/no-adapter-repro.mjs`.
 
 ## Related issues
 

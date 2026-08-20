@@ -27,10 +27,45 @@
  *
  * Exits non-zero on any refusal, so a caller cannot mistake a skipped write
  * for a completed install.
+ *
+ * A THIRD destination is written as a delimited block rather than a whole file:
+ *
+ *   $DSH_HOME/cordis.patch.yml            the machine-wide patch layer, which
+ *                                         carries the `parametria-vision` route
+ *
+ * That file is the operator's, so this installer is a guest between its own
+ * markers: it creates the file when absent, appends its block when the file
+ * exists without one, replaces its own block when the receipt says the block is
+ * still the one it wrote, and REFUSES otherwise — a hand-edited block, an
+ * unterminated one, or a machine patch that already targets the `llm-pi-ai` row
+ * itself. `--force` releases this installer's claim over its OWN block (edited,
+ * or unreceipted). It is not a release for the other two, which say so instead
+ * of advertising a flag that would refuse again: an operator's own `llm-pi-ai`
+ * row is their configuration, and an unterminated block has no known extent to
+ * replace.
+ *
+ * The route lives there rather than in the profile because the preset does. The
+ * agent preset lands in `$DSH_HOME/.agent-presets/`, which EVERY profile scans,
+ * and it pins `subagent_validator` to `parametria-vision`; while that route was
+ * profile-scoped, any other profile ran the persona, spawned the validator, and
+ * killed it at its first request with NO_ADAPTER — issue #1 lost runs 3 and 4
+ * to exactly that, with the install reporting success both times. Upstream
+ * applies this layer after every profile's own, in the desktop launcher and the
+ * CLI alike, so one declaration now reaches every profile and both surfaces.
  */
 
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, posix, resolve, sep, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -230,6 +265,87 @@ export function writeDefaultSelection(statePath, whenLate = '') {
   return state
 }
 
+/**
+ * Read the launcher's selection document, distinguishing absent from unreadable.
+ *
+ * Absence is a real answer (the launcher has never recorded a choice) and it is
+ * `--default`'s whole permission, so it gets its own value rather than sharing
+ * one with a file this installer could not parse. Nothing here refuses — the
+ * selection is reported, not gated on, since the route went machine-wide — but
+ * an unknown must still never be reported as an answer.
+ * @param statePath - the selection-state file.
+ * @returns the parsed document, `undefined` when absent, `null` when unusable.
+ */
+export function readSelectionDocument(statePath) {
+  let text
+  try {
+    text = readFileSync(statePath, 'utf8')
+  } catch (cause) {
+    // Only ENOENT proves absence. An unreadable directory entry (EACCES, a
+    // directory in the file's place) is an unknown, and reporting it as "never
+    // chosen" would invite a `--default` seed this installer cannot honour.
+    return cause?.code === 'ENOENT' ? undefined : null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    return parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) ? null : parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Classify what the launcher's persisted selection means for this preset.
+ *
+ * `pending` outranks `active`: it names the profile the next start will TRY,
+ * and the launcher only promotes it once that profile's shell has mounted. So
+ * a pending choice of this preset counts as selected even while `active` still
+ * reads `desktop`, and a pending choice of anything else counts as another
+ * profile even when `active` happens to read this one.
+ * @param document - the parsed selection document from {@link readSelectionDocument}.
+ * @returns `unseeded`, `unreadable`, `selected`, or `other` with the chosen name.
+ */
+export function classifyProfileSelection(document) {
+  if (document === undefined) return { kind: 'unseeded' }
+  if (document === null) return { kind: 'unreadable' }
+  const { active, pending } = document
+  if (typeof pending === 'string' && pending.length > 0) {
+    return pending === PRESET_NAME
+      ? { kind: 'selected', via: 'pending' }
+      : { kind: 'other', via: 'pending', chosen: pending }
+  }
+  if (typeof active === 'string' && active.length > 0) {
+    return active === PRESET_NAME
+      ? { kind: 'selected', via: 'active' }
+      : { kind: 'other', via: 'active', chosen: active }
+  }
+  return { kind: 'unreadable' }
+}
+
+/**
+ * What the launcher's selection means now that the route is machine-wide.
+ *
+ * This used to be a refusal, and the refusal is what the owner's ruling on
+ * issue #1 retired: while the `parametria-vision` route lived in the
+ * `parametria` PROFILE, booting any other profile produced validator children
+ * that spawned with the right route config and died at their first request with
+ * `no adapter registered for provider "parametria-vision"` — so an install onto
+ * a machine that boots something else was a false claim of readiness. The route
+ * now installs into the machine-wide patch layer, on the same plane as the
+ * preset that pins it, so every profile serves it and no profile has to be
+ * selected. The fact is still worth REPORTING — it is the first thing anyone
+ * reading a failed run wants — but it no longer gates anything, and reporting
+ * it as a refusal would send operators to switch profiles for nothing.
+ * @param statePath - the selection-state file that was read.
+ * @param selection - the `other` classification.
+ * @returns the informational line.
+ */
+function otherProfileNoticeMessage(statePath, selection) {
+  return `${BIN}: this machine boots profile ${JSON.stringify(selection.chosen)} (${selection.via},`
+    + ` per ${statePath});`
+    + ' the parametria-vision route is machine-wide, so that profile serves it too'
+}
+
 /** One diagnostic for every non-refusal seed failure, naming the step. */
 function seedFailedMessage(statePath, cause) {
   const detail = cause instanceof InstallError ? cause.message : String(cause)
@@ -279,6 +395,260 @@ export function managedFiles(packageRoot = PACKAGE_ROOT) {
   }
   files.set(posix.join('profiles', PRESET_NAME, 'pnpm-workspace.yaml'), Buffer.from(PROFILE_PNPM_WORKSPACE))
   return files
+}
+
+/**
+ * The block this installer owns inside the operator's machine-wide patch.
+ *
+ * `$DSH_HOME/cordis.patch.yml` is the OPERATOR's file — upstream's own
+ * machine-wide layer, applied after every profile's — and this package is only
+ * ever a guest in it. So the claim is a delimited block rather than the whole
+ * file: markers say where the guest ends, the receipt records what the guest
+ * last wrote, and everything outside is none of this installer's business.
+ */
+const MACHINE_PATCH_BEGIN = '# >>> dsh-preset-parametria: parametria-vision route (managed) >>>'
+const MACHINE_PATCH_END = '# <<< dsh-preset-parametria: parametria-vision route (managed) <<<'
+/** The machine-wide patch file, relative to the Harness home. */
+const MACHINE_PATCH_FILENAME = 'cordis.patch.yml'
+/** Receipt key for the managed block — a fragment claim, not a whole-file one. */
+const MACHINE_PATCH_RECEIPT_KEY = `${MACHINE_PATCH_FILENAME}#parametria-vision`
+/**
+ * Any mention of the row this block owns, ANYWHERE outside the managed block.
+ *
+ * Deliberately over-broad, and checked on every branch rather than only when
+ * appending. Two entries for one row is not an error upstream — the later
+ * replaces the earlier's whole config — so a second `llm-pi-ai` entry silently
+ * deletes one of two intents. If it is the operator's, their configuration
+ * vanishes; if it is ours, `parametria-vision` vanishes and the validator dies
+ * at its first request with NO_ADAPTER while the install reports success. That
+ * second case is issue #1 verbatim, so this errs the other way.
+ *
+ * This script imports only node builtins, so there is no YAML parser here to
+ * ask precisely; a line-shaped pattern would miss `- {id: llm-pi-ai, …}`, a
+ * trailing comment, or a quoted spelling. A bare substring cannot miss any of
+ * them. The cost is a false refusal on a file that merely mentions the string
+ * elsewhere — which names the file and asks for a hand edit, while the failure
+ * it prevents is silent. Also catches a duplicated managed block, whose second
+ * copy would outrank the one just written for the same upstream reason.
+ */
+const MENTIONS_LLM_PI_AI = /llm-pi-ai/u
+
+/** The header written when this installer creates the machine patch itself. */
+const MACHINE_PATCH_HEADER = `# $DSH_HOME/cordis.patch.yml — your machine-wide Cordis patch layer, applied
+# after every bundle layer and after the active profile's own cordis.patch.yml.
+#
+# Everything outside the marked block below is yours: the installer never reads
+# it as its own and never rewrites it. The block itself is managed by
+# dsh-preset-parametria and replaced whole on re-install.
+`
+
+/** The managed block for the current package contents, markers included, unterminated. */
+export function machinePatchBlock(packageRoot = PACKAGE_ROOT) {
+  const body = readFileSync(join(packageRoot, 'machine', MACHINE_PATCH_FILENAME), 'utf8')
+  return `${MACHINE_PATCH_BEGIN}\n${body.endsWith('\n') ? body : `${body}\n`}${MACHINE_PATCH_END}`
+}
+
+/**
+ * Locate the managed block in an existing machine patch.
+ * @param text - the file's current contents.
+ * @returns the block's span and text, `undefined` when absent, `null` when an
+ *   opening marker has no closing one — an unusable claim, never guessed at.
+ */
+export function findManagedBlock(text) {
+  const begin = text.indexOf(MACHINE_PATCH_BEGIN)
+  if (begin < 0) return undefined
+  const closing = text.indexOf(MACHINE_PATCH_END, begin)
+  if (closing < 0) return null
+  const end = closing + MACHINE_PATCH_END.length
+  return { begin, end, text: text.slice(begin, end) }
+}
+
+/** The file's text with the managed block excised, i.e. everything that is the operator's. */
+function outsideManagedBlock(text, found) {
+  return found === undefined ? text : `${text.slice(0, found.begin)}${text.slice(found.end)}`
+}
+
+/**
+ * Whether a top-level YAML block sequence can take one more item appended.
+ *
+ * Structural, not a parse: with only node builtins there is no parser here, so
+ * this asks the one question appending depends on — does every meaningful line
+ * at column zero open a sequence item? A flow sequence (`[]`), a mapping
+ * (`insert: []`), or a scalar answers no, and appending `- …` to any of them
+ * yields a document upstream refuses to boot. Comments and blank lines carry no
+ * shape, and indented lines are continuations of an item already opened.
+ * @param text - the existing file contents.
+ * @returns whether appending a sequence item keeps the document valid.
+ */
+function isAppendableSequence(text) {
+  for (const line of text.split('\n')) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue
+    if (/^[ \t]/u.test(line)) continue
+    if (line === '-' || line.startsWith('- ')) continue
+    return false
+  }
+  return true
+}
+
+/**
+ * Decide what to do with the operator's machine-wide patch.
+ *
+ * Pure, so every branch is checkable without a filesystem: "never clobber" is
+ * then a property of the decision rather than of how carefully the writer that
+ * carries it out was written.
+ * @param existing - current file contents, `undefined` when the file is absent.
+ * @param block - the managed block to install.
+ * @param options - the `--force` release and the receipt's digest of the block last written.
+ * @returns the action, plus the full next contents whenever there is a write to make.
+ */
+export function planMachinePatch(existing, block, { force = false, previousDigest } = {}) {
+  if (existing === undefined) {
+    return { action: 'create', next: `${MACHINE_PATCH_HEADER}\n${block}\n` }
+  }
+  const found = findManagedBlock(existing)
+  // Checked BEFORE any branch decides, because the danger is not confined to
+  // the one where we append. An installed machine takes the `unchanged` or
+  // `update` branch, and an operator who added their own `llm-pi-ai` row after
+  // our block would otherwise get "route already current", exit 0, and a
+  // validator that dies at its first request — issue #1's silent success,
+  // rebuilt on the new plane.
+  if (found !== null && MENTIONS_LLM_PI_AI.test(outsideManagedBlock(existing, found))) {
+    return {
+      action: 'conflict',
+      // The operator's own content, outside any marker of ours. `--force`
+      // releases this installer's claim over its own block; it has never been a
+      // licence to delete their configuration.
+      releasable: false,
+      reason: 'it mentions the llm-pi-ai row outside this installer\'s block, and a second entry for that'
+        + " row would replace the first one's whole config",
+    }
+  }
+  if (found === null) {
+    // `--force` is deliberately NOT a release here, and the refusal says so:
+    // the block's extent is unknown, so there is nothing a forced write could
+    // safely replace. `releasable` carries that distinction to the message,
+    // because a refusal that advertises a flag which cannot lift it sends the
+    // operator into a loop.
+    return {
+      action: 'conflict',
+      releasable: false,
+      reason: "the managed block's opening marker has no closing marker, so its extent is unknown",
+    }
+  }
+  if (found === undefined) {
+    if (!isAppendableSequence(existing)) {
+      // Appending a sequence item to a document that is not a block sequence
+      // produces YAML that does not parse, and upstream is fail-loud about
+      // exactly that (`loadOptionalPatches`: "an unreadable, unparsable, or
+      // non-array file throws … must fail loud at boot"). A valid `[]` — which
+      // is what `prepareDesktopProfile` itself writes for a root config — would
+      // otherwise turn into a machine that boots under NO profile, reported as
+      // a successful install.
+      return {
+        action: 'conflict',
+        releasable: false,
+        reason: 'it is not a block-sequence document, so appending an entry would produce YAML the'
+          + ' harness refuses to boot',
+      }
+    }
+    const separator = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n'
+    return { action: 'append', next: `${existing}${separator}${block}\n` }
+  }
+  if (found.text === block) return { action: 'unchanged' }
+  if (!force) {
+    // A block that does not match the receipt was edited by hand, and a block
+    // with no receipt was written by something that is not this installer.
+    // `--force` is that claim's release, exactly as it is for managed files.
+    if (previousDigest === undefined) {
+      return {
+        action: 'conflict',
+        releasable: true,
+        reason: 'it carries a managed block this installer has no receipt for',
+      }
+    }
+    if (digest(found.text) !== previousDigest) {
+      return {
+        action: 'conflict',
+        releasable: true,
+        reason: 'its managed block has been edited since this installer wrote it',
+      }
+    }
+  }
+  return {
+    action: 'update',
+    next: `${existing.slice(0, found.begin)}${block}${existing.slice(found.end)}`,
+  }
+}
+
+/**
+ * The refusal a conflicting machine patch produces, naming the file and — only
+ * when it is true — the release.
+ *
+ * `--force` releases this installer's claim over its OWN block. It is not a
+ * licence to delete the operator's configuration, and it cannot replace a block
+ * whose extent is unknown, so those two refusals must not advertise it: a
+ * refusal that names a flag which will refuse again is a loop.
+ * @param path - the machine-wide patch file.
+ * @param conflict - the `conflict` plan, carrying `reason` and `releasable`.
+ * @returns the operator-facing refusal text.
+ */
+function refuseMachinePatchMessage(path, conflict) {
+  return `${BIN}: refusing to edit the machine-wide patch layer:\n`
+    + `  ${path}\n`
+    + `because ${conflict.reason}.\n`
+    + 'That file is yours; this installer owns only the block between its own markers.\n'
+    + `Resolve it by hand — the block to carry is this package's machine/${MACHINE_PATCH_FILENAME}`
+    + (conflict.releasable === true
+      ? ' —\nor re-run with --force to replace the managed block regardless.'
+      : '.\n--force does NOT release this one: it releases this installer\'s claim over its own block,'
+        + ' which\nis not what stands in the way here.')
+}
+
+/**
+ * Write the machine patch atomically, and only onto the state it was planned from.
+ *
+ * Two hazards, one writer. The plan was computed from a snapshot, so a bare
+ * write would clobber whatever appeared in between — the sibling
+ * `writeDefaultSelection` refuses that at the syscall with `flag: 'wx'`, and
+ * this file is more the operator's than that one is, so it may not get weaker
+ * treatment. And a partial write of a document upstream parses strictly is not
+ * a lost edit but an unbootable machine, under every profile, so the new
+ * contents land through a temp file and one rename rather than a truncate.
+ * @param path - the machine-wide patch file.
+ * @param next - the full contents to store.
+ * @param expected - contents the plan was made from, `undefined` for a create.
+ */
+function writeMachinePatch(path, next, expected) {
+  const current = readMachinePatch(path)
+  if (current !== expected) {
+    throw new InstallError(
+      `${BIN}: the machine-wide patch layer changed while this install was running:\n`
+      + `  ${path}\n`
+      + 'Nothing was written. Re-run the installer to plan against the current contents.',
+    )
+  }
+  const temporary = `${path}.${PRESET_NAME}.tmp`
+  try {
+    writeFileSync(temporary, next, { encoding: 'utf8' })
+    // Same directory, so this is a rename rather than a copy, and it replaces
+    // the destination in one step on every platform this ships to.
+    renameSync(temporary, path)
+  } catch (cause) {
+    try {
+      rmSync(temporary, { force: true })
+    } catch { /* the temp file is not worth failing the install over */ }
+    throw new InstallError(`${BIN}: could not write the machine-wide patch layer at ${path}: ${String(cause)}`)
+  }
+}
+
+/** Read the machine patch, distinguishing "absent" from "unreadable". */
+function readMachinePatch(path) {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch (cause) {
+    if (cause?.code === 'ENOENT') return undefined
+    throw new InstallError(`${BIN}: machine-wide patch layer is unreadable: ${path} (${String(cause)})`)
+  }
 }
 
 /** Depth-first list of every file under `dir`, as paths relative to it. */
@@ -400,6 +770,19 @@ export function install({
       + '\nRe-run with --force to replace them.',
     )
   }
+  // Planned with the file conflicts above and BEFORE any write, for the reason
+  // the `--default` refusal is: a run that refuses half way through has already
+  // changed the machine, and this one edits a file the operator owns.
+  const machinePatchPath = join(home, MACHINE_PATCH_FILENAME)
+  const block = machinePatchBlock(packageRoot)
+  const machinePatchSnapshot = readMachinePatch(machinePatchPath)
+  const machinePatch = planMachinePatch(machinePatchSnapshot, block, {
+    force,
+    previousDigest: receipt.files[MACHINE_PATCH_RECEIPT_KEY],
+  })
+  if (machinePatch.action === 'conflict') {
+    throw new InstallError(refuseMachinePatchMessage(machinePatchPath, machinePatch))
+  }
   let statePath
   if (setDefault) {
     statePath = selectionStatePath(userDataDir ?? defaultDesktopUserDataDirectory())
@@ -417,10 +800,31 @@ export function install({
     mkdirSync(dirname(destinationPath), { recursive: true })
     writeFileSync(destinationPath, contents)
   }
+  if (machinePatch.next !== undefined && !dryRun) {
+    writeMachinePatch(machinePatchPath, machinePatch.next, machinePatchSnapshot)
+    // The claim is only true if the block is really in the file the harness
+    // will read, so it is read back rather than assumed from a successful
+    // write — this is the whole reason the route moved planes.
+    const stored = findManagedBlock(readMachinePatch(machinePatchPath) ?? '')
+    if (stored === undefined || stored === null || stored.text !== block) {
+      throw new InstallError(
+        `${BIN}: wrote the machine-wide patch layer but could not read the managed block back:\n`
+        + `  ${machinePatchPath}\n`
+        + 'The parametria-vision route is NOT installed; nothing else on this machine can supply it.'
+        + ' Check that file before starting the app: the harness refuses to boot ANY profile on a'
+        + ' machine patch it cannot parse.',
+      )
+    }
+  }
   const nextReceipt = {
     version: RECEIPT_VERSION,
     preset: PRESET_NAME,
-    files: Object.fromEntries([...files].map(([name, contents]) => [name, digest(contents)])),
+    files: {
+      ...Object.fromEntries([...files].map(([name, contents]) => [name, digest(contents)])),
+      // Recorded even for a rehearsal-free `unchanged`, so the claim survives a
+      // receipt rewritten by a run that had nothing to write.
+      [MACHINE_PATCH_RECEIPT_KEY]: digest(block),
+    },
   }
   if (!dryRun) {
     mkdirSync(dirname(receiptPath), { recursive: true })
@@ -440,6 +844,12 @@ export function install({
     written,
     unchanged,
     receiptPath,
+    machinePatch: {
+      path: machinePatchPath,
+      // `would-` prefixes keep a rehearsal from reading as a durable write, the
+      // same discriminator `defaultSelection` carries.
+      action: dryRun && machinePatch.next !== undefined ? `would-${machinePatch.action}` : machinePatch.action,
+    },
     ...(defaultSelection === undefined ? {} : { defaultSelection }),
   }
 }
@@ -465,6 +875,55 @@ export function parseArgs(argv) {
     throw new InstallError(`${BIN}: --user-data-dir only applies with --default`)
   }
   return options
+}
+
+/**
+ * Report whether the machine this ran on will actually boot the installed profile.
+ *
+ * Runs against the launcher's own selection state, and only when this install
+ * targeted the home the launcher reads — a `--home <temp>` install (tests,
+ * evidence harnesses, an isolated instance) says nothing about the operator's
+ * machine, and reading their real state to judge it would be noise at best.
+ * An explicit `--user-data-dir` is the deliberate pairing of a home with a data
+ * root, so it opts back in against that root.
+ * @param options - resolved home, optional userDataDir, and platform seams.
+ * @returns `{ lines }` to print. Never a refusal: since the route went
+ *   machine-wide, every profile serves it, so this reports and does not gate.
+ */
+export function reportProfileSelection({
+  home,
+  userDataDir,
+  launcherHome = resolveHome(undefined),
+  platform = process.platform,
+  environment = process.env,
+  homeDirectory = homedir(),
+} = {}) {
+  if (userDataDir === undefined && home !== launcherHome) {
+    return { lines: [`${BIN}: selection check skipped: --home is not the launcher's home (${launcherHome})`] }
+  }
+  let statePath
+  try {
+    statePath = selectionStatePath(userDataDir ?? defaultDesktopUserDataDirectory(platform, environment, homeDirectory))
+  } catch (cause) {
+    return { lines: [`${BIN}: selection check skipped: ${cause instanceof InstallError ? cause.message : String(cause)}`] }
+  }
+  const selection = classifyProfileSelection(readSelectionDocument(statePath))
+  if (selection.kind === 'selected') {
+    return { lines: [`${BIN}: the launcher selection names ${PRESET_NAME} (${selection.via}): ${statePath}`] }
+  }
+  if (selection.kind === 'unseeded') {
+    return {
+      lines: [
+        `${BIN}: no launcher profile selection recorded yet (${statePath});`
+        + ` whichever profile boots serves the machine-wide route`,
+      ],
+    }
+  }
+  if (selection.kind === 'unreadable') {
+    // An unknown is reported as an unknown, never folded into either answer.
+    return { lines: [`${BIN}: could not read the launcher profile selection (${statePath})`] }
+  }
+  return { lines: [otherProfileNoticeMessage(statePath, selection)] }
 }
 
 /**
@@ -504,15 +963,38 @@ if (process.argv[1] !== undefined
     const verb = options.dryRun ? 'would write' : 'wrote'
     const marker = options.dryRun ? '~' : '+'
     const selection = result.defaultSelection === undefined
-      ? `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`
+      ? ''
       : `${BIN}: ${result.defaultSelection.action === 'written' ? 'seeded' : 'would seed'}`
         + ` the desktop profile selection at ${result.defaultSelection.statePath}\n`
         + `${BIN}: the next DSH Desktop start selects ${PRESET_NAME};`
         + ` the tray picker overrides it at any time\n`
+    // Which profile boots is reported, never refused on: the route is
+    // machine-wide now (issue #1, owner ruling), so every profile serves it.
+    const readiness = reportProfileSelection({ home, userDataDir: options.userDataDir })
+    // Same voice as the file lines above: past tense for a write that happened,
+    // "would ..." for a rehearsal.
+    const machineVerb = {
+      unchanged: 'left the parametria-vision route as it was in',
+      create: 'wrote the parametria-vision route to',
+      append: 'added the parametria-vision route to',
+      update: 'replaced the parametria-vision route in',
+      'would-create': 'would write the parametria-vision route to',
+      'would-append': 'would add the parametria-vision route to',
+      'would-update': 'would replace the parametria-vision route in',
+    }[result.machinePatch.action]
+    const machine = `${BIN}: ${machineVerb} ${result.machinePatch.path}\n`
     process.stdout.write(
       `${BIN}: ${verb} ${result.written.length} file(s), ${result.unchanged.length} already current, under ${home}\n`
       + result.written.map(name => `  ${marker} ${name}\n`).join('')
-      + selection,
+      + machine
+      + selection
+      + readiness.lines.map(line => `${line}\n`).join('')
+      // The route reaches every profile, so selecting this one is optional —
+      // said once, plainly, rather than left for the operator to infer from the
+      // readiness line.
+      + (result.defaultSelection === undefined
+        ? `${BIN}: selecting the ${PRESET_NAME} profile is optional; the route serves whichever profile boots\n`
+        : ''),
     )
   } catch (error) {
     process.stderr.write(`${error instanceof InstallError ? error.message : String(error)}\n`)
@@ -532,4 +1014,11 @@ export {
   SELECTION_STATE_SEGMENTS,
   SELECTION_STATE_VERSION,
   assertDefaultTargetsTheLauncherHome,
+  MACHINE_PATCH_BEGIN,
+  MACHINE_PATCH_END,
+  MACHINE_PATCH_FILENAME,
+  MACHINE_PATCH_RECEIPT_KEY,
+  otherProfileNoticeMessage,
+  refuseMachinePatchMessage,
+  writeMachinePatch,
 }
