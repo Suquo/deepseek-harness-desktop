@@ -22,6 +22,12 @@ import {
 } from '../src/directory-picker-contract.ts'
 import type { DesktopRuntime, DesktopShellSpec } from '../src/runtime.ts'
 import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/renderer-boot-contract.ts'
+import {
+  PARAMETRIA_SHELL_TITLE,
+  SHELL_FAVICON_PATH,
+  SHELL_MANIFEST_PATH,
+  compatibilityBrandStyles,
+} from '../src/shell-branding.ts'
 
 const config: DesktopConfig = {
   mode: 'compatibility',
@@ -46,6 +52,7 @@ interface PluginHarness {
   pickDirectory: ReturnType<typeof vi.fn<() => Promise<string | null>>>
   validateDirectory: ReturnType<typeof vi.fn<(path: string) => Promise<boolean>>>
   route(path: string): WebRoute | undefined
+  index(html: string): string
   notify(next: DesktopSettings, prev: DesktopSettings): Promise<void>
   notifyLocale(preference: LocaleId | undefined): void
   notifyTheme(preference: ThemePreference): void
@@ -62,6 +69,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   const pickDirectory = vi.fn(async () => null)
   const validateDirectory = vi.fn(async () => true)
   const routes = new Map<string, WebRoute>()
+  const taps: ((html: string) => string)[] = []
   const settingsUpdated = new Set<(namespace: unknown, next: unknown) => void>()
   let localePreference: LocaleId | undefined
   let themePreference: ThemePreference = 'system'
@@ -121,6 +129,13 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
         routes.set(route.path, route)
         return () => { if (routes.get(route.path) === route) routes.delete(route.path) }
       }),
+      tapIndex: vi.fn((transform: (html: string) => string) => {
+        taps.push(transform)
+        return () => {
+          const at = taps.indexOf(transform)
+          if (at !== -1) taps.splice(at, 1)
+        }
+      }),
     },
     settings,
     logger: { warn: vi.fn(), error: vi.fn() },
@@ -143,6 +158,7 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
     pickDirectory,
     validateDirectory,
     route: path => routes.get(path),
+    index: html => taps.reduce((out, transform) => transform(out), html),
     notify: async (next, prev) => { await watcher?.(next, prev) },
     notifyLocale: (preference) => {
       localePreference = preference
@@ -218,8 +234,8 @@ describe('desktop Host plugin', () => {
     expect(harness.shell()).toEqual(expect.objectContaining({
       mode: 'compatibility',
       url: 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin',
-      productName: 'DSH Desktop',
-      windowTitle: 'DeepSeek Harness Desktop',
+      productName: 'Parametria',
+      windowTitle: 'Parametria',
       readThemeSource: expect.any(Function),
     }))
     expect(harness.shell()?.iconPath.endsWith(join('build', 'app-icon-mac.png'))).toBe(true)
@@ -231,6 +247,39 @@ describe('desktop Host plugin', () => {
 
     await harness.shell()?.requestModeChange('advanced')
     expect(harness.update).toHaveBeenCalledWith({ mode: 'advanced' })
+  })
+
+  it('brands every served index and claims the two shell asset paths', async () => {
+    const harness = createHarness()
+    apply(harness.ctx, config)
+    const index = '<html><head><title>DeepSeek Harness</title></head><body></body></html>'
+
+    // Compatibility is the default shell, and the owner ruling puts the brand there: the tap must
+    // rename the document AND carry the sheet, because that mode has no stylesheet of its own.
+    const branded = harness.index(index)
+    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain(compatibilityBrandStyles())
+
+    const icon = harness.route(SHELL_FAVICON_PATH)
+    const manifest = harness.route(SHELL_MANIFEST_PATH)
+    expect(icon).toEqual(expect.objectContaining({ kind: 'exact' }))
+    expect(manifest).toEqual(expect.objectContaining({ kind: 'exact' }))
+
+    const res = { writeHead: vi.fn(), end: vi.fn() } as unknown as ServerResponse
+    await icon?.handler({ method: 'GET' } as IncomingMessage, res)
+    expect(vi.mocked(res.writeHead)).toHaveBeenCalledWith(200, { 'content-type': 'image/svg+xml' })
+    expect(vi.mocked(res.end).mock.calls[0]?.[0]).toContain(`viewBox="0 0 500 500"`)
+  })
+
+  it('leaves the advanced shell to paint its own brand', () => {
+    const harness = createHarness()
+    apply(harness.ctx, { ...config, mode: 'advanced' })
+
+    // The advanced client sheet already covers these sites; the document-level sheet must stay out
+    // so one mode never has two owners for the same pixels. The title still applies in both modes.
+    const branded = harness.index('<html><head><title>DeepSeek Harness</title></head><body></body></html>')
+    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).not.toContain('<style>')
   })
 
   it('forwards same-origin renderer boot reports through the Host route', async () => {
