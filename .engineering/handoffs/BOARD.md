@@ -23,9 +23,9 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — gen-6 delivered #41 (PR #44). #45 (trim amortization) claimable low-priority.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-10 on the NO_ADAPTER diagnosis** (branch `pm/issue-1-no-adapter`, non-closing PR; fix lands in preset/profile materials, freeze if it needs a patch or operator-settings change). Queue: #23/#24/#30/#45 available, #6 buildable, #7 owner-gated.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-4 RESUMED on the rc.8 bump (#43)** after the npmMinimalAgeGate cleared at 15:42Z (RM ruled WAIT, zero policy change; steps 1-4 fenced at `44b3ac9ba6`). Folded into the resume: gated install + patch re-cuts (GNU-patch oracle; one directory-picker hunk genuinely regresses) + brand class re-derivation (railFish→railMark +5 classes, interacts with #28/#37) + does rc.8 reshape #40's reportDelivery surface + trademark-guidelines read for #26 + release-age check into the watch doc + bump-surface-omissions follow-up issue.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-7 on #49 PRIORITY** (rc.8 openBrowser: gate + every desktop launch open the operator browser; fix = openBrowser: false in our patch row, gen-10s mechanism relayed; branch `claude/issue-49-no-open`). #45 low.
+- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-10 delivered the #1 unblock (PR #50 merged on green: machine-wide parametria-vision route, ownership-guarded installer, ADR H-0005; root cause was profile-scoped route + never-switched profile). #1 OPEN pending-live: operator does ONE install:profile then runs. Queue: #23/#24/#30/#45/#48 available, #6 buildable, #7 owner-gated.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
 
 ## Queue (open GitHub issues, RM-triaged)
