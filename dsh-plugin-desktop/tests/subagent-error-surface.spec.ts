@@ -17,6 +17,7 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, {
   CallId,
   LlmAdapter,
+  LlmError,
   type GenerateOptions,
   type LlmResolvedModelInfo,
   type StreamChunk,
@@ -57,9 +58,9 @@ class ScriptedAdapter extends LlmAdapter {
   }
 }
 
-/** Adapter whose stream throws a plain (non-`LlmError`) failure. */
+/** Adapter whose stream throws the failure it was constructed with. */
 class ThrowingAdapter extends LlmAdapter {
-  constructor(private readonly failure: string) {
+  constructor(private readonly failure: Error) {
     super()
   }
 
@@ -69,9 +70,20 @@ class ThrowingAdapter extends LlmAdapter {
 
   async *stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
     await Promise.resolve()
-    throw new Error(this.failure)
+    throw this.failure
   }
 }
+
+/**
+ * The verbatim OpenRouter body from child sessions `de0ce2b8` and `2c7adafa`
+ * (2026-08-20 runs), whose parents saw only the laundered string. Kept literal
+ * because the wire message is the payload this change exists to deliver — and
+ * because it is a JSON body, which is why the diagnostic needs a byte bound.
+ */
+const REASONING_400_MESSAGE
+  = '400: {"message":"Reasoning is mandatory for this endpoint and cannot be disabled.",'
+  + '"code":400,"metadata":{"provider_name":null,"previous_errors":[{"code":400,'
+  + '"message":"Reasoning is mandatory for this endpoint and cannot be disabled."}]}}'
 
 /** Mount the real host services a delegating parent needs. */
 async function setup(): Promise<{ ctx: Context; parent: Agent }> {
@@ -150,8 +162,10 @@ describe('subagent parent-side error surface', () => {
     const result: SubagentResult = await run.result
 
     expect(result.stopReason).toBe('error')
-    expect(result.diagnostic).toBe(
-      `NO_ADAPTER — no adapter registered for provider "${MISROUTED_PROVIDER}" (child session ${run.id})`,
+    // Anchored on the shape this patch owns — code, cause, child session id —
+    // not on upstream's exact NO_ADAPTER sentence, which a pin bump may reword.
+    expect(result.diagnostic).toMatch(
+      new RegExp(`^NO_ADAPTER — .*"${MISROUTED_PROVIDER}".* \\(child session ${run.id}\\)$`, 'u'),
     )
     await run.dispose()
   })
@@ -163,14 +177,36 @@ describe('subagent parent-side error surface', () => {
     const outcome = await settleRun(run)
 
     expect(outcome.status).toBe('failed')
-    expect(outcome.detail).toBe(
-      `error; diagnostic: NO_ADAPTER — no adapter registered for provider "${MISROUTED_PROVIDER}" (child session ${childId})`,
+    expect(outcome.detail).toMatch(
+      new RegExp(
+        `^error; diagnostic: NO_ADAPTER — .*"${MISROUTED_PROVIDER}".* \\(child session ${childId}\\)$`,
+        'u',
+      ),
     )
+  })
+
+  it("carries a provider wire failure's own code and body (the live reasoning-400)", async () => {
+    const { ctx, parent } = await setup()
+    ctx.llm.registerAdapter(
+      ['openrouter-vision'],
+      new ThrowingAdapter(new LlmError(REASONING_400_MESSAGE, 'INVALID_REQUEST')),
+    )
+    const run = await startChild(ctx, parent, { provider: 'openrouter-vision', model: 'v1' })
+    const result: SubagentResult = await run.result
+
+    expect(result.stopReason).toBe('error')
+    expect(result.diagnostic).toBe(
+      `INVALID_REQUEST — ${REASONING_400_MESSAGE} (child session ${run.id})`,
+    )
+    await run.dispose()
   })
 
   it('flattens a non-LlmError child failure to UNKNOWN rather than dropping it', async () => {
     const { ctx, parent } = await setup()
-    ctx.llm.registerAdapter(['broken-vision'], new ThrowingAdapter('vision transport exploded'))
+    ctx.llm.registerAdapter(
+      ['broken-vision'],
+      new ThrowingAdapter(new Error('vision transport exploded')),
+    )
     const run = await startChild(ctx, parent, { provider: 'broken-vision', model: 'v1' })
     const result: SubagentResult = await run.result
 
