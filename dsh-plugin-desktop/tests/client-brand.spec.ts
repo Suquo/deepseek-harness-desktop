@@ -85,15 +85,22 @@ describe('Parametria brand presentation', () => {
     // to this site — a wordmark alone is what dropped a graphic the lockup already had.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
 
-    // rc.8 moved upstream's brand string out of the svg into a sibling TEXT node, which the svg rule
-    // above does not reach. Without this the lockup would show upstream's wordmark beside ours.
+    // rc.8 fills the lockup's name box from the `sidebar.brand.name` slot: an svg when something
+    // provides it (covered by the rule above), a TEXT fallback — `DSH Local Build` plus a build
+    // revision — when nothing does, which no svg rule reaches. This covers that branch.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand \.hHd-Xa_brandName \{ display: none; \}/)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }`)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }`)
 
     // Collapsed sidebar rail and empty-state hero: the mark, painted over the hidden svg.
-    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railMark { background: ${mark}; }`)
-    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railMark > \* \{ display: none; \}/)
+    // The rail paints the SVG, not the `.railMark` box. rc.7 put that class on the svg itself, so
+    // painting it worked and `> *` hid the whale's paths. rc.8 made it a wrapping span fed by the
+    // `sidebar.brand.mark` slot: the span is inline-flex with no intrinsic size (a background on it
+    // paints nothing) and the slot's div carries an inline `display: contents` that outranks `> *`.
+    // Both broken states were seen in the running app; reaching the svg restores rc.7's arrangement.
+    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railMark svg { background: ${mark}; }`)
+    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railMark svg > \* \{ display: none; \}/)
+    expect(css).not.toMatch(/\.hHd-Xa_railMark \{/)
     expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_fishHitbox \.pXSMma_fish > \* \{ display: none; \}/)
   })
@@ -105,9 +112,9 @@ describe('Parametria brand presentation', () => {
       .map(block => (block.split('{')[0] ?? '').trim())
       .filter(selector => selector.includes(`.${sidebar.brand}`))
 
-    // Exhaustive: the two rules that reshape the button, the one that hides upstream's own brand
-    // text (rc.8 split it out of the svg), and the two that generate boxes in it. A third generated
-    // box appearing here without a decision is exactly what this count catches.
+    // Exhaustive: the two rules that reshape the button, the one covering rc.8's slot-filled name
+    // box, and the two that generate boxes in it. A third generated box appearing here without a
+    // decision is exactly what this count catches.
     expect(lockupRules).toHaveLength(5)
 
     // Every generated box is qualified by upstream's expanded-state class. The rail renders no

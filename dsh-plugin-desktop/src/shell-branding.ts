@@ -174,8 +174,8 @@ ${lockup} svg { display: none; }
 ${lockup} .${SIDEBAR.brandName} { display: none; }
 ${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
 ${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
-.${SIDEBAR.logoRow} .${SIDEBAR.railMark} { background: ${mark}; }
-.${SIDEBAR.logoRow} .${SIDEBAR.railMark} > * { display: none; }
+.${SIDEBAR.logoRow} .${SIDEBAR.railMark} svg { background: ${mark}; }
+.${SIDEBAR.logoRow} .${SIDEBAR.railMark} svg > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} > * { display: none; }
 .${CONVERSATION.headline} .${CONVERSATION.headlineText} { display: none; }

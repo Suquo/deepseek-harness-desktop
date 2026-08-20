@@ -137,13 +137,34 @@ export const UPSTREAM_BRAND_CLASSES = {
  * rail renders no `.hHd-Xa_brand` element at all, so its icon-only resting state is reached by a
  * different rule entirely (`.hHd-Xa_railMark` below) and cannot pick either of these up.
  *
- * `.hHd-Xa_brandName` is hidden for the same reason the svg above it is, and it exists as a separate
- * rule only because rc.8 moved upstream's brand string out of the svg. At rc.7 the lockup's entire
- * content was one decorative `<svg>`, so hiding svg hid the brand. rc.8 renders `brandMark` (still an
- * svg) beside `brandName`, a TEXT node carrying upstream's own wordmark — which `svg { display: none }`
- * does not reach. Without this rule the rc.8 lockup would show upstream's brand text and this sheet's
- * `::after` wordmark side by side. Hiding it restores exactly the rc.7 rendering; it does not change
- * what this sheet was already doing.
+ * The rail rules below paint the SVG rather than the `.hHd-Xa_railMark` box, and that indirection is
+ * load-bearing. At rc.7 `railFish` was a class upstream put ON the svg itself
+ * (`<FishLogo className={railFish} size={24}/>`), so painting `.railFish` painted a box the svg's own
+ * 24px geometry sized, and `> *` hid the whale's `<path>` children inside it. rc.8 turned that class
+ * into a wrapping `<span>` whose content comes from the `sidebar.brand.mark` slot, which interposes
+ * `<div data-slot… style="display: contents">`. Two things break at once: the span is `inline-flex`
+ * with no intrinsic size, so a background on it has nothing to paint, and `> *` now names that div,
+ * whose INLINE `display: contents` outranks any rule this sheet can write.
+ *
+ * Both failure modes were observed in the running app rather than deduced. Keeping `> *` left
+ * upstream's whale drawn over our mark (svg visible, 24x17.66, opacity 1); widening it to `*` hid the
+ * whale but collapsed the span to 0x0 and painted nothing at all. Reaching the svg restores rc.7's
+ * arrangement exactly — our background on the box upstream's own svg sizes, its paths hidden inside
+ * it. Every headless gate was green through both broken states, because no fence in this repo can
+ * see a computed style.
+ *
+ * `.hHd-Xa_brandName` is hidden for the same reason the svg above it is, and it needs its own rule
+ * because rc.8 gave that box a second, non-svg form. At rc.7 the lockup's whole content was one
+ * decorative `<svg>`, so `svg { display: none }` hid the brand outright. rc.8 splits the lockup into
+ * `brandIdentity > brandMark + brandName` and fills `brandName` from the `sidebar.brand.name` SLOT:
+ * when something provides that slot it renders upstream's wordmark svg — already covered by the rule
+ * above, and that is what a running advanced shell shows today — but when nothing does, the fallback
+ * is TEXT (`DSH Local Build` plus a build revision), which no svg rule reaches. That fallback is
+ * live, not hypothetical: this build's own served `<title>` is `DSH Local Build`.
+ *
+ * So this rule is coverage for the fallback branch rather than a fix for a double wordmark anyone
+ * has seen. Either way it restores the rc.7 rendering — one brand, ours — instead of changing what
+ * this sheet does.
  *
  * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
  * hidden, so the superseded string leaves the accessibility tree instead of being announced
@@ -183,8 +204,8 @@ ${lockup} svg { display: none; }
 ${lockup} .hHd-Xa_brandName { display: none; }
 ${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
 ${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
-.dshDesktopUpstreamSidebar .hHd-Xa_railMark { background: ${mark}; }
-.dshDesktopUpstreamSidebar .hHd-Xa_railMark > * { display: none; }
+.dshDesktopUpstreamSidebar .hHd-Xa_railMark svg { background: ${mark}; }
+.dshDesktopUpstreamSidebar .hHd-Xa_railMark svg > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_headline .pXSMma_headlineText { display: none; }
