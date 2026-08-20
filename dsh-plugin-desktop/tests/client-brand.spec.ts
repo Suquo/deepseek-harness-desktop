@@ -27,6 +27,20 @@ const CONVERSATION = '@deepseek-ai/dsh-client-ui-conversation'
 const OVERLAY_CLASS_PREFIX = 'dshDesktop'
 
 /**
+ * Pinned upstream facts a brand override's REASONING rests on, beyond the classes it selects.
+ *
+ * The sidebar lockup is the one such fact today. The wordmark rides that button's `::after`, and
+ * both brand sheets justify leaving it unlabelled by upstream's own `aria-label`: the accessible
+ * name computation reaches `aria-label` (step 2C) before name-from-content (step 2F), so the
+ * generated wordmark text is never gathered and the button keeps announcing its "New session"
+ * action. Were that label dropped upstream, the `::after` would silently start naming the button.
+ * The label is therefore load-bearing and gets a guard like every other pinned fact.
+ */
+const UPSTREAM_BRAND_ANCHORS: Record<string, RegExp> = {
+  '@deepseek-ai/dsh-client-ui-sidebar': /\.brand, \w+\.wide\),\s*"aria-label": t\("session\.new\.label"\)/,
+}
+
+/**
  * Read one pinned upstream client bundle.
  * @param packageName - upstream package shipping a `./client` entry.
  * @returns the bundle text.
@@ -154,6 +168,8 @@ describe('Parametria brand presentation', () => {
       for (const [local, emitted] of Object.entries(classes)) {
         expect(bundle).toContain(`"${local}": "${emitted}"`)
       }
+      const anchor = UPSTREAM_BRAND_ANCHORS[packageName]
+      if (anchor !== undefined) expect(bundle).toMatch(anchor)
     },
   )
 

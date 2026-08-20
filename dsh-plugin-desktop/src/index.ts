@@ -26,6 +26,14 @@ import {
   handleDesktopDirectoryPickerRequest,
   handleDesktopDirectoryValidationRequest,
 } from './directory-picker-route.ts'
+import {
+  SHELL_FAVICON_PATH,
+  SHELL_MANIFEST_PATH,
+  brandShellIndex,
+  parametriaFaviconSvg,
+  parametriaWebManifest,
+  serveShellAsset,
+} from './shell-branding.ts'
 import type { DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
@@ -159,6 +167,30 @@ export function apply(ctx: Context, config: Config): void {
     }),
     'dsh-plugin-desktop: renderer boot report route',
   )
+  // Shell-level brand identity, served to every face of the product: the compatibility shell, the
+  // advanced shell, and the same loopback URL opened in a browser. The two asset routes claim paths
+  // the upstream dist would otherwise answer; named routes are matched before the fallback, so the
+  // static server keeps serving everything else untouched.
+  ctx.effect(
+    () => ctx.webServer.tapIndex(html => brandShellIndex(html, config.mode)),
+    'dsh-plugin-desktop: shell brand identity',
+  )
+  ctx.effect(
+    () => ctx.webServer.register({
+      kind: 'exact',
+      path: SHELL_FAVICON_PATH,
+      handler: (req, res) => { serveShellAsset(req, res, 'image/svg+xml', parametriaFaviconSvg()) },
+    }),
+    'dsh-plugin-desktop: shell brand icon route',
+  )
+  ctx.effect(
+    () => ctx.webServer.register({
+      kind: 'exact',
+      path: SHELL_MANIFEST_PATH,
+      handler: (req, res) => { serveShellAsset(req, res, 'application/manifest+json', parametriaWebManifest()) },
+    }),
+    'dsh-plugin-desktop: shell brand manifest route',
+  )
   if (runtime.platform === 'win32') {
     ctx.effect(
       () => ctx.webServer.register({
@@ -228,8 +260,15 @@ export function apply(ctx: Context, config: Config): void {
     () => runtime.schedule({
       ...config,
       url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
-      productName: 'DSH Desktop',
-      windowTitle: 'DeepSeek Harness Desktop',
+      // Display identity only: this name reaches the tray tooltip and the tray's "Open …" command,
+      // and the caption reaches the Windows title bar and the accessible window title. The
+      // application's ON-DISK identity is a different value on purpose — `main.ts` holds
+      // `PRODUCT_NAME` and passes it to `app.setName()` before the first `app.getPath('userData')`
+      // read, so that string, not this one, names `%APPDATA%\DSH Desktop`. Renaming it here would
+      // strand every installed profile, session, and log; moving the data identity is a migration,
+      // not a rebrand, and is tracked separately.
+      productName: 'Parametria',
+      windowTitle: 'Parametria',
       iconPath,
       trayIcons,
       readLocalePreference: () => {
