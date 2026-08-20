@@ -23,7 +23,6 @@ import {
 import type { DesktopRuntime, DesktopShellSpec } from '../src/runtime.ts'
 import { RENDERER_BOOT_REPORT_PATH, type RendererBootReport } from '../src/renderer-boot-contract.ts'
 import {
-  PARAMETRIA_SHELL_TITLE,
   SHELL_FAVICON_PATH,
   SHELL_MANIFEST_PATH,
   compatibilityBrandStyles,
@@ -257,7 +256,7 @@ describe('desktop Host plugin', () => {
     // Compatibility is the default shell, and the owner ruling puts the brand there: the tap must
     // rename the document AND carry the sheet, because that mode has no stylesheet of its own.
     const branded = harness.index(index)
-    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain('<title>Parametria</title>')
     expect(branded).toContain(compatibilityBrandStyles())
 
     const icon = harness.route(SHELL_FAVICON_PATH)
@@ -278,7 +277,7 @@ describe('desktop Host plugin', () => {
     // The advanced client sheet already covers these sites; the document-level sheet must stay out
     // so one mode never has two owners for the same pixels. The title still applies in both modes.
     const branded = harness.index('<html><head><title>DeepSeek Harness</title></head><body></body></html>')
-    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain('<title>Parametria</title>')
     expect(branded).not.toContain('<style>')
   })
 

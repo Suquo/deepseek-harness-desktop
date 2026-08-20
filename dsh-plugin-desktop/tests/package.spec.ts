@@ -6,6 +6,24 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
+import {
+  APP_ICON_PATH,
+  MARK_SOURCE_PATH,
+  TRAY_BRAND_COLOR,
+  TRAY_SOURCE_PATH,
+  markColors,
+  markElements,
+  trayIconSvg,
+} from '../scripts/brand-icon-sources.ts'
+import { renderAppIcon } from '../scripts/generate-brand-icons.ts'
+
+/**
+ * Digest of the committed application icon.
+ *
+ * Produced by `node scripts/generate-brand-icons.ts` from `assets/parametria-logo-icon.svg`. It
+ * replaced the vendored DeepSeek iOS icon (`315fbc6e…de80`) when the fork took its own mark.
+ */
+const APP_ICON_SHA256 = 'ab8aff25014e80dec1a0736b1b8e60972c22ab01d79f24b4084d0da16647cde8'
 
 const packageRoot = new URL('../', import.meta.url)
 const workspaceRoot = new URL('../', packageRoot)
@@ -501,11 +519,15 @@ describe('published package surface', () => {
     expect(ciWorkflow).toContain('Documentation-only change; product build and tests are not required.')
   })
 
-  it('keeps one fixed brand-blue tray source for generated native assets', () => {
+  it('keeps one fixed brand-colour tray source for generated native assets', () => {
     const source = readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')
 
-    expect(source.match(/#4D6BFE/gu)).toHaveLength(1)
-    expect(source).not.toMatch(/<style\b|prefers-color-scheme/iu)
+    // One paint value, and only one, read by attribute rather than by scanning for `#` tokens —
+    // `fill="white"`, `fill="rgb(…)"` and `style="fill:…"` are all colours a token scan cannot
+    // see. The macOS template variants are produced by replacing that one value with black, so a
+    // second one would leave a template image that is not a silhouette.
+    expect([...markColors(source)]).toEqual([TRAY_BRAND_COLOR])
+    expect(source).not.toMatch(/<style\b|style\s*=|prefers-color-scheme/iu)
     for (const filename of [
       'tray-iconTemplate.png',
       'tray-iconTemplate@2x.png',
@@ -518,12 +540,111 @@ describe('published package surface', () => {
     }
   })
 
-  it('keeps the iOS Default source icon unmodified', () => {
-    const digest = createHash('sha256')
-      .update(readFileSync(new URL('build/app-icon.png', packageRoot)))
-      .digest('hex')
+  it('leaves every generated tray bitmap a single-hue silhouette', async () => {
+    // The outcome, not the generator's source text. Whatever the generator is written to do, a
+    // template image that carries anything but black-plus-alpha is not a template image, and a
+    // brand bitmap that carries a second hue has lost the property the whole tray derivation
+    // exists to preserve. Anti-aliasing makes edge pixels partly transparent, never differently
+    // hued, so the check is on hue at full opacity.
+    const [r, g, b] = [1, 3, 5].map(index => Number.parseInt(TRAY_BRAND_COLOR.slice(index, index + 2), 16))
+    for (const [filename, expected] of [
+      ['tray-iconTemplate.png', [0, 0, 0]],
+      ['tray-iconTemplate@2x.png', [0, 0, 0]],
+      ['tray-icon-blue.png', [r, g, b]],
+      ['tray-icon-blue@1.25x.png', [r, g, b]],
+      ['tray-icon-blue@1.5x.png', [r, g, b]],
+      ['tray-icon-blue@2x.png', [r, g, b]],
+    ] as [string, number[]][]) {
+      const { data, info } = await sharp(readFileSync(new URL(`build/${filename}`, packageRoot)))
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true })
+      const opaque: number[][] = []
+      for (let offset = 0; offset < data.length; offset += info.channels) {
+        if ((data[offset + 3] as number) === 255) {
+          opaque.push([data[offset] as number, data[offset + 1] as number, data[offset + 2] as number])
+        }
+      }
 
-    expect(digest).toBe('315fbc6e57ff1f34894f21f66fb7f9f26deccf78333c71fad21a6cec64e7de80')
+      expect(opaque.length).toBeGreaterThan(0)
+      for (const pixel of opaque) expect(pixel).toEqual(expected)
+    }
+  })
+
+  it('derives the tray source from the vendored mark rather than hand-authoring it', () => {
+    // `build/tray-icon.svg` is committed, so nothing at build time would notice it drifting from
+    // the artwork the application paints. Re-deriving it here is the guard: edit either the mark or
+    // the committed source alone and this fails.
+    const mark = readFileSync(new URL('assets/parametria-logo-icon.svg', packageRoot), 'utf8')
+
+    expect(readFileSync(new URL('build/tray-icon.svg', packageRoot), 'utf8')).toBe(trayIconSvg(mark))
+    expect(TRAY_BRAND_COLOR).toBe('#1a8fc4')
+
+    // The generator writes the two committed sources; these bind the paths it writes to the paths
+    // every guard above reads, so a generator pointed at a different file cannot leave the guards
+    // passing against artwork nothing ships.
+    expect(MARK_SOURCE_PATH).toBe(fileURLToPath(new URL('assets/parametria-logo-icon.svg', packageRoot)))
+    expect(TRAY_SOURCE_PATH).toBe(fileURLToPath(new URL('build/tray-icon.svg', packageRoot)))
+    expect(APP_ICON_PATH).toBe(fileURLToPath(new URL('build/app-icon.png', packageRoot)))
+
+    // The derivation refuses a source it cannot flatten, rather than emitting one and trusting the
+    // build to notice. A named colour is the case a hex-token scan cannot see.
+    expect(() => trayIconSvg(mark.replace('fill="#1a8fc4"', 'fill="white"'))).toThrow(/only #1a8fc4/u)
+
+    // The derivation drops the mark's `#fff` construction hairlines and keeps every solid element,
+    // which is what makes a single-colour silhouette possible at all.
+    expect(mark).toMatch(/<line\b/u)
+    expect(trayIconSvg(mark)).not.toMatch(/<line\b|#fff/u)
+    expect(markElements(mark)).toHaveLength(26)
+    expect(markElements(mark).filter(element => !element.startsWith('<line'))).toHaveLength(12)
+  })
+
+  it('carries the Parametria mark as the application icon, in the format the macOS derivation requires', async () => {
+    const icon = readFileSync(new URL('build/app-icon.png', packageRoot))
+    const digest = createHash('sha256').update(icon).digest('hex')
+    const metadata = await sharp(icon).metadata()
+
+    // The pin. This icon is a committed raster rather than a build product on purpose — a PNG
+    // re-encoded per machine could carry no digest at all — so the digest is what says the bytes in
+    // the tree are the reviewed ones. Regenerate with `node scripts/generate-brand-icons.ts` and
+    // move this line deliberately.
+    expect(digest).toBe(APP_ICON_SHA256)
+
+    // The format is a contract, not a coincidence: `generate-mac-app-icon.mjs` refuses any source
+    // that is not a 1024-pixel RGBA16 PNG with an ICC profile, and copies that profile onto its
+    // own output.
+    expect(metadata).toEqual(expect.objectContaining({
+      format: 'png',
+      width: 1024,
+      height: 1024,
+      space: 'rgb16',
+      depth: 'ushort',
+      bitsPerSample: 16,
+      channels: 4,
+      hasAlpha: true,
+    }))
+    expect(metadata.icc).toBeInstanceOf(Buffer)
+  })
+
+  it('keeps the committed application icon a render of the vendored mark', async () => {
+    // A digest says the bytes did not change; it does not say what they depict. This re-renders the
+    // mark and compares the two at low resolution, which is insensitive to the rasteriser's
+    // anti-aliasing across platforms and decisive about the artwork being a different picture.
+    const mark = readFileSync(new URL('assets/parametria-logo-icon.svg', packageRoot), 'utf8')
+    const compare = async (image: Buffer): Promise<Buffer> => sharp(image)
+      .resize(64, 64, { fit: 'fill' })
+      .flatten({ background: '#ffffff' })
+      .raw()
+      .toBuffer()
+
+    const committed = await compare(readFileSync(new URL('build/app-icon.png', packageRoot)))
+    const rendered = await compare(await renderAppIcon(mark))
+    let total = 0
+    for (const [index, value] of committed.entries()) {
+      total += Math.abs(value - (rendered[index] as number))
+    }
+
+    expect(total / committed.length).toBeLessThan(8)
   })
 
   it('generates a centered macOS icon with a 100-pixel visual inset', async () => {

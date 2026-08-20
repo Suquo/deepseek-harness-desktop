@@ -1,11 +1,11 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { relative } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { UPSTREAM_BRAND_CLASSES, parametriaBrandStyles } from '../src/client/brand.ts'
 import { PARAMETRIA_MARK_ELEMENTS, PARAMETRIA_MARK_VIEW_BOX } from '../src/client/parametria-mark.ts'
 import {
-  PARAMETRIA_SHELL_TITLE,
   SHELL_FAVICON_PATH,
   SHELL_MANIFEST_PATH,
   brandShellIndex,
@@ -13,7 +13,67 @@ import {
   parametriaFaviconSvg,
   parametriaWebManifest,
   serveShellAsset,
+  SHELL_ASSET_ALLOW,
 } from '../src/shell-branding.ts'
+
+/**
+ * The display name this product ships, spelled out rather than imported.
+ *
+ * The source reads one exported constant on every surface, which is the point of the consolidation
+ * — but a spec that imported that constant would assert nothing about its value. Restating the
+ * string here is what turns "all four surfaces agree" into "all four surfaces say Parametria".
+ */
+const PRODUCT_NAME = 'Parametria'
+
+/**
+ * Every TypeScript file under a directory, recursively.
+ *
+ * The consolidation fence sweeps the package's whole source tree rather than the two modules that
+ * carry the name today, so a third surface that restates it is caught the day it appears. Both
+ * extensions are swept: the client face ships `.tsx`, and a wordmark restated in a component would
+ * be exactly the drift this is for.
+ * @param root - absolute directory to walk.
+ * @returns absolute paths of the TypeScript files found beneath it.
+ */
+function sourceFiles(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true, recursive: true })
+    .filter(entry => entry.isFile() && /\.tsx?$/u.test(entry.name))
+    .map(entry => `${entry.parentPath}/${entry.name}`)
+}
+
+/**
+ * Every string-literal value in a TypeScript source, with comments excluded.
+ *
+ * Written as a scanner rather than a regex on purpose. A regex that looks for a quoted name has to
+ * choose between two failure modes: anchored to the exact string it misses `'Parametria Terminal'`
+ * and `'Parametr' + 'ia'`, and loosened to span quote characters it starts matching prose — this
+ * package's own doc comments are full of the word, and full of apostrophes that a naive tokenizer
+ * reads as opening quotes. Walking the source once with a mode is the only version that answers
+ * the question actually being asked: which *values* does this code state?
+ * @param source - TypeScript or TSX source text.
+ * @returns the contents of every string and template literal, comments dropped.
+ */
+function stringLiterals(source: string): string[] {
+  const found: string[] = []
+  let mode: 'code' | 'line' | 'block' | '"' | "'" | '`' = 'code'
+  let value = ''
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] as string
+    const next = source[index + 1]
+    if (mode === 'code') {
+      if (char === '/' && next === '/') { mode = 'line'; index += 1 }
+      else if (char === '/' && next === '*') { mode = 'block'; index += 1 }
+      else if (char === '"' || char === "'" || char === '`') { mode = char; value = '' }
+      continue
+    }
+    if (mode === 'line') { if (char === '\n') mode = 'code'; continue }
+    if (mode === 'block') { if (char === '*' && next === '/') { mode = 'code'; index += 1 } continue }
+    if (char === '\\') { value += next ?? ''; index += 1; continue }
+    if (char === mode) { found.push(value); mode = 'code'; continue }
+    value += char
+  }
+  return found
+}
 
 const UPSTREAM_INDEX_PATH = fileURLToPath(
   new URL('../../deepseek-harness/apps/web/index.html', import.meta.url),
@@ -67,19 +127,19 @@ describe('Parametria shell identity', () => {
     // The pinned index ships DeepSeek's title; after the tap neither the element nor the string
     // survives, and exactly one title remains.
     expect(html).toContain('<title>DeepSeek Harness</title>')
-    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain('<title>Parametria</title>')
     expect(branded).not.toContain('DeepSeek')
     expect([...branded.matchAll(/<title>/g)]).toHaveLength(1)
 
     // Everything else the document carries is upstream's business: the tap is identity-only.
-    expect(branded.replace(`<title>${PARAMETRIA_SHELL_TITLE}</title>`, '<title>DeepSeek Harness</title>'))
+    expect(branded.replace('<title>Parametria</title>', '<title>DeepSeek Harness</title>'))
       .toBe(html)
   })
 
   it('states the title on a document that ships without one', () => {
     const branded = brandShellIndex('<html><head><meta charset="utf-8" /></head><body></body></html>', 'advanced')
 
-    expect(branded).toContain(`<head><title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain(`<head><title>${PRODUCT_NAME}</title>`)
     expect(branded).toContain('<meta charset="utf-8" />')
   })
 
@@ -153,8 +213,8 @@ describe('Parametria shell identity', () => {
       icons: { src: string }[]
     }
 
-    expect(manifest.name).toBe(PARAMETRIA_SHELL_TITLE)
-    expect(manifest.short_name).toBe(PARAMETRIA_SHELL_TITLE)
+    expect(manifest.name).toBe(PRODUCT_NAME)
+    expect(manifest.short_name).toBe(PRODUCT_NAME)
     expect(parametriaWebManifest()).not.toContain('DeepSeek')
     expect(parametriaWebManifest()).not.toContain('DSH')
 
@@ -187,11 +247,78 @@ describe('Parametria shell identity', () => {
     expect(head.body()).toBe('')
 
     // Anything else is refused rather than served against a verb the dist server would have
-    // answered 405.
+    // answered 405 — and the refusal names the methods that would have worked, which RFC 9110
+    // §15.5.6 makes mandatory on this status and no other. No content-type: there is no body.
     const post = fakeResponse()
     serveShellAsset({ method: 'POST' } as IncomingMessage, post.res, 'image/svg+xml', 'body')
     expect(post.status()).toBe(405)
+    expect(post.headers()).toEqual({ allow: 'GET, HEAD' })
     expect(post.body()).toBe('')
+
+    // A request with no method at all is refused the same way, rather than falling through the
+    // inequality pair the branch used to be written as.
+    const methodless = fakeResponse()
+    serveShellAsset({} as IncomingMessage, methodless.res, 'image/svg+xml', 'body')
+    expect(methodless.status()).toBe(405)
+    expect(methodless.headers()).toEqual({ allow: 'GET, HEAD' })
+  })
+
+  it('advertises exactly the methods it answers', () => {
+    // The `Allow` value and the accepted set are one list read twice, so this asserts the two
+    // against a third statement of the same fact: every method named is served, and a method that
+    // is not named is refused.
+    //
+    // OPTIONS is in the refused list deliberately, and it is the one place this route departs from
+    // what RFC 9110 §9.3.7 would prefer. These two routes exist to displace the upstream dist
+    // server on two paths, and matching its method semantics is the whole point of the branch —
+    // adding an OPTIONS responder here would make the branded paths behave differently from every
+    // other path that server answers. The refusal at least carries `Allow`, which is the field an
+    // OPTIONS response would have been asked for. Pinned so the deviation is a decision on the
+    // record rather than an accident nobody re-examines.
+    const advertised = SHELL_ASSET_ALLOW.split(', ')
+    expect(advertised).toEqual(['GET', 'HEAD'])
+
+    for (const method of advertised) {
+      const res = fakeResponse()
+      serveShellAsset({ method } as IncomingMessage, res.res, 'image/svg+xml', 'body')
+      expect(res.status()).toBe(200)
+    }
+    for (const method of ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
+      const res = fakeResponse()
+      serveShellAsset({ method } as IncomingMessage, res.res, 'image/svg+xml', 'body')
+      expect(res.status()).toBe(405)
+      expect(res.headers().allow).toBe(SHELL_ASSET_ALLOW)
+    }
+  })
+
+  it('states the product display name once, and reads it everywhere else', () => {
+    // The consolidation fence. Five user-visible surfaces carry the name over six read sites — the
+    // served title (two arms of the transform), the manifest's `name` and `short_name`, and the
+    // native shell's productName and windowTitle — reached from two modules. Any string literal in
+    // `src/` that CONTAINS the name, other than the one declaration in `client/brand.ts`, is a
+    // surface that has stopped reading the constant: that is exactly how four of five get renamed
+    // and the fifth does not. Containment rather than equality, so `'Parametria Terminal'` and a
+    // concatenated half both count.
+    const root = fileURLToPath(new URL('..', import.meta.url))
+    const declarations: string[] = []
+    for (const file of sourceFiles(fileURLToPath(new URL('../src', import.meta.url)))) {
+      const stated = stringLiterals(readFileSync(file, 'utf8'))
+        .filter(literal => literal.includes(PRODUCT_NAME))
+      // Relative, because a fence's failure message is a result: an absolute path here would name
+      // this machine in a report meant to be read anywhere.
+      declarations.push(...stated.map(() => relative(root, file).replaceAll('\\', '/')))
+    }
+
+    expect(declarations).toEqual(['src/client/brand.ts'])
+    expect(PRODUCT_NAME).toBe('Parametria')
+    expect(parametriaWebManifest()).toContain(`"name": "${PRODUCT_NAME}"`)
+
+    // The scanner reads values, not prose: a comment mentioning Parametria is not a restatement,
+    // and a literal that merely contains the name is. Both directions asserted, because a scanner
+    // that silently returned nothing would make the sweep above vacuous.
+    expect(stringLiterals('// Parametria\nconst a = 1\n')).toEqual([])
+    expect(stringLiterals('/* it\'s Parametria */\nconst a = "Parametria Terminal"\n'))
+      .toEqual(['Parametria Terminal'])
   })
 
   it('is a pure transform, so every index response gets the same document', () => {

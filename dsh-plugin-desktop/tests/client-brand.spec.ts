@@ -18,6 +18,7 @@ import {
 } from '../src/client/parametria-mark.ts'
 import { apply } from '../src/client/index.ts'
 import { advancedStyleSheet } from '../src/client/styles.ts'
+import { MARK_SOURCE_PATH, markElements } from '../scripts/brand-icon-sources.ts'
 
 const require = createRequire(import.meta.url)
 const ASSET_PATH = fileURLToPath(new URL('../assets/parametria-logo-icon.svg', import.meta.url))
@@ -129,8 +130,14 @@ describe('Parametria brand presentation', () => {
   })
 
   it('keeps the inlined mark identical to the committed asset', () => {
+    // The element list is read through the same `markElements` the two native icon derivations
+    // use, not through a second regex of this spec's own. Two independent readers of one file
+    // agree until the artwork gains an element type only one of them matches — and then each guard
+    // keeps passing against its own idea of the mark while the copies silently diverge. The path
+    // is asserted to be the same file for the same reason.
+    expect(MARK_SOURCE_PATH).toBe(ASSET_PATH)
     const asset = readFileSync(ASSET_PATH, 'utf8')
-    const assetElements = [...asset.matchAll(/<(?:line|path|polygon|circle)\s[^>]*\/>/g)].map(match => match[0])
+    const assetElements = markElements(asset)
     const assetViewBox = /viewBox="([^"]+)"/.exec(asset)?.[1]
 
     expect(assetElements).toHaveLength(26)
