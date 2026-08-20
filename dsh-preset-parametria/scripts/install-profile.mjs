@@ -27,6 +27,17 @@
  *
  * Exits non-zero on any refusal, so a caller cannot mistake a skipped write
  * for a completed install.
+ *
+ * The last step is a READINESS check, not another write: the preset installs
+ * across two planes whose scopes differ — the agent preset lands in
+ * `$DSH_HOME/.agent-presets/`, which EVERY profile scans, while the
+ * `parametria-vision` route its validator delegation pins lands in
+ * `profiles/parametria/` and belongs to that profile alone. A machine that
+ * boots any other profile therefore runs the persona, spawns the validator,
+ * and kills it at its first request with NO_ADAPTER (issue #1, runs 3 and 4 —
+ * both lost to exactly this, with the install reporting success). So a
+ * completed install whose machine selects another profile exits non-zero and
+ * says which profile it selects.
  */
 
 import { createHash } from 'node:crypto'
@@ -228,6 +239,92 @@ export function writeDefaultSelection(statePath, whenLate = '') {
     throw new InstallError(seedFailedMessage(statePath, cause) + whenLate)
   }
   return state
+}
+
+/**
+ * Read the launcher's selection document, distinguishing absent from unreadable.
+ *
+ * Absence is a real answer (the launcher has never recorded a choice), so it
+ * gets its own value rather than sharing one with a file this installer could
+ * not parse: {@link classifyProfileSelection} refuses only on a document that
+ * positively names another profile, and an unknown may never be reported as a
+ * refusal or as readiness.
+ * @param statePath - the selection-state file.
+ * @returns the parsed document, `undefined` when absent, `null` when unusable.
+ */
+export function readSelectionDocument(statePath) {
+  let text
+  try {
+    text = readFileSync(statePath, 'utf8')
+  } catch (cause) {
+    // Only ENOENT proves absence. An unreadable directory entry (EACCES, a
+    // directory in the file's place) is an unknown, and reporting it as "never
+    // chosen" would invite a `--default` seed this installer cannot honour.
+    return cause?.code === 'ENOENT' ? undefined : null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    return parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) ? null : parsed
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Classify what the launcher's persisted selection means for this preset.
+ *
+ * `pending` outranks `active`: it names the profile the next start will TRY,
+ * and the launcher only promotes it once that profile's shell has mounted. So
+ * a pending choice of this preset counts as selected even while `active` still
+ * reads `desktop`, and a pending choice of anything else counts as another
+ * profile even when `active` happens to read this one.
+ * @param document - the parsed selection document from {@link readSelectionDocument}.
+ * @returns `unseeded`, `unreadable`, `selected`, or `other` with the chosen name.
+ */
+export function classifyProfileSelection(document) {
+  if (document === undefined) return { kind: 'unseeded' }
+  if (document === null) return { kind: 'unreadable' }
+  const { active, pending } = document
+  if (typeof pending === 'string' && pending.length > 0) {
+    return pending === PRESET_NAME
+      ? { kind: 'selected', via: 'pending' }
+      : { kind: 'other', via: 'pending', chosen: pending }
+  }
+  if (typeof active === 'string' && active.length > 0) {
+    return active === PRESET_NAME
+      ? { kind: 'selected', via: 'active' }
+      : { kind: 'other', via: 'active', chosen: active }
+  }
+  return { kind: 'unreadable' }
+}
+
+/**
+ * The refusal for a machine whose launcher boots some other profile.
+ *
+ * This is the checked half of what used to be a hint. The preset installs
+ * across two planes with different scopes — the agent preset lands in
+ * `$DSH_HOME/.agent-presets/`, which every profile scans, while the
+ * `parametria-vision` route it pins lands in `profiles/parametria/` and exists
+ * for that profile alone. So a completed install on a machine that boots
+ * another profile produces a validator that spawns, delegates, and dies at its
+ * first request. That is the silent-blind-validator class this preset exists to
+ * remove, which is why it exits non-zero rather than printing a note.
+ * @param statePath - the selection-state file that was read.
+ * @param selection - the `other` classification.
+ * @returns the operator-facing refusal text.
+ */
+function refuseUnselectedProfileMessage(statePath, selection) {
+  return `${BIN}: the profile files are installed, but this machine does not boot them.\n`
+    + `  selection state: ${statePath}\n`
+    + `  it selects profile ${JSON.stringify(selection.chosen)} (${selection.via}),`
+    + ` not ${JSON.stringify(PRESET_NAME)}\n`
+    + `The preset's validator delegation pins provider "parametria-vision", which the\n`
+    + `${PRESET_NAME} PROFILE declares and no other profile does, while the preset itself is\n`
+    + 'home-level and loads under every profile. Under any other profile the validator\n'
+    + 'spawns with the right route config and dies at its first request with\n'
+    + '  no adapter registered for provider "parametria-vision" (NO_ADAPTER)\n'
+    + `Select the profile — ${DESKTOP_PRODUCT_NAME} tray > Profile > ${PRESET_NAME}, which persists —\n`
+    + `then re-run this installer to confirm. Headless callers: 'dsh --profile ${PRESET_NAME}'.`
 }
 
 /** One diagnostic for every non-refusal seed failure, naming the step. */
@@ -468,6 +565,56 @@ export function parseArgs(argv) {
 }
 
 /**
+ * Report whether the machine this ran on will actually boot the installed profile.
+ *
+ * Runs against the launcher's own selection state, and only when this install
+ * targeted the home the launcher reads — a `--home <temp>` install (tests,
+ * evidence harnesses, an isolated instance) says nothing about the operator's
+ * machine, and reading their real state to judge it would be noise at best.
+ * An explicit `--user-data-dir` is the deliberate pairing of a home with a data
+ * root, so it opts back in against that root.
+ * @param options - resolved home, optional userDataDir, and platform seams.
+ * @returns lines to print, plus the refusal message when one applies.
+ */
+export function reportProfileSelection({
+  home,
+  userDataDir,
+  launcherHome = resolveHome(undefined),
+  platform = process.platform,
+  environment = process.env,
+  homeDirectory = homedir(),
+} = {}) {
+  if (userDataDir === undefined && home !== launcherHome) {
+    return { lines: [`${BIN}: selection check skipped: --home is not the launcher's home (${launcherHome})`] }
+  }
+  let statePath
+  try {
+    statePath = selectionStatePath(userDataDir ?? defaultDesktopUserDataDirectory(platform, environment, homeDirectory))
+  } catch (cause) {
+    return { lines: [`${BIN}: selection check skipped: ${cause instanceof InstallError ? cause.message : String(cause)}`] }
+  }
+  const selection = classifyProfileSelection(readSelectionDocument(statePath))
+  if (selection.kind === 'selected') {
+    return { lines: [`${BIN}: the launcher selection names ${PRESET_NAME} (${selection.via}): ${statePath}`] }
+  }
+  if (selection.kind === 'unseeded') {
+    // Not a refusal: nothing has chosen yet, and `--default` still can.
+    return {
+      lines: [
+        `${BIN}: no launcher profile selection recorded yet (${statePath})`,
+        `${BIN}: until one names ${PRESET_NAME}, the validator's parametria-vision route is not mounted`,
+        `${BIN}: re-run with --default to seed it, or pick ${PRESET_NAME} in the ${DESKTOP_PRODUCT_NAME} tray`,
+      ],
+    }
+  }
+  if (selection.kind === 'unreadable') {
+    // An unknown is reported as an unknown: neither readiness nor a refusal.
+    return { lines: [`${BIN}: could not read the launcher profile selection (${statePath}); readiness unconfirmed`] }
+  }
+  return { lines: [], refusal: refuseUnselectedProfileMessage(statePath, selection) }
+}
+
+/**
  * Refuse a `--default` that seeds a selection the launcher would roll back.
  *
  * The launcher resolves its own Harness home from `$DSH_HOME` and never sees
@@ -504,16 +651,22 @@ if (process.argv[1] !== undefined
     const verb = options.dryRun ? 'would write' : 'wrote'
     const marker = options.dryRun ? '~' : '+'
     const selection = result.defaultSelection === undefined
-      ? `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`
+      ? ''
       : `${BIN}: ${result.defaultSelection.action === 'written' ? 'seeded' : 'would seed'}`
         + ` the desktop profile selection at ${result.defaultSelection.statePath}\n`
         + `${BIN}: the next DSH Desktop start selects ${PRESET_NAME};`
         + ` the tray picker overrides it at any time\n`
+    // The readiness report replaces the old "select it in the picker" hint. That
+    // hint was unchecked, and a machine that had never acted on it installed
+    // clean and produced NO_ADAPTER validators at run time (issue #1, runs 3-4).
+    const readiness = reportProfileSelection({ home, userDataDir: options.userDataDir })
     process.stdout.write(
       `${BIN}: ${verb} ${result.written.length} file(s), ${result.unchanged.length} already current, under ${home}\n`
       + result.written.map(name => `  ${marker} ${name}\n`).join('')
-      + selection,
+      + selection
+      + readiness.lines.map(line => `${line}\n`).join(''),
     )
+    if (readiness.refusal !== undefined) throw new InstallError(readiness.refusal)
   } catch (error) {
     process.stderr.write(`${error instanceof InstallError ? error.message : String(error)}\n`)
     process.exitCode = 1
@@ -532,4 +685,5 @@ export {
   SELECTION_STATE_SEGMENTS,
   SELECTION_STATE_VERSION,
   assertDefaultTargetsTheLauncherHome,
+  refuseUnselectedProfileMessage,
 }

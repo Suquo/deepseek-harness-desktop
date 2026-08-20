@@ -40,7 +40,39 @@ yarn workspace dsh-preset-parametria install:profile --default  # ...and boot in
 ```
 
 Then pick **Parametria** in the desktop profile picker (selecting a profile
-restarts the app), or run `dsh --profile parametria`.
+restarts the app), or run `dsh --profile parametria`. **That step is not
+optional, and the installer now checks it** — see the section below.
+
+### Selecting the profile is half the install
+
+The two directories above have different scopes, and that asymmetry is the
+sharpest edge in this package:
+
+| what | where it lands | which profiles see it |
+|---|---|---|
+| the agent preset (persona, delegation, `subagent_validator` pinned to `parametria-vision`) | `$DSH_HOME/.agent-presets/parametria/` | **every** profile — `includeUserRoot` scans this root whatever boots |
+| the `parametria-vision` route that pin needs | `$DSH_HOME/profiles/parametria/cordis.patch.yml` | **only** the `parametria` profile |
+
+Under any other profile the persona still loads, the validator still spawns,
+and its children still carry `provider: parametria-vision` — then each one dies
+at its first request with
+
+```
+no adapter registered for provider "parametria-vision"   (NO_ADAPTER)
+```
+
+Issue #1 lost two live runs to exactly this. Both times the machine was booting
+the `desktop` profile (`%APPDATA%\DSH Desktop\profile-selection\state.json`
+read `"active": "desktop"` throughout) while everything else looked right —
+because everything else *was* right, and home-level.
+
+The installer therefore ends with a readiness check against the launcher's own
+selection state, keeping its three answers apart: it names the other profile
+and exits **non-zero** when the machine selects one, says so plainly when no
+selection has been recorded yet (`--default` can still seed that), and reports
+an unreadable state as unconfirmed rather than as either. An install whose
+`--home` is not the launcher's home skips the check, so test and evidence
+harnesses are never judged against the operator's machine.
 
 ### Making it the profile the app boots into
 
@@ -401,6 +433,7 @@ root chain again.
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/evidence-hygiene.test.mjs` | The **dot-prefixed** workspace directories the persona tells a run to create, **derived** from the persona text rather than restated, each asserted ignored by *this repository's own* `.gitignore` via `git check-ignore --no-index --verbose` with `core.excludesFile` emptied — so a persona naming a new dot-prefixed directory fails until `.gitignore` covers it, and a rule inherited from a developer's global excludes cannot stand in for one that travels. A non-dot name is not separable from prose and stays a review question, which the fence documents. Two counter-assertions (a plain tracked file and a dot-prefixed one) keep an over-broad rule — `*` or `.*` — from making it vacuous. |
 | `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. For `--default`: the whole seeded document (not a probe for the profile name), that an ordinary install leaves the state absent, that the refusal fires **before any other write**, that `--force` does *not* release it, and that exclusivity survives the check being bypassed — `flag: 'wx'` and `planDefaultSelection` are asserted separately, because the check only produces the message while the flag makes the guarantee. Also the bound on that: a seed failing *after* the files land says so rather than reading as a no-op, no failure leaks a bare errno, an occupied directory path is not mis-reported as an existing selection, a pre-existing state directory is tightened to `0o700` the way the launcher tightens its own, and the dry-run result carries an `action` discriminator so a caller cannot mistake a rehearsal for a durable write. |
+| `tests/profile-selection-readiness.test.mjs` | The installer's closing readiness check, which is what turns "pick the profile in the picker" from a hint into a checked claim. Holds its three answers apart, because an unknown reported as either of the others is how issue #1 lost two runs: a selection naming another profile **refuses** (and the refusal names that profile, the state file, and the `NO_ADAPTER` line it predicts), an absent selection reads as unknown-and-not-ready rather than as ready, and an unparseable one reads as unconfirmed rather than as absent — absence is `--default`'s whole permission, so the two may never collapse. Also that `pending` outranks `active` in both directions (it names what the next start will try), and that the check skips — never throws, never judges — for an install whose `--home` is not the launcher's home or on a platform that hides `userData`. |
 | `tests/desktop-selection-drift.test.mjs` | The six values `--default` **mirrors** from `dsh-plugin-desktop/src`, each read back from that source and anchored to its declaration: the `PRODUCT_NAME` passed to `app.setName` — asserted in all three platform branches of the launcher's headless mirror (each branch's *whole* shape, since pinning only the trailing name would let the Linux `XDG_CONFIG_HOME` / `.config` base move unnoticed), against this installer's resolver output, and for the **ordering** that makes it load-bearing at all: `setName` must precede both `start()` and the first `getPath('userData')` inside `run()`, and `start()` must keep a single call site — the two `selectionStatePath` segments; `STATE_VERSION`; `DEFAULT_PROFILE_NAME`; and the `0o700`/`0o600` modes. Plus the claims the design rests on: that `selectDesktopProfile` still writes a first selection as a `pending` one — checked as a **closed key set** taken from that one object literal, in both directions, so a new field on either side fails rather than passing on four surviving matches — and that startup still rolls an unselectable `pending` back. Duplicated because the installer imports only node builtins and `yarn check` runs it *before* `dsh-plugin-desktop` is built; this fence is what makes the duplication safe, and the tripwire for the pending `app.setName` rebrand migration. |
 
 Every drift fence except `desktop-selection-drift` reads the pinned upstream
