@@ -26,6 +26,7 @@ import {
   handleDesktopDirectoryPickerRequest,
   handleDesktopDirectoryValidationRequest,
 } from './directory-picker-route.ts'
+import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
 import {
   SHELL_FAVICON_PATH,
   SHELL_MANIFEST_PATH,
@@ -261,14 +262,14 @@ export function apply(ctx: Context, config: Config): void {
       ...config,
       url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
       // Display identity only: this name reaches the tray tooltip and the tray's "Open …" command,
-      // and the caption reaches the Windows title bar and the accessible window title. The
-      // application's ON-DISK identity is a different value on purpose — `main.ts` holds
-      // `PRODUCT_NAME` and passes it to `app.setName()` before the first `app.getPath('userData')`
-      // read, so that string, not this one, names `%APPDATA%\DSH Desktop`. Renaming it here would
-      // strand every installed profile, session, and log; moving the data identity is a migration,
-      // not a rebrand, and is tracked separately.
-      productName: 'Parametria',
-      windowTitle: 'Parametria',
+      // and the caption reaches the Windows title bar and the accessible window title. It is the
+      // same constant the served document's title and web manifest carry — `PARAMETRIA_PRODUCT_NAME`
+      // in `src/client/brand.ts`, whose doc comment holds the distinction from the application's
+      // ON-DISK identity: `main.ts` holds its own `PRODUCT_NAME` and passes it to `app.setName()`
+      // before the first `app.getPath('userData')` read, so that string, not this one, names
+      // `%APPDATA%\DSH Desktop`.
+      productName: PARAMETRIA_PRODUCT_NAME,
+      windowTitle: PARAMETRIA_PRODUCT_NAME,
       iconPath,
       trayIcons,
       readLocalePreference: () => {

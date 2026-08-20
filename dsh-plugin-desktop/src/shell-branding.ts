@@ -19,8 +19,8 @@
  * document, and it is injected only when the generation runs in compatibility mode — so each mode
  * has exactly one source painting these pixels, never two.
  *
- * Brand values are never restated here: the wordmark, both accents, the headline, the mark, and the
- * upstream class table are imported from the client brand module, and
+ * Brand values are never restated here: the product's display name, the wordmark, both accents, the
+ * headline, the mark, and the upstream class table are imported from the client brand module, and
  * `tests/shell-branding.spec.ts` holds the two sheets to the same declarations.
  *
  * Compatibility mode carries visual branding by owner ruling (AGENTS.md, issue #26) and nothing
@@ -32,6 +32,7 @@ import {
   HERO_HEADLINE_TEXT,
   PARAMETRIA_ACCENT_DARK,
   PARAMETRIA_ACCENT_LIGHT,
+  PARAMETRIA_PRODUCT_NAME,
   PARAMETRIA_WORDMARK,
   UPSTREAM_BRAND_CLASSES,
 } from './client/brand.ts'
@@ -42,14 +43,22 @@ import {
 } from './client/parametria-mark.ts'
 import type { DesktopShellMode } from './runtime.ts'
 
-/** Document title of the served shell, and the name the web manifest carries. */
-export const PARAMETRIA_SHELL_TITLE = 'Parametria'
-
 /** Upstream dist path of the shell icon, claimed by a named route so the manifest icon follows. */
 export const SHELL_FAVICON_PATH = '/favicon.svg'
 
 /** Upstream dist path of the web manifest, claimed by a named route. */
 export const SHELL_MANIFEST_PATH = '/manifest.webmanifest'
+
+/**
+ * Methods these routes answer, and the value their 405 advertises.
+ *
+ * One list, read twice — the refusal a client is told about is the same list the code enforces,
+ * rather than a header that can quietly fall out of step with the branch above it.
+ */
+const SHELL_ASSET_METHODS = ['GET', 'HEAD'] as const
+
+/** `Allow` field value of the 405 response, formatted as the RFC's comma-separated method list. */
+export const SHELL_ASSET_ALLOW = SHELL_ASSET_METHODS.join(', ')
 
 const SIDEBAR = UPSTREAM_BRAND_CLASSES['@deepseek-ai/dsh-client-ui-sidebar']
 const CONVERSATION = UPSTREAM_BRAND_CLASSES['@deepseek-ai/dsh-client-ui-conversation']
@@ -79,8 +88,8 @@ export function parametriaFaviconSvg(): string {
 export function parametriaWebManifest(): string {
   return `${JSON.stringify({
     id: '/',
-    name: PARAMETRIA_SHELL_TITLE,
-    short_name: PARAMETRIA_SHELL_TITLE,
+    name: PARAMETRIA_PRODUCT_NAME,
+    short_name: PARAMETRIA_PRODUCT_NAME,
     start_url: '/',
     scope: '/',
     display: 'fullscreen',
@@ -101,6 +110,12 @@ export function parametriaWebManifest(): string {
  * These routes claim two paths the upstream dist would otherwise answer, so they keep the method
  * semantics that server has: read methods succeed, anything else is 405 rather than a body served
  * against a verb the static server would have refused.
+ *
+ * The refusal carries `Allow`. A 405 without it is an incomplete response — RFC 9110 §15.5.6 makes
+ * the field mandatory on that status precisely because the status alone says only "not this
+ * method", leaving a client no way to learn which method would have worked. The value is generated
+ * from {@link SHELL_ASSET_METHODS}, the same list the branch below tests, so the advertised set
+ * cannot drift from the enforced one.
  * @param req - the incoming request, read for its method.
  * @param res - the response this route owns.
  * @param contentType - MIME type of the asset.
@@ -112,8 +127,8 @@ export function serveShellAsset(
   contentType: string,
   body: string,
 ): void {
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    res.writeHead(405)
+  if (!(SHELL_ASSET_METHODS as readonly (string | undefined)[]).includes(req.method)) {
+    res.writeHead(405, { allow: SHELL_ASSET_ALLOW })
     res.end()
     return
   }
@@ -179,8 +194,8 @@ body[data-ds-dark-theme] ${lockup}.${SIDEBAR.wide}::after { color: ${PARAMETRIA_
  */
 export function brandShellIndex(html: string, mode: DesktopShellMode): string {
   const titled = /<title>[^<]*<\/title>/i.test(html)
-    ? html.replace(/<title>[^<]*<\/title>/i, `<title>${PARAMETRIA_SHELL_TITLE}</title>`)
-    : html.replace(/<head(?:\s[^>]*)?>/i, match => `${match}<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    ? html.replace(/<title>[^<]*<\/title>/i, `<title>${PARAMETRIA_PRODUCT_NAME}</title>`)
+    : html.replace(/<head(?:\s[^>]*)?>/i, match => `${match}<title>${PARAMETRIA_PRODUCT_NAME}</title>`)
   if (mode !== 'compatibility') return titled
   const style = `<style>${compatibilityBrandStyles()}</style>`
   const head = /<\/head>/i.exec(titled)

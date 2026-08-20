@@ -1,11 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { UPSTREAM_BRAND_CLASSES, parametriaBrandStyles } from '../src/client/brand.ts'
 import { PARAMETRIA_MARK_ELEMENTS, PARAMETRIA_MARK_VIEW_BOX } from '../src/client/parametria-mark.ts'
 import {
-  PARAMETRIA_SHELL_TITLE,
   SHELL_FAVICON_PATH,
   SHELL_MANIFEST_PATH,
   brandShellIndex,
@@ -13,7 +12,31 @@ import {
   parametriaFaviconSvg,
   parametriaWebManifest,
   serveShellAsset,
+  SHELL_ASSET_ALLOW,
 } from '../src/shell-branding.ts'
+
+/**
+ * The display name this product ships, spelled out rather than imported.
+ *
+ * The source reads one exported constant on every surface, which is the point of the consolidation
+ * — but a spec that imported that constant would assert nothing about its value. Restating the
+ * string here is what turns "all four surfaces agree" into "all four surfaces say Parametria".
+ */
+const PRODUCT_NAME = 'Parametria'
+
+/**
+ * Every TypeScript file under a directory, recursively.
+ *
+ * The consolidation fence sweeps the package's whole source tree rather than the two modules that
+ * carry the name today, so a third surface that restates it is caught the day it appears.
+ * @param root - absolute directory to walk.
+ * @returns absolute paths of the `.ts` files found beneath it.
+ */
+function sourceFiles(root: string): string[] {
+  return readdirSync(root, { withFileTypes: true, recursive: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith('.ts'))
+    .map(entry => `${entry.parentPath}/${entry.name}`)
+}
 
 const UPSTREAM_INDEX_PATH = fileURLToPath(
   new URL('../../deepseek-harness/apps/web/index.html', import.meta.url),
@@ -67,19 +90,19 @@ describe('Parametria shell identity', () => {
     // The pinned index ships DeepSeek's title; after the tap neither the element nor the string
     // survives, and exactly one title remains.
     expect(html).toContain('<title>DeepSeek Harness</title>')
-    expect(branded).toContain(`<title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain('<title>Parametria</title>')
     expect(branded).not.toContain('DeepSeek')
     expect([...branded.matchAll(/<title>/g)]).toHaveLength(1)
 
     // Everything else the document carries is upstream's business: the tap is identity-only.
-    expect(branded.replace(`<title>${PARAMETRIA_SHELL_TITLE}</title>`, '<title>DeepSeek Harness</title>'))
+    expect(branded.replace('<title>Parametria</title>', '<title>DeepSeek Harness</title>'))
       .toBe(html)
   })
 
   it('states the title on a document that ships without one', () => {
     const branded = brandShellIndex('<html><head><meta charset="utf-8" /></head><body></body></html>', 'advanced')
 
-    expect(branded).toContain(`<head><title>${PARAMETRIA_SHELL_TITLE}</title>`)
+    expect(branded).toContain(`<head><title>${PRODUCT_NAME}</title>`)
     expect(branded).toContain('<meta charset="utf-8" />')
   })
 
@@ -153,8 +176,8 @@ describe('Parametria shell identity', () => {
       icons: { src: string }[]
     }
 
-    expect(manifest.name).toBe(PARAMETRIA_SHELL_TITLE)
-    expect(manifest.short_name).toBe(PARAMETRIA_SHELL_TITLE)
+    expect(manifest.name).toBe(PRODUCT_NAME)
+    expect(manifest.short_name).toBe(PRODUCT_NAME)
     expect(parametriaWebManifest()).not.toContain('DeepSeek')
     expect(parametriaWebManifest()).not.toContain('DSH')
 
@@ -187,11 +210,58 @@ describe('Parametria shell identity', () => {
     expect(head.body()).toBe('')
 
     // Anything else is refused rather than served against a verb the dist server would have
-    // answered 405.
+    // answered 405 — and the refusal names the methods that would have worked, which RFC 9110
+    // §15.5.6 makes mandatory on this status and no other. No content-type: there is no body.
     const post = fakeResponse()
     serveShellAsset({ method: 'POST' } as IncomingMessage, post.res, 'image/svg+xml', 'body')
     expect(post.status()).toBe(405)
+    expect(post.headers()).toEqual({ allow: 'GET, HEAD' })
     expect(post.body()).toBe('')
+
+    // A request with no method at all is refused the same way, rather than falling through the
+    // inequality pair the branch used to be written as.
+    const methodless = fakeResponse()
+    serveShellAsset({} as IncomingMessage, methodless.res, 'image/svg+xml', 'body')
+    expect(methodless.status()).toBe(405)
+    expect(methodless.headers()).toEqual({ allow: 'GET, HEAD' })
+  })
+
+  it('advertises exactly the methods it answers', () => {
+    // The `Allow` value and the accepted set are one list read twice, so this asserts the two
+    // against a third statement of the same fact: every method named is served, and a method that
+    // is not named is refused.
+    const advertised = SHELL_ASSET_ALLOW.split(', ')
+    expect(advertised).toEqual(['GET', 'HEAD'])
+
+    for (const method of advertised) {
+      const res = fakeResponse()
+      serveShellAsset({ method } as IncomingMessage, res.res, 'image/svg+xml', 'body')
+      expect(res.status()).toBe(200)
+    }
+    for (const method of ['POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']) {
+      const res = fakeResponse()
+      serveShellAsset({ method } as IncomingMessage, res.res, 'image/svg+xml', 'body')
+      expect(res.status()).toBe(405)
+      expect(res.headers().allow).toBe(SHELL_ASSET_ALLOW)
+    }
+  })
+
+  it('states the product display name once, and reads it everywhere else', () => {
+    // The consolidation fence. Four user-visible surfaces carry the name — the served title, the
+    // manifest's two name fields, and the native shell's productName/windowTitle — reached from two
+    // modules. A quoted `'Parametria'` anywhere in `src/` other than the one declaration in
+    // `client/brand.ts` is a surface that has stopped reading the constant, which is exactly how
+    // three of four surfaces get renamed and the fourth does not.
+    const declarations: string[] = []
+    for (const file of sourceFiles(fileURLToPath(new URL('../src', import.meta.url)))) {
+      const occurrences = readFileSync(file, 'utf8').match(/(['"`])Parametria\1/gu) ?? []
+      declarations.push(...occurrences.map(() => file.replaceAll('\\', '/')))
+    }
+
+    expect(declarations).toHaveLength(1)
+    expect(declarations[0]).toContain('src/client/brand.ts')
+    expect(PRODUCT_NAME).toBe('Parametria')
+    expect(parametriaWebManifest()).toContain(`"name": "${PRODUCT_NAME}"`)
   })
 
   it('is a pure transform, so every index response gets the same document', () => {

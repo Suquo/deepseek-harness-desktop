@@ -13,6 +13,24 @@ import { parametriaMarkDataUri } from './parametria-mark.ts'
 /** Visible brand name, spelled as the Parametria application spells it. */
 export const PARAMETRIA_WORDMARK = 'PARAMETRIA'
 
+/**
+ * The product's display name — the single spelling every user-visible surface states.
+ *
+ * Four surfaces carry it, reached from two different faces of this package: the served document's
+ * `<title>` and the web manifest's `name`/`short_name` (`src/shell-branding.ts`), and the native
+ * shell's `productName` and `windowTitle` (`src/index.ts`, which reach the tray tooltip, the tray's
+ * "Open …" command, the Windows caption, and the accessible window title). They are one value, so
+ * they are one constant; a rename that reached three of the four and not the fourth is the drift
+ * this removes.
+ *
+ * This is display identity and nothing else. The application's ON-DISK identity is a separate value
+ * on purpose: `main.ts` holds its own `PRODUCT_NAME` and passes it to `app.setName()` before the
+ * first `app.getPath('userData')` read, so that string — not this one — names
+ * `%APPDATA%\DSH Desktop`. The two look interchangeable and are not; moving the data identity is a
+ * migration, not a rebrand, and is tracked separately.
+ */
+export const PARAMETRIA_PRODUCT_NAME = 'Parametria'
+
 /** Wordmark accent under a light theme. */
 export const PARAMETRIA_ACCENT_LIGHT = '#0288d1'
 
