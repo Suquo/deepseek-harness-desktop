@@ -21,9 +21,18 @@
     - id: desktop-updates
       name: dsh-plugin-desktop/updates
 
-# A desktop launch has no terminal operator waiting for the Web readiness line.
+# A desktop launch has no terminal operator waiting for the Web readiness line,
+# and no browser to hand the URL to: the Electron shell IS the client.
+#
+# This config REPLACES upstream's whole config object, so every field the pinned
+# row sets must be restated here or it silently takes the schema default — how
+# rc.8's new `openBrowser` turned every launch and every gate run into a browser
+# tab (#49). It also means the flags behind the fields we replace (`--no-open`,
+# `--trusted-host`) cannot reach this row. Fenced by package.spec.ts against the
+# pinned bundle's own row, so a bump cannot add a field unnoticed.
 - id: web-runtime
   config:
+    openBrowser: false
     printUrl: false
     surfaceContext: true
     trustedHosts: []

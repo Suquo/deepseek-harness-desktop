@@ -4,7 +4,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { boot } from '@deepseek-ai/dsh-app-boot'
+import { boot, composeEntries } from '@deepseek-ai/dsh-app-boot'
 import { provideCmdline } from '@deepseek-ai/dsh-cmdline'
 import {
   createLaunchEnvironmentSnapshot,
@@ -58,6 +58,19 @@ try {
     },
     ...prepared.patches,
   ]
+
+  // Headless safety (#49): this smoke boots the real composed Web profile, so a
+  // web-runtime row that reaches web-app's default-browser handoff opens the
+  // operator's browser on every gate run — which is what rc.8 did until the
+  // desktop patch restated `openBrowser: false`. Assert the EFFECTIVE composed
+  // row, every layer applied exactly as boot mounts it, rather than the bundle
+  // file in isolation: a later profile or home layer that re-replaces this row
+  // inherits the schema default again, and that is the shape of the regression.
+  const composedWebRuntime = composeEntries([patches]).find(row => row.id === 'web-runtime')
+  if (composedWebRuntime?.config?.openBrowser !== false) {
+    throw new Error(`composed desktop profile carries web-runtime openBrowser ${String(composedWebRuntime?.config?.openBrowser)} instead of false`)
+  }
+
   const packageRoot = new URL('../', import.meta.url)
   const pnpmBinPath = fileURLToPath(new URL('node_modules/pnpm/bin/pnpm.mjs', packageRoot))
   const electronVersion = JSON.parse(

@@ -4,6 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 import {
@@ -66,6 +67,27 @@ const workspaceManifest = JSON.parse(readFileSync(new URL('package.json', worksp
   scripts?: Record<string, unknown>
 }
 const ciWorkflow = readFileSync(new URL('.github/workflows/ci.yml', workspaceRoot), 'utf8')
+
+/** One patch, or one entry inserted by a patch, as the include dialect parses it. */
+interface PatchRow {
+  id?: string
+  insert?: PatchRow[]
+  config?: Record<string, unknown>
+}
+
+/**
+ * Find the `web-runtime` row in a parsed patch list, including inside insert groups.
+ * @param patches - a patch list from `loadOverlayPatches`.
+ * @returns the row, or undefined when the list carries none.
+ */
+function webRuntimeRow(patches: readonly unknown[]): PatchRow | undefined {
+  for (const patch of patches as readonly PatchRow[]) {
+    if (patch.id === 'web-runtime') return patch
+    const nested = patch.insert === undefined ? undefined : webRuntimeRow(patch.insert)
+    if (nested !== undefined) return nested
+  }
+  return undefined
+}
 
 describe('published package surface', () => {
   it('runs desktop and community market typechecks from the root command', () => {
@@ -147,6 +169,40 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
+  })
+
+  it('restates every field the pinned web-runtime row sets, browser handoff off', () => {
+    // An id-targeted patch REPLACES per top-level key (dsh-app-boot applyEntryPatches
+    // assigns `target[key] = value`), so this row's `config` stands in for upstream's
+    // whole object and every field it omits silently takes the web-app schema default.
+    // rc.8 added `openBrowser` defaulting to true; the omission opened the operator's
+    // browser on every desktop launch and every verify:profile run (#49).
+    //
+    // The key set therefore comes from the PINNED bundle's own row, not from a
+    // literal here: at the next pin bump a field upstream adds fails this test until
+    // the desktop row is re-derived against it, which is the direction that failed
+    // silently at rc.8. The value assertion below then pins our intent for each one —
+    // and note that `trustedHosts: []` is deliberate too: replacing upstream's
+    // `!!js ctx.webStartup.trustedHosts` is what makes `--trusted-host`, like
+    // `--no-open`, inert on a desktop-composed profile.
+    const desktopRow = webRuntimeRow(loadOverlayPatches(
+      'dsh-plugin-desktop',
+      fileURLToPath(new URL('cordis.patch.yml', packageRoot)),
+    ))
+    const upstreamRow = webRuntimeRow(loadOverlayPatches(
+      'dsh-plugin-desktop',
+      createRequire(import.meta.url).resolve('@deepseek-ai/dsh-web-app/cordis.patch.yml'),
+    ))
+    expect(desktopRow).toBeDefined()
+    expect(upstreamRow).toBeDefined()
+    expect(Object.keys(desktopRow?.config ?? {}).sort())
+      .toEqual(Object.keys(upstreamRow?.config ?? {}).sort())
+    expect(desktopRow?.config).toEqual({
+      openBrowser: false,
+      printUrl: false,
+      surfaceContext: true,
+      trustedHosts: [],
+    })
   })
 
   it('keeps unaudited marketplace packages out of the published runtime', () => {
