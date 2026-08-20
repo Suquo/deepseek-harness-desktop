@@ -1,19 +1,21 @@
 /**
- * Fences over the installer's readiness check — the checked replacement for a
- * hint that cost issue #1 two live runs.
+ * Fences over what the installer says about the profile this machine boots.
  *
- * The preset installs across two planes with different scopes: the agent preset
- * goes to `$DSH_HOME/.agent-presets/`, which every profile scans, while the
- * `parametria-vision` route its validator pins goes to `profiles/parametria/`
- * and exists for that profile alone. Runs 3 and 4 both booted the `desktop`
- * profile with the preset live, so every validator child carried the right
- * route config and died at its first request with
- * `no adapter registered for provider "parametria-vision"`. The install had
- * reported success both times.
+ * Issue #1's failure was a scope mismatch: the agent preset installs into
+ * `$DSH_HOME/.agent-presets/`, which every profile scans, while the
+ * `parametria-vision` route its validator pins used to live in
+ * `profiles/parametria/` and served that profile alone. Runs 3 and 4 both
+ * booted `desktop` with the preset live, so every validator child carried the
+ * right route config and died at its first request with `no adapter registered
+ * for provider "parametria-vision"` — and the install had reported success.
  *
- * These tests hold the three answers apart — READY, UNKNOWN, and REFUSED — and
- * the refusal's exit code, because an unknown reported as either of the others
- * is how that failure stayed invisible.
+ * The route now installs machine-wide (owner ruling on #1), which is what
+ * turned this from a gate into a REPORT: every profile serves the route, so the
+ * selection is a fact worth naming and not a reason to refuse. What these tests
+ * still hold is the discipline that made the old failure invisible — an unknown
+ * must never be reported as an answer. Absence, unreadability, and a real
+ * selection stay three distinct outcomes, because absence is `--default`'s
+ * whole permission and the other two must not be able to impersonate it.
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -115,20 +117,28 @@ describe('classifying what the selection means for this preset', () => {
 })
 
 describe('the readiness report', () => {
-  it('refuses a machine that boots another profile, naming it and the failure it predicts', () => {
+  it('names the other profile it found, and does NOT refuse over it', () => {
+    // This exact document — read off the operator's machine during runs 3 and
+    // 4 — used to be a hard refusal here, and the owner's ruling on #1 retired
+    // that: the route is machine-wide now, so whichever profile boots serves
+    // it. The fact stays REPORTED, because it is the first thing anyone
+    // debugging a run wants; refusing over it would send an operator to switch
+    // profiles for nothing, at the cost of the toolchain their own profile
+    // carries.
     const { userDataDir, statePath } = userDataWith({
       version: 1,
       active: DESKTOP_PROFILE_NAME,
       lastKnownGood: DESKTOP_PROFILE_NAME,
     })
-    const { refusal } = report(userDataDir)
-    assert.ok(refusal !== undefined, 'a machine selecting another profile must not report a clean install')
-    assert.match(refusal, /no adapter registered for provider "parametria-vision"/u)
-    assert.ok(refusal.includes(statePath), 'the refusal must name the file the operator has to change')
-    assert.ok(refusal.includes(JSON.stringify(DESKTOP_PROFILE_NAME)), 'the refusal must name the profile actually selected')
+    const { refusal, lines } = report(userDataDir)
+    assert.equal(refusal, undefined, 'a machine on another profile is served by the machine-wide route')
+    const notice = lines.find(line => line.includes(DESKTOP_PROFILE_NAME))
+    assert.ok(notice !== undefined, 'the report must still name the profile that boots')
+    assert.ok(notice.includes(statePath), 'and the file that says so')
+    assert.match(notice, /machine-wide/u)
   })
 
-  it('passes a machine whose selection names this preset', () => {
+  it('names this preset when the selection does', () => {
     const { userDataDir } = userDataWith({
       version: 1,
       active: DESKTOP_PROFILE_NAME,
@@ -140,21 +150,17 @@ describe('the readiness report', () => {
     assert.ok(lines.some(line => line.includes(PRESET_NAME)))
   })
 
-  it('reports an unrecorded selection as unknown, not as ready and not as a refusal', () => {
+  it('reports an unrecorded selection as unrecorded rather than inventing one', () => {
     const { refusal, lines } = report(freshRoot())
     assert.equal(refusal, undefined)
     assert.ok(lines.some(line => line.includes('no launcher profile selection recorded')))
-    assert.ok(
-      lines.some(line => line.includes('not mounted')),
-      'an unknown still has to say the route is not reachable yet',
-    )
   })
 
-  it('reports an unusable selection as unconfirmed rather than inventing an answer', () => {
+  it('reports an unusable selection without claiming to have read it', () => {
     const { userDataDir } = userDataWith('{ not json')
     const { refusal, lines } = report(userDataDir)
     assert.equal(refusal, undefined)
-    assert.ok(lines.some(line => line.includes('readiness unconfirmed')))
+    assert.ok(lines.some(line => line.includes('could not read the launcher profile selection')))
   })
 
   it('says nothing about the operator machine when the install targeted another home', () => {

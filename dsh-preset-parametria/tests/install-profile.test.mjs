@@ -22,6 +22,7 @@ import {
   install,
   managedFiles,
   parseArgs,
+  MACHINE_PATCH_RECEIPT_KEY,
   planDefaultSelection,
   resolveHome,
   selectionStatePath,
@@ -131,7 +132,14 @@ describe('a first install', () => {
     // dotfile one level deeper is invisible to it.
     const receipt = JSON.parse(readFileSync(join(home, 'profiles', 'parametria', RECEIPT_NAME), 'utf8'))
     assert.equal(receipt.preset, 'parametria')
-    assert.equal(Object.keys(receipt.files).length, managedFiles(PACKAGE_ROOT).size)
+    // Every managed file, plus exactly one FRAGMENT claim: the machine-wide
+    // patch block, which is a guest inside an operator-owned file rather than a
+    // file this installer owns. Asserted as the closed set rather than a count,
+    // so a claim that silently changes identity fails here.
+    assert.deepEqual(
+      Object.keys(receipt.files).sort(),
+      [...managedFiles(PACKAGE_ROOT).keys(), MACHINE_PATCH_RECEIPT_KEY].sort(),
+    )
   })
 })
 

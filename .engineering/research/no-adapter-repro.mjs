@@ -14,14 +14,23 @@
  *   node .engineering/research/no-adapter-repro.mjs --profile parametria --user-section
  *   node .engineering/research/no-adapter-repro.mjs --profile desktop    --user-section
  *
- * Recorded result (2026-08-20, rc.7 pin, both runs with `--user-section` — the
+ * Recorded results (2026-08-20, rc.7 pin, every run with `--user-section` — the
  * operator's own `llm-pi-ai: providers: openrouter:` section present):
  *
- *   --profile parametria  ->  parametria-vision registered? true
- *   --profile desktop     ->  parametria-vision registered? false
+ *   BEFORE — route declared in `profiles/parametria/cordis.patch.yml`
+ *     --profile parametria  ->  parametria-vision registered? true
+ *     --profile desktop     ->  parametria-vision registered? false
  *
- * which is run 4's `NO_ADAPTER`, reproduced: the differentiator is the ACTIVE
- * PROFILE, not the settings merge, the patch order, or a missing pnpm step.
+ *   AFTER — route declared in the machine-wide `$DSH_HOME/cordis.patch.yml`
+ *     --profile parametria  ->  parametria-vision registered? true
+ *     --profile desktop     ->  parametria-vision registered? true
+ *
+ * The first pair is run 4's `NO_ADAPTER`, reproduced: the differentiator was the
+ * ACTIVE PROFILE, not the settings merge, the patch order, or a missing pnpm
+ * step. The second is the fix — the route reaches the profile the operator
+ * actually boots. Running this file today reproduces the AFTER pair; for
+ * BEFORE, delete the managed block from the temp home's `cordis.patch.yml`
+ * between the install and the boot.
  */
 
 import { execFileSync } from 'node:child_process'

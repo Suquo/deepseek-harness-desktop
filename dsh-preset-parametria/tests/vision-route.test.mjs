@@ -9,6 +9,11 @@
  * to prevent. Every declared value is therefore diffed against the installed
  * catalog entry, so an upstream pin that changes the model's real shape fails
  * the gate instead of quietly mis-sizing or blinding the validator.
+ *
+ * The route is read from `machine/cordis.patch.yml` — the block the installer
+ * merges into `$DSH_HOME/cordis.patch.yml` — because the preset that pins it is
+ * machine-wide too. `tests/machine-patch.test.mjs` holds the plane itself: that
+ * the profile layer no longer declares this route and the machine layer does.
  */
 
 import { readFileSync } from 'node:fs'
@@ -18,7 +23,7 @@ import { describe, it } from 'node:test'
 import { PACKAGE_ROOT, indexRows, openrouterCatalogEntry, readComposition } from './helpers.mjs'
 
 const MODEL_ID = 'google/gemini-3.6-flash'
-const patchPath = join(PACKAGE_ROOT, 'profile', 'cordis.patch.yml')
+const patchPath = join(PACKAGE_ROOT, 'machine', 'cordis.patch.yml')
 const patchText = readFileSync(patchPath, 'utf8')
 const providers = readComposition(patchPath)
   .find(entry => entry?.id === 'llm-pi-ai')
