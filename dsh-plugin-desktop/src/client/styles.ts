@@ -5,6 +5,7 @@ import {
   WINDOWS_CAPTION_CONTROLS_WIDTH,
   WINDOWS_TITLEBAR_HEIGHT,
 } from '../window-chrome.ts'
+import { parametriaBrandStyles } from './brand.ts'
 import { SIDEBAR_COLLAPSED } from './layout-state.ts'
 
 /** Advanced-shell stylesheet kept as a plain string so the package client bundle stays self-contained. */
@@ -49,7 +50,22 @@ export function installAdvancedStyles(): () => void {
   const style = document.createElement('style')
   style.dataset.plugin = 'dsh-plugin-desktop'
   style.dataset.pluginCss = 'dsh-plugin-desktop/advanced-shell'
-  style.textContent = ADVANCED_STYLES
+  style.textContent = advancedStyleSheet()
   document.head.appendChild(style)
   return () => { style.remove() }
+}
+
+/**
+ * Compose the advanced-shell stylesheet.
+ *
+ * The two halves target disjoint selectors, so their order here decides nothing; the Parametria
+ * rules beat the upstream module rules they replace on specificity, each carrying two or three
+ * classes against upstream's one.
+ *
+ * Compatibility mode never installs this sheet, which keeps the upstream default client running
+ * without overrides.
+ * @returns the full advanced-shell stylesheet text.
+ */
+export function advancedStyleSheet(): string {
+  return ADVANCED_STYLES + parametriaBrandStyles()
 }

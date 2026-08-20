@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="none">
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="292.91" y1="359.69" x2="74.6" y2="140.38"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="205.39" y1="359.74" x2="425.4" y2="140.38"/>
+  <line stroke="#fff" stroke-miterlimit="10" x1="140.38" y1="74.6" x2="74.6" y2="140.38"/>
+  <path fill="#1a8fc4" d="M307.15,160.38c2.83,11.83,4.52,25.38,4.68,40.95.19,19.14-2.93,35.19-8.2,48.62-1.19,3.06-2.49,5.97-3.91,8.75-.06.13-.13.25-.19.38-.17.33-.34.65-.51.98-4.6,8.79-10.17,16.28-16.27,22.63l.16.13,76.71-76.66v153.47l65.77,65.77V140.38l-32.72-32.89-33.05,32.89-32.36-.12"/>
+  <path fill="#0e6a94" d="M235.16,234.12c-7.05,7.7-16.02,12-23.22,14.37-5.77,1.9-11.83,2.82-17.91,2.82h-33.05v65.34h33.87c13.45,0,27.71-.71,40.48-4.92,31.18-10.28,77.21-38.48,76.49-110.41-.16-15.57-1.85-29.12-4.68-40.95l-71.99,73.74Z"/>
+  <polygon fill="#1a8fc4" points="74.6 315.48 74.6 316.65 74.6 425.4 140.38 359.62 140.38 316.65 140.38 250 140.38 248.46 74.6 315.48"/>
+  <path fill="#0e6a94" d="M235.1,78.87c-8.42-2.87-17.26-4.27-26.16-4.27h-68.57l-65.77,65.77v175.21l65.77-65.71v-109.5l29.74.17h31.01c4.02,0,8.02.63,11.83,1.93,11.44,3.9,31.55,15.38,34.82,48.11l50.24-50.2h.22c-16.26-40.34-43.24-54.72-63.13-61.51Z"/>
+  <polygon fill="#1a8fc4" points="425.4 74.6 392.68 107.49 425.4 140.38 425.4 74.6"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="74.6" y1="425.4" x2="425.4" y2="74.6"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="425.4" y1="425.4" x2="74.6" y2="74.36"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="327.18" y1="140.38" x2="392.85" y2="74.7"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="140.38" y1="30.75" x2="140.38" y2="469.25"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="359.62" y1="30.75" x2="360.06" y2="469.25"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="425.4" y1="30.75" x2="425.4" y2="469.25"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="30.75" y1="74.6" x2="469.25" y2="74.6"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="30.75" y1="140.38" x2="469.25" y2="140.38"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="30.75" y1="425.4" x2="469.25" y2="425.4"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="30.75" y1="316.65" x2="469.25" y2="316.65"/>
+  <line stroke="#fff" stroke-width=".5" stroke-miterlimit="10" x1="74.6" y1="30.75" x2="74.6" y2="469.25"/>
+  <circle fill="#0e6a94" cx="74.6" cy="74.6" r="5.26"/>
+  <circle fill="#0e6a94" cx="425.4" cy="74.6" r="5.26"/>
+  <circle fill="#0e6a94" cx="392.95" cy="74.6" r="5.26"/>
+  <circle fill="#0e6a94" cx="250" cy="316.65" r="5.26"/>
+  <circle fill="#1a8fc4" cx="250" cy="250" r="3.51"/>
+  <circle fill="#0e6a94" cx="74.6" cy="425.4" r="5.26"/>
+  <circle fill="#0e6a94" cx="425.4" cy="425.4" r="5.26"/>
+</svg>
