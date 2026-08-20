@@ -115,6 +115,9 @@ try {
         host: '127.0.0.1',
         port: 43120,
         register() { return () => {} },
+        // The shell brand identity registers an index transform, so this stub carries the same
+        // disposer-returning tapIndex the real Web carrier exposes.
+        tapIndex() { return () => {} },
       })
       host.provide('webRuntime', {})
       host.provide('appExit', () => {})
