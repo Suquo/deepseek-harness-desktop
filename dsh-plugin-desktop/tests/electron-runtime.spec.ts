@@ -239,15 +239,16 @@ const spec: DesktopShellSpec = {
 }
 
 describe('Electron desktop runtime', {
-  // Windows budget sized from measurement. Fifty of these tests `await
-  // import('../src/electron-runtime.ts')` in their own body, but only the first
-  // pays for it: that import transforms and links a 26-file, ~8.3k-line closure,
-  // and every later one is served from the module registry. So the file has one
-  // expensive test and forty-nine cheap ones — 215-277ms over twelve isolated
-  // runs against a second-worst of <=68ms. (Counts re-derived at the a80c504f7f
-  // overlay merge, which added three importing tests and two waitFor calls. The
-  // budget is per-test, so more cheap tests do not move it — only the prose had
-  // to be brought back into agreement with the file.)
+  // Windows budget sized from measurement. This file's tests `await
+  // import('../src/electron-runtime.ts')` in their own body — fifty such import
+  // sites — but only the first pays for it: that import transforms and links a
+  // 28-file, ~8.5k-line closure, and every later one is served from the module
+  // registry. So of the 51 tests vitest reports here, one is expensive and fifty
+  // are cheap — 215-277ms over twelve isolated runs against a second-worst of
+  // <=68ms. (Re-derived at the a80c504f7f overlay merge, which added three import
+  // sites, one vi.waitFor call, and two files to the closure — src/renderer-health.ts
+  // and src/workspace-admission.ts. The budget is per-test, so more cheap tests do
+  // not move it; only the prose had to be brought back into agreement.)
   //
   // The anchor is the compound worst, not the robust worst. Under full-suite load
   // that first test measured 153-372ms over seven runs; 372ms is a single outlier,
@@ -261,7 +262,7 @@ describe('Electron desktop runtime', {
   // No ceiling constraint: the beforeEach/afterEach below only reset in-memory
   // fakes and restore mocks — green at a 10ms hookTimeout, i.e. >=1000x against
   // the untouched 10s default. Exactly one number moves. Known limitation of this
-  // class of fix: the twelve `vi.waitFor(...)` calls in this file take vitest's
+  // class of fix: the eleven `vi.waitFor(...)` calls in this file take vitest's
   // default 1000ms waitFor budget, which no describe-level timeout can reach.
   // The POSIX arm keeps the 5s default — the load characteristic sized here is
   // NTFS/Defender and was not measured on a POSIX host.
