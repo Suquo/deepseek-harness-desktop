@@ -10,13 +10,11 @@
 
 ## Now
 
-**PR #32 MERGED (2026-08-20 ~06:10, on green dispatch CI): #5 CLOSED — the in-UI cost surface is LIVE.** Per-generation cost chip + per-step cost/TTFT/model-time columns in desktop-composed modes (compat pristine); live OpenRouter list rates with visible provenance timestamp; `unpriced` fail-open with `≥$x` floors; compile-time both-direction status witnesses; parity fence against the offline `session-cost.mjs` join. Real billed cost = #30 (Host-plane, grounded both roads). Validated live: `$5.77 · 6m58s`, 50/50 generations priced. **Owner's top-line metrics (cost + speed per definition) are now on screen.**
+**RUN #4 HARVESTED (2026-08-20 ~19:20): the profile finally mounted — and the precise #1 blocker is now host-plane.** All 6 validator children spawned with the correct route config and died NO_ADAPTER: the profile's `llm-pi-ai` providers block never reaches the live plugin config (prime suspect: the user-settings merge clobbering composed providers — the operator's session moved to `deepseek-modlens`, so their settings.yaml changed). **Lane B gen-10 is on the diagnosis** (`/diagnosing-bugs` discipline, red-capable composition dump). Run 4 also: deepseek-v4-flash built a 97-node workbench end-to-end with honest not-pure-validated disclosure; modlens vision flaky 9/19 (agy still ERROR after sign-in, claude-cli poisoned by a SessionEnd hook, codex spawn EINVAL — all operator-side); evidence hygiene perfect; #40 gained a background-path laundering variant.
 
-**PR #28 MERGED (2026-08-20 ~02:40): in-app Parametria rebrand LIVE.** PARAMETRIA wordmark + mark (both themes; desktop-composed modes only — compat mode stays pristine per AGENTS.md), "Parametric Definitions" headline, ADR H-0002 (upstream-class-selector deviation, Lane C pin-bump obligation: re-run client-brand.spec + re-derive the class table before accepting a new pin). #26 re-scoped OPEN on the Host/packaging remainder (title/favicon/manifest via indexTaps · tray/app icons/windowTitle/productName/installer art · locale copy · aria-label drift-guard one-liner) — Lane A/B, gated partly on the owner's compat-branding ruling. Lane D's `--user-data-dir` discovery closed the charter's userData isolation gap.
+**PR #44 MERGED (2026-08-20 ~14:10, green CI): #41 delivered — 10.6x append fix; TEMPORARY 300s budget retired → measured 30s.** The 'pre-merge baseline' was a broken recorder (win32 O_TRUNC EINVAL — the trim path first ran on win32 in #42; 4th RM-verified premise refutation). #45 filed (trim amortization, low).
 
-**PR #25 MERGED (2026-08-20 ~00:20): #9 CLOSED — evidence plumbing landed per ruling** (run-scoped `.parametria-evidence/<session>/` root, persona-instructed; gitignore + `.uv-cache` rider; derived evidence-hygiene fence; residuals filed as #23/#24).
-
-**Day 1 totals (2026-08-19→20): 11 PRs merged (#8 #10 #11 #14 #15 #17 #19 #21 #22 #25 #28), issues #2 #4 #9 #12 #13 #16 #18 #20 delivered.** Run harvests 1-2 done (persona auto-load PROVEN; SK-4 stale-spec hazard found; validator fix still unverified live — reinstall needed, see owner items).
+**PR #42 MERGED (2026-08-20 ~12:30, green CI): #39 delivered — overlay sync current to anywhere-labs a80c504f7f** (65 commits, 4 conflicts resolved fences-intact; found upstream's quadratic appendOwned → #41). **20 PRs merged this generation**; earlier deliveries: #8 #10 #11 #14 #15 #17 #19 #21 #22 #25 #28 #29 #32 #33 #34 #35 #37 #38.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -24,30 +22,22 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — gen-6 delivered #41 (PR #44 merged on green: 10.6x append fix; the pre-merge baseline was a BROKEN RECORDER — O_TRUNC EINVAL — so the trim path first ran on win32 in #42; budget 30s ruled non-double-counting). #45 (trim amortization) claimable low-priority.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-10 on the NO_ADAPTER diagnosis** (run-4 root: profile mounts but parametria-vision never registers in host llm-pi-ai; prime suspect = user-settings merge clobbering composed providers; branch `pm/issue-1-no-adapter`, non-closing PR). Queue: #23/#24/#30/#45 available, #6 buildable, #7 owner-gated.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **FROZEN-SCHEDULED — gen-4 on the rc.8 bump (#43)**: yarn npmMinimalAgeGate blocks rc.8 resolution until 2026-08-20T15:42Z (RM ruled WAIT, zero policy change). Steps 1-4 done+fenced at head 44b3ac9ba6; resume after 15:42Z. Six fallout items pre-triaged on #43 (reportDelivery vs #40 · brand-region restructuring vs #28/#37 · trademark guidelines vs #26 · SQLite · multimodal · PTY).
-- **Lane D (design, `dg/*`, RM-spawned)**: FREE — gen-3 delivered the sidebar lockup (PR #37 merged on green CI: mark beside wordmark, neutral inherited ink, upstream-derived geometry).
+- **RM**: AB generation LIVE (`/loop /repo-manager`, cjjmaster).
+- **Lane A (general, `claude/*`)**: FREE — gen-6 delivered #41 (PR #44). #45 (trim amortization) claimable low-priority.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-10 on the NO_ADAPTER diagnosis** (branch `pm/issue-1-no-adapter`, non-closing PR; fix lands in preset/profile materials, freeze if it needs a patch or operator-settings change). Queue: #23/#24/#30/#45 available, #6 buildable, #7 owner-gated.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-4 RESUMED on the rc.8 bump (#43)** after the npmMinimalAgeGate cleared at 15:42Z (RM ruled WAIT, zero policy change; steps 1-4 fenced at `44b3ac9ba6`). Folded into the resume: gated install + patch re-cuts (GNU-patch oracle; one directory-picker hunk genuinely regresses) + brand class re-derivation (railFish→railMark +5 classes, interacts with #28/#37) + does rc.8 reshape #40's reportDelivery surface + trademark-guidelines read for #26 + release-age check into the watch doc + bump-surface-omissions follow-up issue.
+- **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
 
-## Second run harvested (weaker model, 2026-08-19)
+## Queue (open GitHub issues, RM-triaged)
 
-`gemini-3.6-flash` solo built a 119-node cabinet in 9.9 min (vs 20+8 min for run 1) but SKIPPED the per-increment validation discipline; its subagent died with an opaque `Error: subagent run failed` (empty transcript — new harness finding, scoped into #1); orchestrator self-validated via in-context image reads. First A/B datum + protocol implications recorded in `.engineering/research/model-comparison-first-datum.md`, commented onto #6 and #1. RM recommendation pending owner: validator pin = `google/gemini-3.6-flash` (pi-ai route, `input: [text, image]`).
-
-## Queue (open GitHub issues, RM-triaged; DELIVERED today: #2→PR8, #4→PR11, #13→PR15, #9-item-2→PR10)
-
-- (delivered today, all lanes: #2→PR8 · #4→PR11 · #9-item2→PR10 · #13→PR15 · #12→PR14 · #16→PR17)
-- **#1 [Lane B] Vision routing** — structural half landed in PR #8; stays open PENDING-LIVE (first real run must show `subagent_validator` on `parametria-vision` + the opaque `subagent run failed` finding scoped here).
-- **#5 [Lane B] Cost/timing report** — gated on owner price seeds. **#6 [Lane B] Model A/B protocol** — first datum recorded; buildable after #5's seeds. **#7 [Lane B] Skill-root consolidation** — gated on owner canonicalization OK.
-- **#9 [Lane B] PR #8 follow-ups** — item 2 done (PR #10); items 1 (evidence/sandbox plumbing) + 3 (mount observation, pending-live) remain. **#3 [owner] CI required-checks** — see owner items.
-- **[skill, outside repo] SK-1** (SKILL.md L115 vs L298 contradiction) + **SK-2** (node-catalog regeneration) — need a landing surface ruling (owner item).
+- **#1 [Lane B] Vision routing — PENDING-LIVE**, blocker now precisely NO_ADAPTER (gen-10 diagnosing). Closes on the first run where a validator child answers through parametria-vision.
+- **#43 [Lane C] rc.8 pin bump** — IN PROGRESS (gen-4). Six fallout items pre-triaged on-issue.
+- **#26 [Lane A/B] rebrand remainder** — open on: owner identity migrations (app.setName/userData · builder appId/productName · naming ruling) + locale copy. #23/#24/#30/#45 — claimable follow-ups (structural evidence surface · command-level policy · Host-plane real cost · trim amortization). **#40** — error-laundering fix, claimable AFTER #43 lands (patch surface moves with the pin). **#6** — A/B protocol, buildable (4 datums recorded; vision-path + verification-claim-fidelity axes established). **#7** — owner-gated (canonicalization).
+- **[skill, outside repo] SK-1/SK-2/SK-3/SK-4** — await the owner's landing-surface ruling.
 
 ## Owner items (batched, non-blocking)
 
-- **ONE step left on #3 — the fork Actions tab enable-workflows click (UI-only, operator-only).** Branch protection is DONE per the in-session ruling (2026-08-19): ruleset `master-required-checks` (21051431) active — required checks `check` + `desktop-windows`, deletion + force-push blocked, admin bypass always (no wedge while events are dormant). API shows Actions enabled and the workflow active, yet push/PR events fire zero runs — the fork opt-in banner is the remaining explanation and only the UI clears it. #3 closes on the first real PR-event rollup.
-- **Skill-root canonicalization** (#7): OK to make the preset-local copy in this repo canonical and retire/sync-target `~/.claude/skills` + `~/.agents/skills` copies? (Coordinates with your sync-skills fleet flow.)
-- **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` (also reads `OPENAI_API_KEY` from other skills' `.env`s). Recommend rotating the Pinecone key and moving it to `scripts/.env`. Flagging only — the skill folder is outside this repo's fleet surface.
-- **SK-2 landing surface**: node-catalog regeneration belongs to the Parametria app (suquo-systems-rust fleet) — file it there?
-- **SK-4 (new, run #2): stale-spec silent wrong-build hazard.** The skill's build procedure writes `spec.json` to `C:/tmp` via a subprocess; under workspace-write the subprocess write EPERMs, and `build-definition` then silently consumed a STALE spec — creating a phantom definition in a real Convex collection (cleaned up in-run). Skill fix: workspace-relative paths (PR #25's `.parametria-evidence/` convention retires C:/tmp) + the build script should verify spec freshness (hash/mtime) before building. Same landing-surface ruling as SK-1/SK-3.
-- **RE-INSTALL NEEDED before run #3:** the installed profile predates PRs #19/#22/#25 — run `corepack yarn workspace dsh-preset-parametria install:profile` (add `--force` if it refuses on local edits), then the next run is #1's live test.
-- **Rebrand identity migrations (from PR #29's deferrals, need owner calls):** (1) `app.setName` change moves Electron `userData` — a real user-data migration, not presentation; (2) electron-builder `appId`/`productName`/NSIS shortcut identity — changes upgrade/install identity for packaged builds; (3) NAMING: what does "DSH Terminal" (and other non-shell product strings) become — 'Parametria Terminal'? Rule these and Lane A takes them as one migration slice.
+- **#3 — the fork Actions tab enable-workflows click** (UI-only; ruleset `master-required-checks` is active with admin bypass; #3 closes on the first real PR-event rollup).
+- **Live-run items:** agy sign-in still failing (antigravity status ERROR persists after sign-in — re-verify with `modlens doctor` or agy's own status); claude-cli vision fails under a SessionEnd hook cancellation (operator's Claude plugin config); codex spawn EINVAL (modlens Windows bug — report to @liustack?).
+- **Rulings pending:** skill-root canonicalization (#7) · SK-1..4 landing surface · rebrand identity migrations + product NAMING ("DSH Terminal" → ?) · report the appendOwned quadratic + O_TRUNC EINVAL forensics to anywhere-labs? · modlens into the parametria profile?
+- **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` — rotate + move to `scripts/.env` (outside this repo's fleet surface; flagged only).
