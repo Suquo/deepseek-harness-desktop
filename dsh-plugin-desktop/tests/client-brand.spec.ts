@@ -84,12 +84,16 @@ describe('Parametria brand presentation', () => {
     // BrandWordmark is a single svg carrying whale AND letterforms, so the mark is not an addition
     // to this site — a wordmark alone is what dropped a graphic the lockup already had.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
+
+    // rc.8 moved upstream's brand string out of the svg into a sibling TEXT node, which the svg rule
+    // above does not reach. Without this the lockup would show upstream's wordmark beside ours.
+    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand \.hHd-Xa_brandName \{ display: none; \}/)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }`)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }`)
 
     // Collapsed sidebar rail and empty-state hero: the mark, painted over the hidden svg.
-    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }`)
-    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railFish > \* \{ display: none; \}/)
+    expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railMark { background: ${mark}; }`)
+    expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_railMark > \* \{ display: none; \}/)
     expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }`)
     expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_fishHitbox \.pXSMma_fish > \* \{ display: none; \}/)
   })
@@ -101,9 +105,10 @@ describe('Parametria brand presentation', () => {
       .map(block => (block.split('{')[0] ?? '').trim())
       .filter(selector => selector.includes(`.${sidebar.brand}`))
 
-    // Exhaustive: the two rules that reshape the button, and the two that generate boxes in it. A
-    // third generated box appearing here without a decision is exactly what this count catches.
-    expect(lockupRules).toHaveLength(4)
+    // Exhaustive: the two rules that reshape the button, the one that hides upstream's own brand
+    // text (rc.8 split it out of the svg), and the two that generate boxes in it. A third generated
+    // box appearing here without a decision is exactly what this count catches.
+    expect(lockupRules).toHaveLength(5)
 
     // Every generated box is qualified by upstream's expanded-state class. The rail renders no
     // `.brand` element at all, so this is defence in depth rather than the only thing keeping the

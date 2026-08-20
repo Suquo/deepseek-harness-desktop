@@ -56,17 +56,25 @@ export const HERO_HEADLINE_TEXT = 'Parametric Definitions'
  * package that ships them.
  *
  * The emitted names are content-derived per-module prefixes baked into the pinned upstream client
- * bundles. They are stable for a pinned upstream version and change when the submodule pin moves,
- * so `tests/client-brand.spec.ts` asserts each pair against the bundle's own module export table
- * — matching the whole mapping, not a bare substring, because several of these names are prefixes
- * of one another.
+ * bundles, so `tests/client-brand.spec.ts` asserts each pair against the bundle's own module export
+ * table — matching the whole mapping, not a bare substring, because several of these names are
+ * prefixes of one another.
+ *
+ * What actually moves them is worth stating precisely, because the rc.7 -> rc.8 bump disproved the
+ * obvious guess. The PREFIX did not change across that bump — `hHd-Xa_` and `pXSMma_` survived it
+ * unchanged — so a pin move does not by itself invalidate these pairs. What invalidated one was
+ * upstream RENAMING a class: rc.8 restructured the sidebar brand region, retiring `railFish` in
+ * favour of `railMark` and giving the lockup real child elements (`brandIdentity > brandMark +
+ * brandName`) where rc.7 had a bare inline svg. The mapping assertion catches exactly that, which is
+ * why it is anchored on the local-to-emitted pair rather than on the prefix.
  */
 export const UPSTREAM_BRAND_CLASSES = {
   '@deepseek-ai/dsh-client-ui-sidebar': {
     logoRow: 'hHd-Xa_logoRow',
     brand: 'hHd-Xa_brand',
     wide: 'hHd-Xa_wide',
-    railFish: 'hHd-Xa_railFish',
+    brandName: 'hHd-Xa_brandName',
+    railMark: 'hHd-Xa_railMark',
   },
   '@deepseek-ai/dsh-client-ui-conversation': {
     fishHitbox: 'pXSMma_fishHitbox',
@@ -127,7 +135,15 @@ export const UPSTREAM_BRAND_CLASSES = {
  *
  * Both generated boxes are qualified by `.hHd-Xa_wide`, upstream's own expanded-state class. The
  * rail renders no `.hHd-Xa_brand` element at all, so its icon-only resting state is reached by a
- * different rule entirely (`.hHd-Xa_railFish` below) and cannot pick either of these up.
+ * different rule entirely (`.hHd-Xa_railMark` below) and cannot pick either of these up.
+ *
+ * `.hHd-Xa_brandName` is hidden for the same reason the svg above it is, and it exists as a separate
+ * rule only because rc.8 moved upstream's brand string out of the svg. At rc.7 the lockup's entire
+ * content was one decorative `<svg>`, so hiding svg hid the brand. rc.8 renders `brandMark` (still an
+ * svg) beside `brandName`, a TEXT node carrying upstream's own wordmark — which `svg { display: none }`
+ * does not reach. Without this rule the rc.8 lockup would show upstream's brand text and this sheet's
+ * `::after` wordmark side by side. Hiding it restores exactly the rc.7 rendering; it does not change
+ * what this sheet was already doing.
  *
  * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
  * hidden, so the superseded string leaves the accessibility tree instead of being announced
@@ -164,10 +180,11 @@ export function parametriaBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
+${lockup} .hHd-Xa_brandName { display: none; }
 ${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
 ${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
-.dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }
-.dshDesktopUpstreamSidebar .hHd-Xa_railFish > * { display: none; }
+.dshDesktopUpstreamSidebar .hHd-Xa_railMark { background: ${mark}; }
+.dshDesktopUpstreamSidebar .hHd-Xa_railMark > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_headline .pXSMma_headlineText { display: none; }
