@@ -35,12 +35,11 @@ export const inject = [
  * Register desktop-owned client surfaces for the current BrowserWindow mode.
  *
  * Everything registered unconditionally here reaches BOTH shell modes, so
- * everything here has to be additive: compatibility mode runs the upstream
- * default client, and AGENTS.md admits desktop-owned UI there only when it adds
- * to a documented slot without replacing or altering upstream slots, services or
- * behaviour. The boot reporter, the folder drop and the directory-picker bridge
- * met that bar already; the cost surface is the first desktop-owned *visible*
- * surface to join them, under the owner ruling on issue #36.
+ * everything here has to be additive — the bar AGENTS.md sets for compatibility
+ * mode. The boot reporter, the folder drop and the directory-picker bridge met
+ * it already; the cost surface is the first desktop-owned *visible* surface to
+ * join them, and `./cost-surface.ts` carries that ruling's reasoning rather than
+ * restating it here.
  *
  * Mode-specific composition — owning the root slot, the window frame's styles,
  * the theme presenter — stays behind the advanced branch at the end.

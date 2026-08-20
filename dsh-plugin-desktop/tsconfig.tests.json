@@ -17,6 +17,7 @@
     "tests/client-cost-model.spec.ts",
     "tests/client-cost-parity.spec.ts",
     "tests/client-cost-rates.spec.ts",
+    "tests/client-cost-surface-mode.spec.ts",
     "tests/client-environment.spec.ts",
     "tests/client-turn-cost.spec.ts",
     "tests/client-workspace-folder-drop.spec.ts",

@@ -7,18 +7,14 @@ import { describe, expect, it } from 'vitest'
  * The cost surface mounts in BOTH shell modes, and stays purely additive in the
  * compatibility one.
  *
- * THE CONTRACT CHANGED, AND WHY. The first version of this file fenced the
- * opposite rule: the surface was advanced-only, because AGENTS.md then bound
- * compatibility mode to the upstream default client without overrides of any
- * kind. The owner ruled otherwise on 2026-08-20 (issues #26 and #5/#36) and
- * AGENTS.md was amended: compatibility mode may carry visual branding and
- * ADDITIVE desktop-owned UI that alters no upstream behaviour — injecting into a
- * documented slot is allowed there; replacing or altering upstream slots,
- * services or behaviour is not. The owner runs compatibility mode and saw no
- * cost surface at all, which is the whole reason the rule moved.
+ * THE CONTRACT CHANGED. The first version of this file fenced the opposite rule
+ * — the surface was advanced-only — because AGENTS.md then admitted no desktop
+ * override into compatibility mode at all. The owner's 2026-08-20 ruling amended
+ * that line; `src/client/cost-surface.ts` carries the reasoning, and AGENTS.md
+ * carries the rule. What matters here is the consequence: the gate did not
+ * disappear, it MOVED — from "which mode" to "what kind of change".
  *
- * So the gate did not disappear, it MOVED — from "which mode" to "what kind of
- * change". These fences hold the new line in three parts:
+ * These fences hold the new line in three parts:
  *
  *  1. MOUNTS IN BOTH MODES — installed from the mode-independent entry point,
  *     ahead of the one advanced-mode branch, so no mode test stands between
@@ -28,13 +24,15 @@ import { describe, expect, it } from 'vitest'
  *     whose stylesheet cannot select an upstream element.
  *  3. THE OLD GATE STILL HOLDS EVERYTHING ELSE — relaxing it for this one
  *     surface must not have let the window frame, the theme presenter, the
- *     layout service or the brand sheet through with it.
+ *     layout service or the brand sheet through with it, and the boundary is
+ *     snapshotted in both directions rather than only on the side it left.
  *
- * Runtime evidence is the primary proof and is recorded in the PR: launches in
- * BOTH modes, both themes, showing the badge in upstream's own turn-tail action
- * row and the `dsh-plugin-desktop/cost-surface` stylesheet served in each, with
- * the compatibility launch still running upstream's `ui-layout` root. These
- * fences keep that property from regressing between launches.
+ * Runtime evidence remains the primary proof, and no fence here substitutes for
+ * it: what was measured in a running compatibility launch — the badge inside
+ * upstream's own turn-tail action row, the `dsh-plugin-desktop/cost-surface`
+ * stylesheet served, and upstream's `ui-layout` root still composing — is
+ * recorded in the pull request that lands this change. These fences keep those
+ * properties from regressing between launches.
  */
 
 const CLIENT_DIRECTORY = fileURLToPath(new URL('../src/client/', import.meta.url))
@@ -67,12 +65,40 @@ const COST_MODULES = ['cost-surface.ts', 'TurnCostBadge.tsx', 'turn-cost.ts', 'c
 
 const STYLES_OPENER = 'const COST_STYLES = `'
 
+/** The sheet's final rule — read back so a truncated read cannot shrink the sample silently. */
+const LAST_RULE = '.dshDesktopCostProvenance {'
+
+/**
+ * Declarations whose value is a colour, by exact property name.
+ *
+ * Exact rather than prefixed on purpose: `border-collapse` and `border-radius`
+ * start with `border` and carry no colour, so a prefix match would demand a
+ * token from a declaration that has no business holding one.
+ */
+const COLOUR_PROPERTIES = new Set([
+  'color',
+  'background',
+  'background-color',
+  'border',
+  'border-top',
+  'border-bottom',
+  'border-left',
+  'border-right',
+  'outline',
+])
+
 /**
  * The stylesheet text, read out of the module source.
  *
- * Comments are stripped first, which also removes the escaped backticks inside
- * the sheet's own explanatory comment — so the closing delimiter search cannot
- * stop early on one of those.
+ * Comments are stripped first, which removes the escaped backticks inside the
+ * sheet's own explanatory comment. The closing delimiter is then matched as a
+ * backtick ALONE ON ITS LINE rather than as the next backtick anywhere, which is
+ * the difference between a fence and a fence-shaped hazard: an escaped backtick
+ * arriving inside real CSS one day — a `content:` string, say — would end a
+ * first-backtick search early, and every fence below would then pass over a
+ * surviving prefix while the truncated tail went unexamined. The last rule is
+ * asserted present as the second half of that guarantee, so a truncation that
+ * somehow got past the delimiter still reddens instead of shrinking the sample.
  * @returns the raw stylesheet body.
  */
 function costStyleSheet(): string {
@@ -80,9 +106,11 @@ function costStyleSheet(): string {
   const start = source.indexOf(STYLES_OPENER)
   expect(start).toBeGreaterThanOrEqual(0)
   const from = start + STYLES_OPENER.length
-  const end = source.indexOf('`', from)
+  const end = source.indexOf('\n`', from)
   expect(end).toBeGreaterThan(from)
-  return source.slice(from, end)
+  const sheet = source.slice(from, end)
+  expect(sheet).toContain(LAST_RULE)
+  return sheet
 }
 
 /**
@@ -100,6 +128,25 @@ function selectorsOf(sheet: string): string[] {
     const brace = block.indexOf('{')
     if (brace < 0) return []
     return block.slice(0, brace).split(',').map(one => one.trim()).filter(one => one.length > 0)
+  })
+}
+
+/**
+ * Every colour-bearing declaration in a stylesheet, as property/value pairs.
+ * @param sheet - stylesheet text.
+ * @returns the colour declarations.
+ */
+function colourDeclarationsOf(sheet: string): { property: string; value: string }[] {
+  return sheet.split('}').flatMap((block) => {
+    const brace = block.indexOf('{')
+    if (brace < 0) return []
+    return block.slice(brace + 1).split(';').flatMap((declaration) => {
+      const colon = declaration.indexOf(':')
+      if (colon < 0) return []
+      const property = declaration.slice(0, colon).trim()
+      if (!COLOUR_PROPERTIES.has(property)) return []
+      return [{ property, value: declaration.slice(colon + 1).trim() }]
+    })
   })
 }
 
@@ -155,12 +202,17 @@ describe('the cost surface stays additive in compatibility mode', () => {
     // DECLARES a slot tree and owns it, which is what `advanced-shell.ts` does
     // for `root` and what must never appear here.
     const surface = code(clientSource('cost-surface.ts'))
-    expect(surface).toContain("ctx.slots.inject(\n    'conversation.chat.assistant-actions',")
-    expect(surface).toMatch(/id: COST_BADGE_ENTRY_ID,\n\s*order: COST_BADGE_ORDER,/)
-    expect(surface).not.toContain('children:')
+    expect(surface).toMatch(/ctx\.slots\.inject\(\s*'conversation\.chat\.assistant-actions',/)
+    expect(surface).toMatch(/id: COST_BADGE_ENTRY_ID,\s*order: COST_BADGE_ORDER,/)
+    // Scoped to the registration literal rather than swept over the file: an
+    // unrelated `children:` elsewhere in the module is not this claim's subject,
+    // and a fence that a stray prop could trip is a fence that gets edited away.
+    const registration = /ctx\.slots\.register\(\{[\s\S]*?\}, TurnCostBadge\)/.exec(surface)?.[0]
+    expect(registration).toBeDefined()
+    expect(registration).not.toContain('children:')
     // The comparison that gives the assertion above its meaning: the owning
     // shape exists in this codebase, and it lives behind the mode gate.
-    expect(code(clientSource('advanced-shell.ts'))).toContain('children:')
+    expect(code(clientSource('advanced-shell.ts'))).toMatch(/ctx\.slots\.register\(\{\s*name: 'root',\s*children: \{/)
   })
 
   it('provides no service and mutates no upstream DOM', () => {
@@ -211,9 +263,16 @@ describe('the cost surface stays additive in compatibility mode', () => {
     // colour resolves through `ui-theme`'s alias tokens, which are defined on
     // `body` in both modes. `brand.ts` by contrast hard-codes its two accents
     // and therefore needs a theme-keyed selector for each.
+    //
+    // Asserted per DECLARATION, not by banning hex literals. "No `#rgb`" was the
+    // first shape of this fence and it was too weak to carry the sentence above
+    // it: `red`, `rgb(...)` and `hsl(...)` all sail through a hex ban, and any of
+    // them would be a colour that is right in one theme and wrong in the other.
     const sheet = costStyleSheet()
-    expect(sheet).not.toMatch(/#[0-9a-fA-F]{3}/)
-    expect(sheet.match(/var\(--dsw-alias-/g)?.length ?? 0).toBeGreaterThan(10)
+    const declarations = colourDeclarationsOf(sheet)
+    expect(declarations.length).toBeGreaterThan(10)
+    const untokened = declarations.filter(one => !one.value.includes('var(--dsw-alias-'))
+    expect(untokened).toEqual([])
   })
 
   it('keeps its stylesheet separate from the advanced-shell, brand and compat-brand sheets', () => {
@@ -230,17 +289,28 @@ describe('the cost surface stays additive in compatibility mode', () => {
   })
 
   it('marks an unpriced cell above the column rule that would otherwise win', () => {
-    // Measured in the running app: `.dshDesktopCostUnknown` alone (0,1,0) loses
-    // to `.dshDesktopCostTable tbody td:last-child` (0,2,2), so unpriced cells
-    // rendered in the ordinary label colour and read as settled values. Unchanged
-    // by the mode move: the same sheet now carries it into both shells.
-    const surface = clientSource('cost-surface.ts')
-    expect(surface).toContain('.dshDesktopCostTable tbody td.dshDesktopCostUnknown')
-    expect(surface).not.toMatch(/^\.dshDesktopCostUnknown \{/m)
+    // Measured in the running app in BOTH modes: `.dshDesktopCostUnknown` alone
+    // (0,1,0) loses to `.dshDesktopCostTable tbody td:last-child` (0,2,2), so
+    // unpriced cells rendered in the ordinary label colour and read as settled
+    // values. Unchanged by the mode move: the same sheet carries it into both.
+    //
+    // Read from the PARSED SHEET, not the raw file. The raw file also contains
+    // the comment that explains this rule, and that comment names both selectors
+    // — so a fence read off the raw text would be satisfied by the prose after
+    // the rule itself had been deleted, which is the exact failure `code()`
+    // exists to prevent.
+    const sheet = costStyleSheet()
+    expect(selectorsOf(sheet)).toContain('.dshDesktopCostTable tbody td.dshDesktopCostUnknown')
+    expect(selectorsOf(sheet)).not.toContain('.dshDesktopCostUnknown')
   })
 })
 
 describe('relaxing the gate for the cost surface did not open it', () => {
+  // The runtime half of this claim — an exhaustive both-directions snapshot of
+  // which effects each mode registers — is in `client-cost-surface-mode.spec.ts`,
+  // which runs `apply` and therefore belongs to the client TypeScript project.
+  // This file stays pure source analysis and imports no client module.
+
   it('keeps desktop-composed presentation behind the mode test', () => {
     // Standard 11: deleting a guard means auditing every path it defended. The
     // advanced-only gate defended five things, of which exactly one was ruled

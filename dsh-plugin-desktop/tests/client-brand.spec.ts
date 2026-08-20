@@ -282,14 +282,16 @@ describe('Parametria brand presentation', () => {
       // so an apply() that stopped running at all cannot pass by registering nothing.
       //
       // The cost surface joined this list under the owner's issue-#36 ruling, and it belongs here
-      // rather than being excused: AGENTS.md admits ADDITIVE desktop-owned UI into compatibility
-      // mode, and this guard's subject is the BRAND override — `parametriaBrandStyles()` reaching
-      // the compatibility document from the client rather than from `src/shell-branding.ts`, which
-      // would paint these pixels twice. What the list still forbids is any effect that replaces
-      // upstream presentation, and the ones that do — the advanced styles, the theme presenter, the
-      // layout service, the root slot — remain absent because `apply` reaches them only through its
-      // advanced branch. `tests/cost-surface-gating.spec.ts` carries the additive-only fences for
-      // the entry that was added.
+      // rather than being excused. This guard's subject is the BRAND override —
+      // `parametriaBrandStyles()` reaching the compatibility document from the client rather than
+      // from `src/shell-branding.ts`, which would paint those pixels twice — and what the list
+      // still forbids is any effect that REPLACES upstream presentation. The four that do (the
+      // advanced styles, the theme presenter, the layout service, the root slot) remain absent
+      // because `apply` reaches them only through its advanced branch.
+      //
+      // `tests/cost-surface-gating.spec.ts` owns the rest of that claim: the additive-only fences
+      // for the entry that was added, and the advanced-mode counterpart to this snapshot, which it
+      // derives from this same list rather than copying it.
       expect(labels).toEqual([
         'dsh-plugin-desktop: renderer boot health report',
         'dsh-plugin-desktop: workspace folder drop',
