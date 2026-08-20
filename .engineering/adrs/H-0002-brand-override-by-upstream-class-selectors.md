@@ -28,7 +28,14 @@ stylesheet.
 ## Consequences
 
 - The emitted class names (`hHd-Xa_*`, `pXSMma_*`) are content-derived per-module prefixes. They are
-  stable for a pinned upstream version and **change when the submodule pin moves**.
+  stable for a pinned upstream version, and ~~**change when the submodule pin moves**~~
+  **corrected 2026-08-20 (PR #47, the rc.7 → rc.8 bump — the first bump to test this claim):** a pin
+  move does **not** by itself change them. Both prefixes survived rc.7 → rc.8 unchanged. What
+  invalidates an entry is upstream **renaming or restructuring** the class: rc.8 retired
+  `railFish` for `railMark` and split the sidebar lockup into `brandIdentity > brandMark +
+  brandName`, while every conversation class stayed put. The obligation below is unchanged — it is
+  the reason the drift was caught — but a generation re-deriving the table should look for renames
+  and restructuring, not for a new hash prefix.
 - `dsh-plugin-desktop/tests/client-brand.spec.ts` carries the resulting obligation: it asserts each
   overridden class against the bundle's own module export mapping, asserts the headline grid shape
   the replacement is placed into, and asserts the superseded `hero.headline` entry in both locales.
