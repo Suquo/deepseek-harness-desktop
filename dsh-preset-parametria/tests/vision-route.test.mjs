@@ -119,9 +119,7 @@ describe(`the ${MODEL_ID} entry against the installed pi-ai catalog`, () => {
     // A hand-declared model that declares no `reasoningEfforts` does not
     // reason at all, which would silently downgrade it.
     assert.equal(catalog.reasoning, true)
-    assert.deepEqual(Object.keys(model.reasoningEfforts).sort(), ['high', 'off'])
-    // `off:` is valueless on purpose — Off is offered and sends nothing.
-    assert.equal(model.reasoningEfforts.off, null)
+    assert.deepEqual(Object.keys(model.reasoningEfforts).sort(), ['high'])
     assert.equal(model.reasoningEfforts.high, 'high')
   })
 
