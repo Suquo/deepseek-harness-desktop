@@ -85,11 +85,7 @@ describe('Parametria brand presentation', () => {
     // to this site — a wordmark alone is what dropped a graphic the lockup already had.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
     expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }`)
-    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }`)
-
-    // Left of the wordmark, not right of it: both boxes are flex children of the same lockup, so
-    // their order is source order, and this is the whole of what the site asks for.
-    expect(css.indexOf('.hHd-Xa_wide::before')).toBeLessThan(css.indexOf('.hHd-Xa_wide::after'))
+    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }`)
 
     // Collapsed sidebar rail and empty-state hero: the mark, painted over the hidden svg.
     expect(css).toContain(`.dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }`)
@@ -126,15 +122,38 @@ describe('Parametria brand presentation', () => {
     expect(markContent?.[1]).toBe('')
   })
 
-  it('pins no colour at all, so both themes come from the ink the sidebar already sets', () => {
+  it('puts the mark left of the wordmark by the only mechanism that decides it', () => {
+    const sidebar = UPSTREAM_BRAND_CLASSES['@deepseek-ai/dsh-client-ui-sidebar']
     const css = parametriaBrandStyles()
 
-    // Exactly one colour declaration, and it names no colour. A single literal would be theme-blind;
-    // a pair of literals keyed on the dark-theme attribute would work, but would pin two values
-    // whose whole job is to match a palette upstream owns and retunes. An inherited value cannot
-    // drift from the palette it reads, and it is the arrangement upstream's own wordmark had.
+    // What actually orders these two boxes is which pseudo-element each one is: `::before` boxes
+    // precede the originating element's content and `::after` boxes follow it, whatever order the
+    // RULES appear in. So the mark must be the `::before` and the wordmark the `::after` — asserting
+    // that the ::before rule is written first in the sheet would prove nothing about the rendering.
+    const markIsBefore = new RegExp(`\\.${sidebar.wide}::before \\{[^}]*background: url`).test(css)
+    const wordIsAfter = new RegExp(`\\.${sidebar.wide}::after \\{ content: "${PARAMETRIA_WORDMARK}"`).test(css)
+    expect([markIsBefore, wordIsAfter]).toEqual([true, true])
+
+    // The one thing that could still flip them is a reversal on the flex container they share, so
+    // the lockup must declare none. `flex-direction` and `direction` are the two that reverse a row;
+    // `order` would let either box jump the other regardless of its pseudo-element.
+    const lockupRule = /\.hHd-Xa_brand \{([^}]*)\}/.exec(css)?.[1] ?? ''
+    expect(lockupRule).toContain('display: inline-flex')
+    for (const reversal of ['flex-direction', 'direction:', 'row-reverse']) {
+      expect(css).not.toContain(reversal)
+    }
+    expect(css).not.toMatch(/(?:^|[\s;{])order:/)
+  })
+
+  it('declares no colour at all, so both themes come from the ink the sidebar already sets', () => {
+    const css = parametriaBrandStyles()
+
+    // Not one colour declaration in the sheet — not even `color: inherit`, which would be inert
+    // since that is already the inherited value. A single literal would be theme-blind; a pair keyed
+    // on the dark-theme attribute would work but would pin two values whose whole job is to match a
+    // palette upstream owns and retunes. Declaring nothing cannot drift from the palette it reads.
     const declared = [...css.matchAll(/(?:^|[\s;{])color:\s*([^;}]+)/g)].map(match => match[1] as string)
-    expect(declared).toEqual(['inherit'])
+    expect(declared).toEqual([])
 
     // And the sheet must not have grown a theme-conditional branch by another route.
     expect(css).not.toContain('data-ds-dark-theme')

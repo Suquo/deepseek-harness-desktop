@@ -153,8 +153,8 @@ export function serveShellAsset(
  * inside `.logoRow`).
  *
  * The wordmark's neutral ink arrives here the same way it does in the advanced sheet — by
- * inheriting the sidebar's own themed label ink — so this sheet, like that one, names no colour and
- * carries no theme-conditional rule of its own.
+ * inheriting the sidebar's own themed label ink through a `color` declaration neither sheet writes —
+ * so this sheet, like that one, names no colour and carries no theme-conditional rule of its own.
  *
  * The accessibility arrangement is the advanced sheet's, for the same reason: upstream's marks are
  * `aria-hidden` decoration, so repainting their boxes costs no accessible name, and the lockup
@@ -172,7 +172,7 @@ export function compatibilityBrandStyles(): string {
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
 ${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
-${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }
+${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} { background: ${mark}; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }

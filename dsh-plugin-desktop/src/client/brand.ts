@@ -83,20 +83,29 @@ export const UPSTREAM_BRAND_CLASSES = {
  * rail, and the empty-state hero headline. Each upstream mark is an `aria-hidden` decorative
  * `<svg>`, so hiding it and repainting the box costs no accessible name.
  *
- * The lockup's replacement is a mark-then-wordmark pair, and its geometry is measured from the
- * upstream svg it supersedes rather than chosen. In `BrandWordmark` (`ui-primitives/src/
- * BrandWordmark.tsx`) the whale's clip box is 23.16 wide by 17.04 tall inside a 24-tall viewBox, and
- * the leftmost letterform path starts at x 26.96 — so upstream drew 17.0px of mark ink with a 3.7px
- * optical gap before the text. The Parametria mark's ink spans 74.6..425.4 of its 500-unit box
- * (70.2%), so a 24px box renders 16.8px of ink with 3.6px of its own padding to the right of it.
- * Both numbers land within a fifth of a pixel of upstream's, so a 24px box reproduces the mark
- * upstream drew here at the size it drew it.
+ * The lockup's replacement is a mark-then-wordmark pair, and its box is sized from the upstream svg
+ * it supersedes rather than chosen. `BrandWordmark` (`ui-primitives/src/BrandWordmark.tsx`) renders
+ * at `size = 24`, so its units are px: the whale's clip box is 23.16 wide by 17.04 tall, and the
+ * leftmost letterform path starts at x 26.96 — upstream's mark ink is therefore 17.04px TALL, with
+ * a 3.66px gap to the text. The Parametria mark's solid ink spans 74.6..425.4 on both axes of its
+ * 500-unit box (70.2%), so a 24px box renders it 16.8px square: within a fifth of a pixel of
+ * upstream's mark HEIGHT, which is the dimension that sets optical size in a horizontal lockup.
  *
- * The pair is then set wider than upstream's on purpose. Reproducing upstream's 3.7px exactly reads
- * as too tight against these letterforms (owner call on the rendered lockup, 2026-08-20), so the
- * mark carries `margin-right: 8px` on top of the 3.6px its own artwork already supplies. 8px is not
- * an eyeballed number: it is the `gap` upstream sets on `.logoRow` itself, so the space inside the
- * lockup now matches the space between the lockup and the control beside it.
+ * Width is deliberately not matched and could not be: the whale is a wide shape and this mark is
+ * square, so at equal height the replacement is about 6.4px narrower. Matching width instead would
+ * have made it 23px tall and visibly larger than the ink it replaces.
+ *
+ * The 70.2% figure is the SOLID ink. The source's hairline construction lines run wider
+ * (30.75..469.25) and its corner circles reach 430.66 — see `./parametria-mark.ts`, which keeps them
+ * because they do not resolve at these sizes. The padding quoted here is padding-to-solid-ink, which
+ * is what the eye reads, not the artwork's outermost extent.
+ *
+ * The pair is then set wider than upstream's on purpose: reproducing upstream's 3.66px exactly reads
+ * as too tight against these letterforms (owner call on the rendered lockup, 2026-08-20). The mark
+ * carries `margin-right: 8px`, which is not an eyeballed number — it is the same `gap` upstream
+ * declares on `.logoRow` itself, so the declared space inside the lockup equals the declared space
+ * between the lockup and the control beside it. Optically the pair then reads about 11.6px apart,
+ * because the mark's own 3.6px of padding sits inside that margin.
  *
  * The wordmark that takes the lockup's place is decorative too, and deliberately so. The lockup is
  * a `<button>` carrying `aria-label={t('session.new.label')}` (`ui-sidebar/src/client/
@@ -127,17 +136,23 @@ export const UPSTREAM_BRAND_CLASSES = {
  * replacement would only land correctly by accident.
  *
  * The wordmark takes NEUTRAL ink rather than Parametria's accent blue (owner call, 2026-08-20,
- * superseding the accent treatment this sheet shipped with). It gets there by riding the sidebar's
- * own text ink — `color: inherit` — which is the arrangement upstream's wordmark had, where the
- * letterforms were `currentColor` inside a `.hHd-Xa_brand` upstream declares `color: inherit`. So
- * the ink is dark on the light sidebar and light on the dark one without this sheet naming either
- * colour, and this sheet now pins no colour at all.
+ * superseding the accent treatment this sheet shipped with), and it gets there by this sheet DECLARING
+ * NO COLOUR AT ALL. `color` is an inherited property and a pseudo-element inherits from the element
+ * that originates it, so the wordmark takes `.hHd-Xa_brand`'s colour, which upstream declares as
+ * `color: inherit` and lets the sidebar's own themed label ink flow into. Dark on the light sidebar,
+ * near-white on the dark one, with nothing here to keep in step.
  *
- * Inheriting is what makes "neutral" a single declaration rather than a palette this sheet has to
- * maintain. Two literals keyed on `body[data-ds-dark-theme]` would also work — upstream's own theme
+ * There is deliberately no `color: inherit` written out below. It would be inert — that is already
+ * the inherited value — and an inert declaration reads as a mechanism when it is only a comment.
+ * This paragraph is the comment.
+ *
+ * Two literals keyed on `body[data-ds-dark-theme]` would have worked instead — upstream's own theme
  * boot script sets that attribute on every index response, in both shell modes — but they would pin
  * two colours whose entire purpose is to match a palette upstream owns, and they would drift the
- * first time upstream retuned its label ink. Inheriting cannot drift from a palette it reads.
+ * first time upstream retuned its label ink. What is NOT guarded, and is worth stating rather than
+ * implying: if upstream retuned that ink to something non-neutral, the wordmark would follow it. The
+ * pin-drift anchor in `tests/client-brand.spec.ts` guards the delegation (`.brand` still inheriting),
+ * not the resolved colour, which no fence in a stylesheet can reach.
  *
  * The mark keeps its own brand blues in both themes, exactly as its source paints it; the accent
  * change is the wordmark TEXT only.
@@ -150,7 +165,7 @@ export function parametriaBrandStyles(): string {
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
 ${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
-${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }
+${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }
