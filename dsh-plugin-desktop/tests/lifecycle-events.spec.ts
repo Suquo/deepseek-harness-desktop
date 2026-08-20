@@ -36,9 +36,7 @@ const fsProbe = vi.hoisted(() => ({
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs')>()
-  return {
-    ...actual,
-    default: actual,
+  const wrapped = {
     readFileSync: ((...args: Parameters<typeof actual.readFileSync>) => {
       if (fsProbe.counting) fsProbe.wholeFileReads += 1
       return actual.readFileSync(...args)
@@ -58,6 +56,9 @@ vi.mock('node:fs', async importOriginal => {
       })
     }) as typeof actual.fstatSync,
   }
+  // The default export carries the same wrappers, so a default import cannot quietly
+  // detach the counters and make the assertions below pass while measuring nothing.
+  return { ...actual, ...wrapped, default: { ...actual, ...wrapped } }
 })
 
 interface CapturedLogger extends DesktopLogger {
@@ -384,12 +385,13 @@ describe('desktop lifecycle events', {
     const evidencePath = desktopLifecycleEvidencePath(userDataDir)
     mkdirSync(join(userDataDir, 'lifecycle-events'))
     writeFileSync(evidencePath, 'stale run evidence\n')
+    const logger = createLogger()
     const recorder = createDesktopLifecycleRecorder({
       userDataDir,
       appVersion: '2.0.1-test',
       platform: 'win32',
       arch: 'x64',
-      logger: createLogger(),
+      logger,
       now: () => FIXED_NOW,
       randomId: (() => {
         const ids = ['cap-run', 'cap-op']
@@ -410,7 +412,8 @@ describe('desktop lifecycle events', {
       'renderer-startup',
       'health-commit',
     ]
-    for (let index = 0; index < 900; index += 1) {
+    const transitions = 900
+    for (let index = 0; index < transitions; index += 1) {
       recorder.transitionStartupStage(stages[index % stages.length] as DesktopStartupFailureStage)
     }
 
@@ -422,6 +425,18 @@ describe('desktop lifecycle events', {
       operationId: 'cap-op',
       eventName: 'startup.run.started',
     })
+
+    // A recorder that GAVE UP at its first trim also satisfies every assertion above:
+    // it leaves a capped file whose head is the generation line and whose lines all
+    // carry this run's ids. It differs in the two things asserted here — it reports
+    // the failure, and its evidence stops at the abort instead of ending on the last
+    // transition driven. Both were needed to catch an `O_TRUNC` open that is EINVAL
+    // on win32, which silently dropped the last 826 events with the suite still green.
+    expect(logger.error).not.toHaveBeenCalled()
+    expect(JSON.parse(retainedEvents.at(-1) ?? '{}')).toMatchObject({
+      eventName: 'startup.stage.started',
+      stageId: stages[(transitions - 1) % stages.length],
+    })
     for (const line of retainedEvents) {
       expect(Buffer.byteLength(line) + 1).toBeLessThanOrEqual(MAX_DESKTOP_LIFECYCLE_EVENT_BYTES)
       expect(parseDesktopLifecycleEvent(JSON.parse(line) as unknown)).toMatchObject({
@@ -431,9 +446,16 @@ describe('desktop lifecycle events', {
     }
   })
 
-  it('appends startup transitions without reading the evidence file back', () => {
+  // Both ownership arms, because both must stay off the file: win32 checks the file
+  // id (nothing read at all), every other platform and any file system reporting no
+  // id compares the generation line (a fixed prefix read, never the file).
+  it.each([
+    ['file identity', false],
+    ['content comparison', true],
+  ])('appends startup transitions without reading the evidence file back (%s)', (_label, hideFileId) => {
     const userDataDir = tempUserData('dsh-lifecycle-append-cost-')
     const logger = createLogger()
+    fsProbe.hideFileId = hideFileId
     const recorder = createDesktopLifecycleRecorder({
       userDataDir,
       appVersion: '2.0.1-test',
@@ -464,6 +486,7 @@ describe('desktop lifecycle events', {
       }
     } finally {
       fsProbe.counting = false
+      fsProbe.hideFileId = false
     }
 
     // Each transition closes one stage and opens the next: two appended events.
@@ -477,8 +500,9 @@ describe('desktop lifecycle events', {
     expect(evidence.byteLength).toBeLessThan(MAX_DESKTOP_LIFECYCLE_EVIDENCE_BYTES)
 
     // What #41 fixed: appending re-read the whole file every time, so the write path
-    // cost grew with the evidence already written. Reading nothing back is the fix;
-    // the fallback arm reads at most the generation line per append, never the file.
+    // cost grew with the evidence already written. Neither arm reads it back now, and
+    // the content arm's reading is bounded by the generation line per append — which
+    // is a real bound here, not a vacuous one, because the second case drives it.
     expect(fsProbe.wholeFileReads).toBe(0)
     expect(fsProbe.bytesRead).toBeLessThanOrEqual(appendedEvents * generationLineBytes)
     expect(logger.error).not.toHaveBeenCalled()

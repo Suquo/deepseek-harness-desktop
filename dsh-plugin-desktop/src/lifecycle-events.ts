@@ -480,10 +480,12 @@ export class DesktopLifecycleRecorder {
    * reports `false` — having written nothing — when it would not, leaving the caller
    * to take the trimming path.
    *
-   * Nothing here reads the evidence file: ownership comes from the descriptor's own
-   * stat and the size decision from the same stat, so the append path costs the same
-   * whether the file holds one event or the full 256 KiB (#41). The check and the
-   * write it authorizes share one descriptor, so no window opens between them.
+   * The evidence already written is never read back here: ownership comes from the
+   * descriptor's own stat and the size decision from the same stat, so the append
+   * path costs the same whether the file holds one event or the full 256 KiB (#41).
+   * (The content-comparison arm reads the generation line, a fixed prefix, and still
+   * never the file.) The check and the write it authorizes share one descriptor, so
+   * no window opens between them.
    */
   private appendOwnedWithinCap(line: Buffer): boolean {
     const descriptor = openSync(this.evidencePath, this.appendFlags())
@@ -526,19 +528,16 @@ export class DesktopLifecycleRecorder {
   }
 
   /**
-   * Truncating on open is only safe once ownership can be established without the
-   * file's own bytes: the content fallback has to read the generation line BEFORE
-   * anything is truncated, so that arm opens read-write and truncates after checking.
+   * Nothing is destroyed before ownership is established: the truncation happens
+   * after the check, never as an `O_TRUNC` on the open. A file this recorder turns
+   * out not to own must be refused with every byte intact — it belongs to a newer
+   * generation that is still writing to it.
    */
   private replaceOwned(content: Buffer): void {
-    const truncateOnOpen = this.ownedIdentity !== undefined
-    const flags = truncateOnOpen
-      ? constants.O_WRONLY | constants.O_TRUNC | noFollowFlag()
-      : constants.O_RDWR | noFollowFlag()
-    const descriptor = openSync(this.evidencePath, flags)
+    const descriptor = openSync(this.evidencePath, this.writeFlags())
     try {
       this.verifyOwnedDescriptor(descriptor)
-      if (!truncateOnOpen) ftruncateSync(descriptor)
+      ftruncateSync(descriptor)
       if (writeSync(descriptor, content, 0, content.byteLength, 0) !== content.byteLength) {
         throw new Error('lifecycle evidence replacement was incomplete')
       }
@@ -612,10 +611,21 @@ export class DesktopLifecycleRecorder {
     if (!prefix.equals(generationLine)) throw new Error('lifecycle evidence belongs to another recorder')
   }
 
-  /** Write-only when ownership is checkable by file id; read-write when it is not. */
+  /**
+   * Write-only when ownership is checkable by file id; read-write when it is not,
+   * because the content comparison has to read the generation line back.
+   *
+   * `O_TRUNC` appears in neither: libuv rejects it without `O_CREAT` on Windows
+   * (`EINVAL`), and truncating on open would destroy a file before the check that
+   * decides whether this recorder may touch it. Truncation is always a separate
+   * `ftruncateSync` after the check.
+   */
+  private writeFlags(): number {
+    return (this.ownedIdentity === undefined ? constants.O_RDWR : constants.O_WRONLY) | noFollowFlag()
+  }
+
   private appendFlags(): number {
-    const access = this.ownedIdentity === undefined ? constants.O_RDWR : constants.O_WRONLY
-    return access | constants.O_APPEND | noFollowFlag()
+    return this.writeFlags() | constants.O_APPEND
   }
 
   private requireGenerationLine(): Buffer {
@@ -639,11 +649,21 @@ function noFollowFlag(): number {
 }
 
 /**
- * The file this recorder owns, as the file system identifies it. Undefined when the
- * file system reports no usable id (`ino` of zero), which sends every ownership check
- * back to comparing the generation line itself.
+ * The file this recorder owns, as the file system identifies it — win32 only, and
+ * only when an id is actually reported. Everywhere else this returns undefined and
+ * every ownership check compares the generation line itself.
+ *
+ * The scope is deliberate. Windows file ids carry a sequence number that advances
+ * when an MFT record is reused, and 101 unlink-and-recreate cycles probed on this
+ * file system produced 101 distinct ids. POSIX inode numbers carry no such guarantee
+ * — a create immediately after an unlink can be handed the same inode back — so an
+ * identity check there could silently accept a newer generation's file as this
+ * recorder's own. Reading the generation line is cheap on those platforms anyway:
+ * the antivirus scan that makes a read-granting open expensive (0.949 ms against
+ * 0.125 ms write-only, measured) is what the win32 arm exists to avoid.
  */
 function ownedIdentityOf(descriptor: number): DesktopLifecycleEvidenceIdentity | undefined {
+  if (process.platform !== 'win32') return undefined
   const stats = fstatSync(descriptor, { bigint: true })
   if (stats.ino === 0n) return undefined
   return { dev: stats.dev, ino: stats.ino }
