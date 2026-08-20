@@ -109,19 +109,38 @@ decision is "inherit" or "adapt".
 3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
    **This paragraph is the authoritative statement of what that surface holds; the
    rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
-   restating the arithmetic.** At `0.1.0-rc.7` it is **166** entries:
+   restating the arithmetic.** At `0.1.0-rc.8` it is **173** entries:
 
    | Where | Entries | Enforced by |
    |---|---|---|
-   | `dsh-plugin-desktop/package.json` `dependencies` | 96 | `pinSurface` |
-   | `dsh-community-market/package.json` `devDependencies` | 32 | `pinSurface` |
-   | `dsh-community-market/package.json` `peerDependencies` | 29 | `pinSurface` |
+   | `dsh-plugin-desktop/package.json` `dependencies` | 98 | `pinSurface` |
+   | `dsh-community-market/package.json` `devDependencies` | 38 | `pinSurface` |
+   | `dsh-community-market/package.json` `peerDependencies` | 28 | `pinSurface` |
    | root `package.json` `resolutions` selectors | 9 | `patchedPackages` |
-   | **total** | **166** | |
+   | **total** | **173** | |
 
-   The middle two are the "61 dev+peer" the script prints as one line. Both enforcing
+   The middle two are the "66 dev+peer" the script prints as one line. Both enforcing
    lists live in `scripts/verify-layout.mjs` and hold package **names**, not counts,
    so they are version-independent and move only when upstream's package set moves.
+
+   **The package set does move, in both directions, and rc.8 moved it both ways at
+   once.** This is normal bump work, not a blocker. A release can *delete* packages:
+   rc.8 dropped `dsh-client-schema-form` (absorbed — `ui-settings` now takes
+   `@deepseek-ai/schemastery` directly) and `dsh-client-web-react` (gone with the
+   `apps/web` restructure). Neither has an rc.8 on npm, so the version replace fails
+   with `YN0082: No candidates found`. **Remove those; do not hold them back.** A
+   deleted package will never be published at the new version, so a hold-back on one is
+   a durable claim whose retirement condition can never be met — exactly the accidental
+   permanent fork option 3 warns about. Confirm first: zero references in the new
+   submodule tree, and no import in our own source. A release can equally *split*
+   packages out, and those surface as `YN0002` peer warnings at install and `TS2307`
+   at typecheck rather than as a resolution failure — rc.8 added `dsh-file-reference`,
+   `dsh-host-apiproxy`, `dsh-session-reference` and `dsh-tool-todo` to the desktop
+   plugin, and seven more to the market. Add split-out packages where the types
+   actually need to resolve; a type-only transitive need belongs in `devDependencies`,
+   because putting it in `peerDependencies` asserts a public runtime contract the
+   workspace does not actually make.
+
    Note the
    script counts against whatever `upstream.json` currently says, so after step 2 it
    counts entries already moved to the **new** version: it starts near zero and is
@@ -134,6 +153,30 @@ decision is "inherit" or "adapt".
    (`handoffs/resolver-charter.md`, ENVIRONMENT).
 5. `corepack yarn install` (not `--immutable`) to regenerate `yarn.lock`, then
    re-validate every patch (next section).
+
+   <a id="release-age"></a>**Check the release's age first — a release younger than 24
+   hours cannot be resolved at all.** Yarn 4 enforces `npmMinimalAgeGate`, whose default
+   is `1d` and which this repo does not override, so every version published less than a
+   day ago is refused with:
+
+   ```
+   YN0016: <package>@npm:<version>: All versions satisfying "<version>" are quarantined
+   ```
+
+   That is Yarn's own supply-chain age gate, not an npm-side quarantine: the registry
+   packument carries no `policyRestrictions` and the tarballs fetch fine. It bites only
+   at **resolution** time, which is why every `--immutable` install is unaffected and why
+   a pin bump is the first thing that ever meets it. The gate clears 24 hours after the
+   *last* package in the surface was published, which is not the release timestamp —
+   check the actual publish times (`npm view <pkg> time`) rather than the GitHub release.
+
+   The RM ruled (2026-08-20, on the rc.8 bump) that the answer is to **wait**: lowering
+   `npmMinimalAgeGate` or allow-listing through `npmPreapprovedPackages` would be a
+   durable weakening of a supply-chain control to chase a release younger than a day,
+   and no bump has that urgency. The scheduling consequence belongs to the RM's watch
+   tick: a bump spawned within 24h of a release **will** hit this, so surface the release
+   age when the watch reports `releases behind > 0` and schedule the trial after the gate
+   clears rather than discovering it mid-slice.
 6. `corepack yarn check` in the foreground.
 
 `check:layout` is the drift guard that catches a half-done bump. It asserts the
@@ -181,6 +224,16 @@ For each patch:
 
 - [ ] **It still applies.** `corepack yarn install` fails loudly when a patch does not.
       A clean install is necessary, never sufficient.
+
+      **Do not pre-check with `git apply`. It is not the applier Yarn uses and it
+      reports failures that do not exist.** On the rc.8 bump `git apply --check`
+      rejected 4 of the 5 patches, including `dsh-sandbox-windows-acl`, whose target
+      file is **byte-identical** between rc.7 and rc.8. Yarn accepted all four. If you
+      want an offline read before the lockfile exists — worth having, because it works
+      on registry tarballs without a resolvable install — use GNU `patch -p1 --dry-run
+      -F 0`, and **run it against the OLD version as a control**: hunks that fail on
+      both versions are a standing `patch`/Yarn divergence, not drift introduced by the
+      release. On rc.8 that control cut three apparent regressions down to one real one.
 - [ ] **It reached the tree.** `corepack yarn why <package>` shows consumers resolving
       through the `patch:` locator. A `resolutions` entry only expresses intent; the
       lockfile locator is the proof. The watch script counts both.
@@ -195,16 +248,16 @@ For each patch:
 - [ ] **The covered behavior is re-tested at the new pin**, by the test that covers it
       or by hand if none does. Naming the behavior is part of the PR body.
 
-Per-patch specifics as of `0.1.0-rc.7`:
+Per-patch specifics as of `0.1.0-rc.8`:
 
 | Patch | Target | Behavior to re-test | Hazard |
 |---|---|---|---|
 | `app-builder-lib@26.15.7` | `out/codeSign/macCodeSign.js` | macOS signing path | **Not** harness-versioned — moves with electron-builder, not with the pin. Leave it alone during a pin bump. |
-| `dsh-app-boot` | `lib/index.js` (patch-list parsing) | app boot + patch list | — |
-| `dsh-client-ui-directory-picker-browse` | `lib/client.js` + 2 `.d.ts` | directory browse UI | 15 hunks — by far the largest; expect the most conflict here. |
+| `dsh-app-boot` | `lib/index.js` (patch-list parsing) | app boot + patch list | Zero-context hunk. Relocated one line at rc.8 and applied on offset. |
+| `dsh-client-ui-directory-picker-browse` | `lib/client.js` + 2 `.d.ts` | directory browse UI | 14 hunks — by far the largest; expect the most conflict here. **The only patch rc.8 actually broke**: its bundler now emits `DirectoryBrowser_module_css_default` alphabetically sorted, which moved a pure-insertion point. Re-cut with the added key in its alphabetical slot so the context survives the next sort. |
 | `dsh-client-ui-workspace` | `lib/client.js` | workspace client UI | — |
-| `dsh-llm-deepseek` | `lib/index.js` (response translation) | **provider wire** | Charter rule: a change to what reaches the provider's wire is not resolved by a green gate. Keep the issue open pending a live provider datum. |
-| `dsh-sandbox-windows-acl` | `lib/types-CNjZgO4h.js` | Windows ACL sandbox spawn | **Hash-named target.** The bundler's content hash changes across releases, so this patch fails by *path*, not by content — the target file must be re-identified before the hunks can even be judged. |
+| `dsh-llm-deepseek` | `lib/index.js` (response translation) | **provider wire** | Charter rule: a change to what reaches the provider's wire is not resolved by a green gate. Keep the issue open pending a live provider datum. Relocated 134 lines at rc.8, content unchanged. |
+| `dsh-sandbox-windows-acl` | `lib/types-CNjZgO4h.js` | Windows ACL sandbox spawn | **Hash-named target.** The bundler's content hash can change across releases, and then this patch fails by *path*, not by content — the target must be re-identified before the hunks can be judged. It did **not** fire at rc.8: the filename held and the file is byte-identical to rc.7. Treat it as a hazard to check, not one that fires every time. |
 
 Windows ACL / sandbox / packaging changes are release-gated: run
 `yarn workspace dsh-plugin-desktop verify:closure` and
@@ -256,7 +309,7 @@ adapt vs hold-back. Explicitly **not** a recommendation dressed as a finding.
 
 ## Maintaining this document
 
-Parts of this file are stamped to `0.1.0-rc.7` and go stale the moment a pin moves.
+Parts of this file are stamped to `0.1.0-rc.8` and go stale the moment a pin moves.
 The pin-bump PR that moves the pin updates them in the same PR — that is the one
 exception to "a pin-bump PR changes nothing else", because leaving them behind makes
 this document lie about the tree it describes:
@@ -267,7 +320,23 @@ this document lie about the tree it describes:
   `scripts/verify-layout.mjs` need no edit for a version change — they hold names —
   but a real change to upstream's package set moves them, and the gate holds them
   against the **tree**, so a stale one fails `check:layout` loudly;
-- the **per-patch table**, including its "as of `0.1.0-rc.7`" heading and any patch
+- the **per-patch table**, including its "as of `0.1.0-rc.8`" heading and any patch
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.
+
+**The 173-entry bump surface is not the whole version-shaped surface, and this document
+used to read as though it were.** `check:layout` fences the manifests; roughly 220
+further literals live outside them and are covered by other gates or by nothing at all.
+At rc.8 they were: `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` (regenerate with
+`yarn workspace dsh-plugin-desktop verify:notices` — it writes the file, it does not
+merely check it), `dsh-plugin-desktop/tests/package.spec.ts` (patch filenames, `npm%3A`
+locators, and a `yarn.lock` substring assertion), `dsh-community-market`'s
+`DSH_RUNTIME_VERSION`, its `contracts.spec.ts` peer assertions and an install fixture,
+four market docs, both `dsh-plugin-desktop` READMEs, the `.agents` note the topology
+rule cites (both languages, plus the `.i18n.yaml` blob record that then goes stale —
+and the record hashes the **committed** blob, so it can only be refreshed after the
+note is committed), the `bug_report.yml` version example, and the preset profile
+comment naming the pin its observation was derived at. `.engineering/research/` is
+deliberately **not** on this list: those files are stamped with the version they were
+derived at and re-stamping them without re-deriving them would be a false claim.
 

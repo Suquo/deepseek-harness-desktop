@@ -124,16 +124,20 @@ describe('Parametria shell identity', () => {
     const html = upstreamIndex()
     const branded = brandShellIndex(html, 'advanced')
 
-    // The pinned index ships DeepSeek's title; after the tap neither the element nor the string
-    // survives, and exactly one title remains.
-    expect(html).toContain('<title>DeepSeek Harness</title>')
+    // The pinned index ships upstream's own title; after the tap neither the element nor the
+    // string survives, and exactly one title remains. The literal is pin-coupled: rc.7 shipped
+    // `DeepSeek Harness`, rc.8 ships `DSH Local Build` (the same build-identity string its sidebar
+    // now uses as `fallbackBrandName`). What the tap must do is unchanged — replace whatever title
+    // upstream ships with ours, exactly once, touching nothing else — so this is a precondition to
+    // re-derive on a pin bump, not a behavior that moved.
+    const upstreamTitle = '<title>DSH Local Build</title>'
+    expect(html).toContain(upstreamTitle)
     expect(branded).toContain('<title>Parametria</title>')
     expect(branded).not.toContain('DeepSeek')
     expect([...branded.matchAll(/<title>/g)]).toHaveLength(1)
 
     // Everything else the document carries is upstream's business: the tap is identity-only.
-    expect(branded.replace('<title>Parametria</title>', '<title>DeepSeek Harness</title>'))
-      .toBe(html)
+    expect(branded.replace('<title>Parametria</title>', upstreamTitle)).toBe(html)
   })
 
   it('states the title on a document that ships without one', () => {
