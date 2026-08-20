@@ -65,11 +65,16 @@ export const UPSTREAM_BRAND_CLASSES = {
  * rail, and the empty-state hero headline. Each upstream mark is an `aria-hidden` decorative
  * `<svg>`, so hiding it and repainting the box costs no accessible name.
  *
- * The wordmark that takes the lockup's place is decorative too, and deliberately so: that button's
- * accessible name is upstream's `aria-label`, which is the "New session" action it performs, not a
- * brand name. Generated content does not enter the name computation, so the button keeps
- * announcing its action exactly as before — the same arrangement upstream already had, where its
- * own wordmark was an `aria-hidden` image inside that button.
+ * The wordmark that takes the lockup's place is decorative too, and deliberately so. The lockup is
+ * a `<button>` carrying `aria-label={t('session.new.label')}` (`ui-sidebar/src/client/
+ * SidebarRoot.tsx:137`), so its accessible name is the "New session" action it performs, not a
+ * brand name — and it stays that way. The reason is precedence, not exclusion: the accessible name
+ * computation reaches `aria-label` (accname step 2C) before it would ever gather name from content
+ * (step 2F), so content is not consulted at all. Generated `::before`/`::after` text *is* part of
+ * name-from-content, so were that label ever dropped upstream, this `::after` would start
+ * announcing the wordmark. The button therefore keeps announcing its action exactly as before —
+ * the same arrangement upstream already had, where its own wordmark was an `aria-hidden` image
+ * inside that button — conditional on upstream's label continuing to exist.
  *
  * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
  * hidden, so the superseded string leaves the accessibility tree instead of being announced

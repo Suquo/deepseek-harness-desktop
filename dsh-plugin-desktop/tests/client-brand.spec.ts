@@ -40,6 +40,11 @@ function upstreamBundle(packageName: string): string {
  *
  * Only selector text is scanned: declaration bodies carry the mark's `data:` URI, whose host name
  * would otherwise read as class tokens.
+ *
+ * Tokenizing on bare braces is not string-aware, so a `content` value containing `{` or `}` would
+ * silently split a rule in the wrong place and hand the drift guard a bogus selector set. The
+ * interpolated-string fence below rejects braces for exactly that reason; it must stay in step with
+ * this split.
  * @param css - stylesheet text.
  * @returns the class names appearing in selector position.
  */
@@ -128,9 +133,14 @@ describe('Parametria brand presentation', () => {
   })
 
   it('keeps both interpolated strings safe to embed in a CSS content value', () => {
+    // `"` and `\` would break out of the quoted content value in the browser. `{` and `}` would
+    // survive the browser fine but mis-tokenize selectedClasses() above, which splits on bare
+    // braces — the drift guard would then compare a bogus selector set and could pass while the
+    // real overrides had drifted. Rejected here so the failure is loud and at the source string.
     for (const value of [PARAMETRIA_WORDMARK, HERO_HEADLINE_TEXT]) {
-      expect(value).not.toContain('"')
-      expect(value).not.toContain('\\')
+      for (const forbidden of ['"', '\\', '{', '}']) {
+        expect(value).not.toContain(forbidden)
+      }
     }
   })
 
@@ -157,8 +167,20 @@ describe('Parametria brand presentation', () => {
     expect(selected).toEqual(declared)
   })
 
-  it('ships the brand override only inside the advanced-shell stylesheet', () => {
-    expect(advancedStyleSheet()).toContain(parametriaBrandStyles())
+  it('composes the brand override into the advanced sheet once, and overrides upstream nowhere else', () => {
+    const sheet = advancedStyleSheet()
+    const brand = parametriaBrandStyles()
+
+    // Exactly one occurrence: absent fails (length 1), a second composition point fails (length 3).
+    expect(sheet.split(brand)).toHaveLength(2)
+
+    // The rest of the sheet must reach no upstream brand class on its own. The two-direction class
+    // guard above runs on parametriaBrandStyles() alone, so without this an override hand-written
+    // into the base styles would escape the pin-drift guards entirely.
+    const base = sheet.replace(brand, '')
+    for (const emitted of Object.values(UPSTREAM_BRAND_CLASSES).flatMap(classes => Object.values(classes))) {
+      expect(base).not.toContain(emitted)
+    }
   })
 
   it('leaves compatibility mode running the upstream client without the override', () => {
