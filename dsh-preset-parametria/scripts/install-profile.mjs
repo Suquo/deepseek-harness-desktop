@@ -15,17 +15,24 @@
  * wrote; a file the operator has since edited stops the run by name. `--force`
  * is that claim's release — it overwrites regardless and re-records.
  *
+ * `--default` additionally makes this profile the one a fresh machine boots
+ * into, by seeding the desktop launcher's selection state. That state lives
+ * OUTSIDE `$DSH_HOME`, in Electron `userData`, and is shared with the running
+ * application — see `planDefaultSelection` for the whole contract, which is
+ * "write it only when nobody has ever chosen".
+ *
  * Usage:
  *   node scripts/install-profile.mjs [--home <dir>] [--force] [--dry-run]
+ *                                    [--default [--user-data-dir <dir>]]
  *
  * Exits non-zero on any refusal, so a caller cannot mistake a skipped write
  * for a completed install.
  */
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join, posix, resolve, sep } from 'node:path'
+import { dirname, join, posix, resolve, sep, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const BIN = 'install-profile'
@@ -33,6 +40,33 @@ const PRESET_NAME = 'parametria'
 const PACKAGE_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const RECEIPT_NAME = '.dsh-preset-parametria.install.json'
 const RECEIPT_VERSION = 1
+
+/**
+ * The Electron application name, which is what names the `userData` directory.
+ *
+ * This is a MIRROR of `PRODUCT_NAME` in `dsh-plugin-desktop/src/main.ts`, the
+ * string passed to `app.setName()` before the first `app.getPath('userData')`
+ * read. It is deliberately NOT the displayed brand ("Parametria"): the on-disk
+ * identity is separate on purpose, and renaming it is a user-data migration
+ * rather than a rebrand — `dsh-plugin-desktop/src/index.ts` says so at the
+ * `productName` it sets.
+ *
+ * Duplicated rather than imported because this package is dependency-free
+ * `.mjs` run before `dsh-plugin-desktop` is built (`yarn check` orders the
+ * preset ahead of it), so there is nothing to import from. The duplication is
+ * held by `tests/desktop-selection-drift.test.mjs`, which fails if this string,
+ * `main.ts`, and `bin.ts` stop agreeing.
+ */
+const DESKTOP_PRODUCT_NAME = 'DSH Desktop'
+/** Selection-state location under `userData`, mirroring `main.ts`'s `selectionStatePath`. */
+const SELECTION_STATE_SEGMENTS = ['profile-selection', 'state.json']
+/** `STATE_VERSION` in `dsh-plugin-desktop/src/profile-manager.ts`. */
+const SELECTION_STATE_VERSION = 1
+/** `DEFAULT_PROFILE_NAME` in `dsh-plugin-desktop/src/profile-manager.ts`. */
+const DESKTOP_PROFILE_NAME = 'desktop'
+/** `STATE_DIRECTORY_MODE` / `STATE_FILE_MODE` the launcher enforces on this state. */
+const SELECTION_DIRECTORY_MODE = 0o700
+const SELECTION_FILE_MODE = 0o600
 
 /** The pnpm settings `initProfile` writes, restated so a hand-built profile matches a `dsh plugin` one. */
 const PROFILE_PNPM_WORKSPACE = `packages:
@@ -53,6 +87,129 @@ export function resolveHome(override) {
   if (override !== undefined) return resolve(override)
   const fromEnv = process.env.DSH_HOME
   return fromEnv !== undefined && fromEnv !== '' ? resolve(fromEnv) : join(homedir(), '.dsh')
+}
+
+/**
+ * Resolve Electron's `userData` directory the way the desktop launcher does.
+ *
+ * A mirror of `defaultDesktopUserDataDirectory` in
+ * `dsh-plugin-desktop/src/bin.ts`, which is itself the headless mirror of what
+ * Electron derives from `app.setName(PRODUCT_NAME)`. Held by the drift fence.
+ * @param platform - the platform to resolve for.
+ * @param environment - the environment supplying `APPDATA` / `XDG_CONFIG_HOME`.
+ * @param homeDirectory - the user home, used on macOS and Linux.
+ * @returns the absolute `userData` directory.
+ */
+export function defaultDesktopUserDataDirectory(
+  platform = process.platform,
+  environment = process.env,
+  homeDirectory = homedir(),
+) {
+  const path = platform === 'win32' ? win32 : posix
+  if (platform === 'win32') {
+    const appData = environment.APPDATA
+    if (appData === undefined || appData.length === 0) {
+      throw new InstallError(`${BIN}: APPDATA is unavailable; pass --user-data-dir to locate ${DESKTOP_PRODUCT_NAME}`)
+    }
+    return path.join(appData, DESKTOP_PRODUCT_NAME)
+  }
+  if (platform === 'darwin') {
+    return path.join(homeDirectory, 'Library', 'Application Support', DESKTOP_PRODUCT_NAME)
+  }
+  const config = environment.XDG_CONFIG_HOME
+  const base = config === undefined || config.length === 0 ? path.join(homeDirectory, '.config') : config
+  return path.join(base, DESKTOP_PRODUCT_NAME)
+}
+
+/**
+ * The desktop launcher's profile-selection state file.
+ * @param userDataDir - the Electron `userData` directory.
+ * @returns the absolute state-file path.
+ */
+export function selectionStatePath(userDataDir) {
+  return join(userDataDir, ...SELECTION_STATE_SEGMENTS)
+}
+
+/**
+ * The selection document that makes this profile the next boot's choice.
+ *
+ * This is byte-for-byte what the desktop picker's `selectDesktopProfile`
+ * writes for a FIRST selection on pristine state: the profile goes in
+ * `pending`, while `active` and `lastKnownGood` stay on `desktop`. Seeding
+ * `active` directly would assert a health this installer cannot know; seeding
+ * `pending` inherits the launcher's rollback contract instead — the profile is
+ * only adopted if it is genuinely selectable at boot, and only promoted to
+ * `lastKnownGood` once its shell has actually mounted.
+ * @returns the state document to write.
+ */
+export function defaultSelectionState() {
+  return {
+    version: SELECTION_STATE_VERSION,
+    active: DESKTOP_PROFILE_NAME,
+    pending: PRESET_NAME,
+    lastKnownGood: DESKTOP_PROFILE_NAME,
+  }
+}
+
+/**
+ * Decide whether the selection state may be seeded.
+ *
+ * The test is that the file does NOT exist — which is stricter than "the user
+ * has not chosen", and deliberately so. The launcher rewrites this file on
+ * every boot, and an explicit pick of `desktop` produces a document identical
+ * to the pristine default, so once the file exists no reading of it can
+ * distinguish "never chose" from "chose, and chose the other one". Absence is
+ * the only unambiguous signal, so absence is the whole permission.
+ *
+ * The cost is that `--default` refuses on a machine that has already launched
+ * the application. That refusal has a one-click remedy — the tray profile
+ * picker, whose choice already persists — and the message says so.
+ * @param statePath - the selection-state file.
+ * @returns `'write'`, or `'exists'` when an operator-owned selection is present.
+ */
+export function planDefaultSelection(statePath) {
+  return existsSync(statePath) ? 'exists' : 'write'
+}
+
+/**
+ * Seed the selection state, refusing an existing file at the syscall.
+ *
+ * `flag: 'wx'` is what actually enforces "only when absent": the check in
+ * `planDefaultSelection` produces the readable diagnostic, but it is this flag
+ * that makes the guarantee independent of it, so a selection created between
+ * the two cannot be clobbered. Directory and file modes match what the
+ * launcher enforces on its own private state.
+ * @param statePath - the selection-state file.
+ * @returns the state document written.
+ */
+export function writeDefaultSelection(statePath) {
+  const stateDir = dirname(statePath)
+  mkdirSync(stateDir, { recursive: true, mode: SELECTION_DIRECTORY_MODE })
+  const directoryStat = lstatSync(stateDir)
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    throw new InstallError(`${BIN}: profile selection state directory is not private: ${stateDir}`)
+  }
+  const state = defaultSelectionState()
+  try {
+    writeFileSync(statePath, `${JSON.stringify(state, undefined, 2)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: SELECTION_FILE_MODE,
+    })
+  } catch (cause) {
+    if (cause?.code === 'EEXIST') throw new InstallError(refuseDefaultMessage(statePath))
+    throw cause
+  }
+  return state
+}
+
+/** The refusal `--default` prints, naming the surface that still works. */
+function refuseDefaultMessage(statePath) {
+  return `${BIN}: refusing to overwrite an existing desktop profile selection:\n`
+    + `  ${statePath}\n`
+    + 'That file records the profile this machine boots, and the installer cannot tell a\n'
+    + 'deliberate choice from a default one. Select the profile in the desktop tray picker\n'
+    + `instead — that choice persists — or remove the file to seed ${PRESET_NAME} as the default.`
 }
 
 /**
@@ -145,9 +302,29 @@ export function planFile(destinationPath, contents, recordedHash, force) {
 
 /**
  * Install into `home`.
+ *
+ * `setDefault` additionally seeds the desktop launcher's selection state. Its
+ * refusal is raised BEFORE any file is written, alongside the managed-file
+ * conflicts, so the run stays all-or-nothing: a `--default` that cannot be
+ * honoured never leaves a half-applied install behind. The state itself is
+ * written LAST, once the profile it names actually exists on disk — a
+ * `pending` selection pointing at a profile that is not there yet would just
+ * be rolled back by the launcher.
+ *
+ * `--force` is deliberately NOT a release for this claim. It releases this
+ * installer's own claim over files it wrote under `$DSH_HOME`; the selection
+ * state is neither this installer's nor inside that home, and no flag here
+ * should be able to move an operator's running application to another profile.
  * @returns a summary of what was written, kept, and skipped.
  */
-export function install({ home, force = false, dryRun = false, packageRoot = PACKAGE_ROOT } = {}) {
+export function install({
+  home,
+  force = false,
+  dryRun = false,
+  packageRoot = PACKAGE_ROOT,
+  setDefault = false,
+  userDataDir,
+} = {}) {
   const files = managedFiles(packageRoot)
   const receiptPath = join(home, 'profiles', PRESET_NAME, RECEIPT_NAME)
   const receipt = readReceipt(receiptPath, force)
@@ -165,6 +342,11 @@ export function install({ home, force = false, dryRun = false, packageRoot = PAC
       + conflicts.map(name => `  ${join(home, ...name.split(posix.sep))}`).join('\n')
       + '\nRe-run with --force to replace them.',
     )
+  }
+  let statePath
+  if (setDefault) {
+    statePath = selectionStatePath(userDataDir ?? defaultDesktopUserDataDirectory())
+    if (planDefaultSelection(statePath) === 'exists') throw new InstallError(refuseDefaultMessage(statePath))
   }
   const written = []
   const unchanged = []
@@ -187,21 +369,41 @@ export function install({ home, force = false, dryRun = false, packageRoot = PAC
     mkdirSync(dirname(receiptPath), { recursive: true })
     writeFileSync(receiptPath, JSON.stringify(nextReceipt, undefined, 2) + '\n')
   }
-  return { home, written, unchanged, receiptPath }
+  let defaultSelection
+  if (statePath !== undefined) {
+    defaultSelection = {
+      statePath,
+      state: dryRun ? defaultSelectionState() : writeDefaultSelection(statePath),
+    }
+  }
+  return {
+    home,
+    written,
+    unchanged,
+    receiptPath,
+    ...(defaultSelection === undefined ? {} : { defaultSelection }),
+  }
 }
 
 /** Parse argv into install options; throws on an unknown or incomplete flag. */
 export function parseArgs(argv) {
-  const options = { force: false, dryRun: false }
+  const options = { force: false, dryRun: false, setDefault: false }
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]
     if (argument === '--force') options.force = true
     else if (argument === '--dry-run') options.dryRun = true
-    else if (argument === '--home') {
+    else if (argument === '--default') options.setDefault = true
+    else if (argument === '--home' || argument === '--user-data-dir') {
       const value = argv[index += 1]
-      if (value === undefined) throw new InstallError(`${BIN}: --home needs a directory`)
-      options.homeOverride = value
+      if (value === undefined) throw new InstallError(`${BIN}: ${argument} needs a directory`)
+      if (argument === '--home') options.homeOverride = value
+      else options.userDataDir = resolve(value)
     } else throw new InstallError(`${BIN}: unknown argument ${JSON.stringify(argument)}`)
+  }
+  // `--user-data-dir` only ever names where the selection state goes, so on its
+  // own it would silently do nothing. Refusing says which flag is missing.
+  if (options.userDataDir !== undefined && !options.setDefault) {
+    throw new InstallError(`${BIN}: --user-data-dir only applies with --default`)
   }
   return options
 }
@@ -214,10 +416,16 @@ if (process.argv[1] !== undefined
     const result = install({ ...options, home })
     const verb = options.dryRun ? 'would write' : 'wrote'
     const marker = options.dryRun ? '~' : '+'
+    const selection = result.defaultSelection === undefined
+      ? `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`
+      : `${BIN}: ${options.dryRun ? 'would seed' : 'seeded'} the desktop profile selection`
+        + ` at ${result.defaultSelection.statePath}\n`
+        + `${BIN}: the next DSH Desktop start selects ${PRESET_NAME};`
+        + ` the tray picker overrides it at any time\n`
     process.stdout.write(
       `${BIN}: ${verb} ${result.written.length} file(s), ${result.unchanged.length} already current, under ${home}\n`
       + result.written.map(name => `  ${marker} ${name}\n`).join('')
-      + `${BIN}: select it with the desktop profile picker, or 'dsh --profile ${PRESET_NAME}'\n`,
+      + selection,
     )
   } catch (error) {
     process.stderr.write(`${error instanceof InstallError ? error.message : String(error)}\n`)
@@ -225,4 +433,13 @@ if (process.argv[1] !== undefined
   }
 }
 
-export { InstallError, PRESET_NAME, RECEIPT_NAME, PROFILE_PNPM_WORKSPACE }
+export {
+  DESKTOP_PRODUCT_NAME,
+  DESKTOP_PROFILE_NAME,
+  InstallError,
+  PRESET_NAME,
+  PROFILE_PNPM_WORKSPACE,
+  RECEIPT_NAME,
+  SELECTION_STATE_SEGMENTS,
+  SELECTION_STATE_VERSION,
+}

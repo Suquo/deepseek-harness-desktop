@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
@@ -17,10 +17,13 @@ import { PACKAGE_ROOT, indexRows, readComposition } from './helpers.mjs'
 import {
   InstallError,
   RECEIPT_NAME,
+  defaultSelectionState,
   install,
   managedFiles,
   parseArgs,
   resolveHome,
+  selectionStatePath,
+  writeDefaultSelection,
 } from '../scripts/install-profile.mjs'
 
 const homes = []
@@ -254,13 +257,135 @@ describe('--dry-run', () => {
   })
 })
 
+describe('--default, which seeds the desktop profile selection', () => {
+  /** A fresh Harness home paired with an empty Electron userData directory. */
+  const freshPair = () => {
+    const home = freshHome()
+    const userDataDir = join(freshHome(), 'DSH Desktop')
+    return { home, userDataDir, statePath: selectionStatePath(userDataDir) }
+  }
+
+  it('writes the document a first picker selection would write', () => {
+    const { home, userDataDir, statePath } = freshPair()
+    const result = install({ home, setDefault: true, userDataDir })
+    assert.equal(result.defaultSelection.statePath, statePath)
+    // The whole document, not a probe for the profile name: a state that also
+    // carried `active: parametria` would contain the same name and mean
+    // something the installer has no standing to assert.
+    assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')), {
+      version: 1,
+      active: 'desktop',
+      pending: 'parametria',
+      lastKnownGood: 'desktop',
+    })
+    assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')), defaultSelectionState())
+  })
+
+  it('seeds a selection naming a profile that is already on disk', () => {
+    // A pending profile the launcher cannot find is rolled straight back, so
+    // the state is only meaningful once the profile files have landed.
+    const { home, userDataDir } = freshPair()
+    install({ home, setDefault: true, userDataDir })
+    const pending = JSON.parse(readFileSync(selectionStatePath(userDataDir), 'utf8')).pending
+    assert.ok(existsSync(join(home, 'profiles', pending, 'package.json')))
+  })
+
+  it('is opt-in: an ordinary install leaves the selection state absent', () => {
+    const { home, userDataDir, statePath } = freshPair()
+    const result = install({ home, userDataDir: undefined })
+    assert.equal(result.defaultSelection, undefined)
+    assert.ok(!existsSync(statePath))
+    assert.ok(!existsSync(userDataDir))
+  })
+
+  it('refuses an existing selection, naming the file and the surface that still works', () => {
+    const { home, userDataDir, statePath } = freshPair()
+    mkdirSync(join(userDataDir, 'profile-selection'), { recursive: true })
+    writeFileSync(statePath, JSON.stringify({ version: 1, active: 'desktop', lastKnownGood: 'desktop' }))
+    assert.throws(() => install({ home, setDefault: true, userDataDir }), error => {
+      assert.ok(error instanceof InstallError)
+      assert.match(error.message, /refusing to overwrite an existing desktop profile selection/)
+      assert.match(error.message, /state\.json/)
+      // The message offers the tray picker as the way through; this keeps that
+      // sentence a true one.
+      assert.match(error.message, /tray picker/)
+      return true
+    })
+    assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).pending, undefined)
+  })
+
+  it('raises that refusal before writing anything at all', () => {
+    // All-or-nothing, the same property the managed-file conflict has: a
+    // --default that cannot be honoured must not leave a half-applied install.
+    const { home, userDataDir, statePath } = freshPair()
+    mkdirSync(join(userDataDir, 'profile-selection'), { recursive: true })
+    writeFileSync(statePath, '{}')
+    assert.throws(() => install({ home, setDefault: true, userDataDir }), InstallError)
+    assert.ok(!existsSync(join(home, 'profiles', 'parametria', 'package.json')))
+    assert.ok(!existsSync(join(home, '.agent-presets', 'parametria', 'agent.cordis.yml')))
+  })
+
+  it('is not released by --force, which claims only this installer\'s own files', () => {
+    // --force releases the receipt claim over files under $DSH_HOME. The
+    // selection state is another package's, outside that home, and moves the
+    // operator's running application — no flag here may overwrite it.
+    const { home, userDataDir, statePath } = freshPair()
+    mkdirSync(join(userDataDir, 'profile-selection'), { recursive: true })
+    writeFileSync(statePath, '{}')
+    assert.throws(() => install({ home, setDefault: true, userDataDir, force: true }), InstallError)
+    assert.equal(readFileSync(statePath, 'utf8'), '{}')
+  })
+
+  it('refuses at the syscall, not only at the plan', () => {
+    // The existence check produces the readable diagnostic; `flag: 'wx'` is
+    // what makes the guarantee independent of it. Calling the writer directly
+    // is the state appearing between the two.
+    const { userDataDir, statePath } = freshPair()
+    mkdirSync(join(userDataDir, 'profile-selection'), { recursive: true })
+    writeFileSync(statePath, '{}')
+    assert.throws(() => writeDefaultSelection(statePath), InstallError)
+    assert.equal(readFileSync(statePath, 'utf8'), '{}')
+  })
+
+  it('reports the seed under --dry-run without creating it', () => {
+    const { home, userDataDir, statePath } = freshPair()
+    const result = install({ home, setDefault: true, userDataDir, dryRun: true })
+    assert.deepEqual(result.defaultSelection.state, defaultSelectionState())
+    assert.ok(!existsSync(statePath))
+    assert.ok(!existsSync(userDataDir))
+  })
+
+  it('writes the state as privately as the launcher keeps it', { skip: process.platform === 'win32' }, () => {
+    // Windows reports POSIX mode bits it does not enforce, so the claim is
+    // only checkable where the launcher's own 0o700/0o600 mean something.
+    const { home, userDataDir, statePath } = freshPair()
+    install({ home, setDefault: true, userDataDir })
+    assert.equal(statSync(join(userDataDir, 'profile-selection')).mode & 0o777, 0o700)
+    assert.equal(statSync(statePath).mode & 0o777, 0o600)
+  })
+})
+
 describe('argument and home resolution', () => {
   it('reads --home, --force, and --dry-run', () => {
     assert.deepEqual(parseArgs(['--force', '--dry-run', '--home', 'C:/tmp/home']), {
       force: true,
       dryRun: true,
+      setDefault: false,
       homeOverride: 'C:/tmp/home',
     })
+  })
+
+  it('reads --default, and --user-data-dir as an absolute override', () => {
+    assert.equal(parseArgs(['--default']).setDefault, true)
+    assert.equal(parseArgs([]).setDefault, false)
+    const parsed = parseArgs(['--default', '--user-data-dir', 'data'])
+    assert.equal(parsed.setDefault, true)
+    assert.equal(parsed.userDataDir, join(process.cwd(), 'data'))
+  })
+
+  it('refuses --user-data-dir on its own rather than silently ignoring it', () => {
+    assert.throws(() => parseArgs(['--user-data-dir', 'data']), /only applies with --default/)
+    assert.throws(() => parseArgs(['--default', '--user-data-dir']), /--user-data-dir needs a directory/)
   })
 
   it('rejects an unknown flag rather than ignoring it', () => {
