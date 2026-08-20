@@ -34,18 +34,18 @@ const catalog = openrouterCatalogEntry(MODEL_ID)
 const validator = indexRows(readComposition(join(PACKAGE_ROOT, 'preset', 'agent.cordis.yml')))
   .get('delegation/tool-subagent-validator')
 
-describe('the preset and the profile agree on the route', () => {
+describe('the preset and the machine-wide layer agree on the route', () => {
   // The coupling is a plain string match across two files in two different
-  // planes — the preset's `agentOptions.provider` (agent plane) and the
-  // profile patch's `providers` dict key (host plane). Nothing in either file
+  // planes — the preset's `agentOptions.provider` (agent plane) and the machine
+  // block's `providers` dict key (host plane). Nothing in either file
   // references the other, so a one-sided rename produces
   // `LlmError('UNKNOWN_PROVIDER')` at request time rather than at composition
   // time. These assertions state the invariant where it can be checked.
-  it('pins the validator to a route this profile actually declares', () => {
+  it('pins the validator to a route the machine block actually declares', () => {
     assert.ok(
       Object.hasOwn(providers, validator.config.agentOptions.provider),
       `the validator pins route "${validator.config.agentOptions.provider}", `
-      + `which the profile patch does not declare (declared: ${Object.keys(providers).join(', ')})`,
+      + `which machine/cordis.patch.yml does not declare (declared: ${Object.keys(providers).join(', ')})`,
     )
   })
 

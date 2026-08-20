@@ -101,7 +101,7 @@ describe('classifying what the selection means for this preset', () => {
     )
   })
 
-  it('names the other profile it found, which is what makes the refusal actionable', () => {
+  it('names the other profile it found, which is what makes the notice actionable', () => {
     // The exact document read off the operator's machine during runs 3 and 4.
     assert.deepEqual(
       classifyProfileSelection({ version: 1, active: DESKTOP_PROFILE_NAME, lastKnownGood: DESKTOP_PROFILE_NAME }),
@@ -130,8 +130,7 @@ describe('the readiness report', () => {
       active: DESKTOP_PROFILE_NAME,
       lastKnownGood: DESKTOP_PROFILE_NAME,
     })
-    const { refusal, lines } = report(userDataDir)
-    assert.equal(refusal, undefined, 'a machine on another profile is served by the machine-wide route')
+    const { lines } = report(userDataDir)
     const notice = lines.find(line => line.includes(DESKTOP_PROFILE_NAME))
     assert.ok(notice !== undefined, 'the report must still name the profile that boots')
     assert.ok(notice.includes(statePath), 'and the file that says so')
@@ -145,21 +144,18 @@ describe('the readiness report', () => {
       pending: PRESET_NAME,
       lastKnownGood: DESKTOP_PROFILE_NAME,
     })
-    const { refusal, lines } = report(userDataDir)
-    assert.equal(refusal, undefined)
+    const { lines } = report(userDataDir)
     assert.ok(lines.some(line => line.includes(PRESET_NAME)))
   })
 
   it('reports an unrecorded selection as unrecorded rather than inventing one', () => {
-    const { refusal, lines } = report(freshRoot())
-    assert.equal(refusal, undefined)
+    const { lines } = report(freshRoot())
     assert.ok(lines.some(line => line.includes('no launcher profile selection recorded')))
   })
 
   it('reports an unusable selection without claiming to have read it', () => {
     const { userDataDir } = userDataWith('{ not json')
-    const { refusal, lines } = report(userDataDir)
-    assert.equal(refusal, undefined)
+    const { lines } = report(userDataDir)
     assert.ok(lines.some(line => line.includes('could not read the launcher profile selection')))
   })
 
@@ -167,11 +163,10 @@ describe('the readiness report', () => {
     // Test and evidence-harness installs pass `--home <temp>`; judging them
     // against the operator's real launcher state would be noise, and would fail
     // the repository's own gate on any developer machine that boots `desktop`.
-    const { lines, refusal } = reportProfileSelection({
+    const { lines } = reportProfileSelection({
       home: freshRoot(),
       launcherHome: freshRoot(),
     })
-    assert.equal(refusal, undefined)
     assert.deepEqual(lines.length, 1)
     assert.match(lines[0], /selection check skipped/u)
   })
@@ -180,13 +175,12 @@ describe('the readiness report', () => {
     // `defaultDesktopUserDataDirectory` throws without APPDATA on win32. A
     // readiness check is not worth failing an install that otherwise succeeded.
     const home = freshRoot()
-    const { lines, refusal } = reportProfileSelection({
+    const { lines } = reportProfileSelection({
       home,
       launcherHome: home,
       platform: 'win32',
       environment: {},
     })
-    assert.equal(refusal, undefined)
     assert.match(lines[0], /selection check skipped/u)
   })
 })

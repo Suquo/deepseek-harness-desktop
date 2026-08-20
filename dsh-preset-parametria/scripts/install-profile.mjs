@@ -38,7 +38,11 @@
  * exists without one, replaces its own block when the receipt says the block is
  * still the one it wrote, and REFUSES otherwise — a hand-edited block, an
  * unterminated one, or a machine patch that already targets the `llm-pi-ai` row
- * itself. `--force` releases that claim, nothing else does.
+ * itself. `--force` releases this installer's claim over its OWN block (edited,
+ * or unreceipted). It is not a release for the other two, which say so instead
+ * of advertising a flag that would refuse again: an operator's own `llm-pi-ai`
+ * row is their configuration, and an unterminated block has no known extent to
+ * replace.
  *
  * The route lives there rather than in the profile because the preset does. The
  * agent preset lands in `$DSH_HOME/.agent-presets/`, which EVERY profile scans,
@@ -51,7 +55,17 @@
  */
 
 import { createHash } from 'node:crypto'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, posix, resolve, sep, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -254,11 +268,11 @@ export function writeDefaultSelection(statePath, whenLate = '') {
 /**
  * Read the launcher's selection document, distinguishing absent from unreadable.
  *
- * Absence is a real answer (the launcher has never recorded a choice), so it
- * gets its own value rather than sharing one with a file this installer could
- * not parse: {@link classifyProfileSelection} refuses only on a document that
- * positively names another profile, and an unknown may never be reported as a
- * refusal or as readiness.
+ * Absence is a real answer (the launcher has never recorded a choice) and it is
+ * `--default`'s whole permission, so it gets its own value rather than sharing
+ * one with a file this installer could not parse. Nothing here refuses — the
+ * selection is reported, not gated on, since the route went machine-wide — but
+ * an unknown must still never be reported as an answer.
  * @param statePath - the selection-state file.
  * @returns the parsed document, `undefined` when absent, `null` when unusable.
  */
@@ -399,14 +413,25 @@ const MACHINE_PATCH_FILENAME = 'cordis.patch.yml'
 /** Receipt key for the managed block — a fragment claim, not a whole-file one. */
 const MACHINE_PATCH_RECEIPT_KEY = `${MACHINE_PATCH_FILENAME}#parametria-vision`
 /**
- * A row targeting `llm-pi-ai` outside the managed block.
+ * Any mention of the row this block owns, ANYWHERE outside the managed block.
  *
- * Two entries for one row is not an error upstream — the later replaces the
- * earlier's whole config — which is exactly why this must refuse rather than
- * append: whichever way that fell, one of the two intents would vanish with no
- * diagnostic anywhere.
+ * Deliberately over-broad, and checked on every branch rather than only when
+ * appending. Two entries for one row is not an error upstream — the later
+ * replaces the earlier's whole config — so a second `llm-pi-ai` entry silently
+ * deletes one of two intents. If it is the operator's, their configuration
+ * vanishes; if it is ours, `parametria-vision` vanishes and the validator dies
+ * at its first request with NO_ADAPTER while the install reports success. That
+ * second case is issue #1 verbatim, so this errs the other way.
+ *
+ * This script imports only node builtins, so there is no YAML parser here to
+ * ask precisely; a line-shaped pattern would miss `- {id: llm-pi-ai, …}`, a
+ * trailing comment, or a quoted spelling. A bare substring cannot miss any of
+ * them. The cost is a false refusal on a file that merely mentions the string
+ * elsewhere — which names the file and asks for a hand edit, while the failure
+ * it prevents is silent. Also catches a duplicated managed block, whose second
+ * copy would outrank the one just written for the same upstream reason.
  */
-const FOREIGN_LLM_PI_AI_ROW = /^[ \t]*(?:-[ \t]+)?id:[ \t]*['"]?llm-pi-ai['"]?[ \t]*$/mu
+const MENTIONS_LLM_PI_AI = /llm-pi-ai/u
 
 /** The header written when this installer creates the machine patch itself. */
 const MACHINE_PATCH_HEADER = `# $DSH_HOME/cordis.patch.yml — your machine-wide Cordis patch layer, applied
@@ -438,6 +463,33 @@ export function findManagedBlock(text) {
   return { begin, end, text: text.slice(begin, end) }
 }
 
+/** The file's text with the managed block excised, i.e. everything that is the operator's. */
+function outsideManagedBlock(text, found) {
+  return found === undefined ? text : `${text.slice(0, found.begin)}${text.slice(found.end)}`
+}
+
+/**
+ * Whether a top-level YAML block sequence can take one more item appended.
+ *
+ * Structural, not a parse: with only node builtins there is no parser here, so
+ * this asks the one question appending depends on — does every meaningful line
+ * at column zero open a sequence item? A flow sequence (`[]`), a mapping
+ * (`insert: []`), or a scalar answers no, and appending `- …` to any of them
+ * yields a document upstream refuses to boot. Comments and blank lines carry no
+ * shape, and indented lines are continuations of an item already opened.
+ * @param text - the existing file contents.
+ * @returns whether appending a sequence item keeps the document valid.
+ */
+function isAppendableSequence(text) {
+  for (const line of text.split('\n')) {
+    if (line.trim() === '' || line.trimStart().startsWith('#')) continue
+    if (/^[ \t]/u.test(line)) continue
+    if (line === '-' || line.startsWith('- ')) continue
+    return false
+  }
+  return true
+}
+
 /**
  * Decide what to do with the operator's machine-wide patch.
  *
@@ -454,18 +506,49 @@ export function planMachinePatch(existing, block, { force = false, previousDiges
     return { action: 'create', next: `${MACHINE_PATCH_HEADER}\n${block}\n` }
   }
   const found = findManagedBlock(existing)
-  if (found === null) {
+  // Checked BEFORE any branch decides, because the danger is not confined to
+  // the one where we append. An installed machine takes the `unchanged` or
+  // `update` branch, and an operator who added their own `llm-pi-ai` row after
+  // our block would otherwise get "route already current", exit 0, and a
+  // validator that dies at its first request — issue #1's silent success,
+  // rebuilt on the new plane.
+  if (found !== null && MENTIONS_LLM_PI_AI.test(outsideManagedBlock(existing, found))) {
     return {
       action: 'conflict',
+      // The operator's own content, outside any marker of ours. `--force`
+      // releases this installer's claim over its own block; it has never been a
+      // licence to delete their configuration.
+      releasable: false,
+      reason: 'it mentions the llm-pi-ai row outside this installer\'s block, and a second entry for that'
+        + " row would replace the first one's whole config",
+    }
+  }
+  if (found === null) {
+    // `--force` is deliberately NOT a release here, and the refusal says so:
+    // the block's extent is unknown, so there is nothing a forced write could
+    // safely replace. `releasable` carries that distinction to the message,
+    // because a refusal that advertises a flag which cannot lift it sends the
+    // operator into a loop.
+    return {
+      action: 'conflict',
+      releasable: false,
       reason: "the managed block's opening marker has no closing marker, so its extent is unknown",
     }
   }
   if (found === undefined) {
-    if (FOREIGN_LLM_PI_AI_ROW.test(existing)) {
+    if (!isAppendableSequence(existing)) {
+      // Appending a sequence item to a document that is not a block sequence
+      // produces YAML that does not parse, and upstream is fail-loud about
+      // exactly that (`loadOptionalPatches`: "an unreadable, unparsable, or
+      // non-array file throws … must fail loud at boot"). A valid `[]` — which
+      // is what `prepareDesktopProfile` itself writes for a root config — would
+      // otherwise turn into a machine that boots under NO profile, reported as
+      // a successful install.
       return {
         action: 'conflict',
-        reason: 'it already targets the llm-pi-ai row itself, and a second entry for that row would'
-          + " replace the first one's whole config",
+        releasable: false,
+        reason: 'it is not a block-sequence document, so appending an entry would produce YAML the'
+          + ' harness refuses to boot',
       }
     }
     const separator = existing.endsWith('\n\n') ? '' : existing.endsWith('\n') ? '\n' : '\n\n'
@@ -477,10 +560,18 @@ export function planMachinePatch(existing, block, { force = false, previousDiges
     // with no receipt was written by something that is not this installer.
     // `--force` is that claim's release, exactly as it is for managed files.
     if (previousDigest === undefined) {
-      return { action: 'conflict', reason: 'it carries a managed block this installer has no receipt for' }
+      return {
+        action: 'conflict',
+        releasable: true,
+        reason: 'it carries a managed block this installer has no receipt for',
+      }
     }
     if (digest(found.text) !== previousDigest) {
-      return { action: 'conflict', reason: 'its managed block has been edited since this installer wrote it' }
+      return {
+        action: 'conflict',
+        releasable: true,
+        reason: 'its managed block has been edited since this installer wrote it',
+      }
     }
   }
   return {
@@ -489,14 +580,65 @@ export function planMachinePatch(existing, block, { force = false, previousDiges
   }
 }
 
-/** The refusal a conflicting machine patch produces, naming the file and the release. */
-function refuseMachinePatchMessage(path, reason) {
+/**
+ * The refusal a conflicting machine patch produces, naming the file and — only
+ * when it is true — the release.
+ *
+ * `--force` releases this installer's claim over its OWN block. It is not a
+ * licence to delete the operator's configuration, and it cannot replace a block
+ * whose extent is unknown, so those two refusals must not advertise it: a
+ * refusal that names a flag which will refuse again is a loop.
+ * @param path - the machine-wide patch file.
+ * @param conflict - the `conflict` plan, carrying `reason` and `releasable`.
+ * @returns the operator-facing refusal text.
+ */
+function refuseMachinePatchMessage(path, conflict) {
   return `${BIN}: refusing to edit the machine-wide patch layer:\n`
     + `  ${path}\n`
-    + `because ${reason}.\n`
+    + `because ${conflict.reason}.\n`
     + 'That file is yours; this installer owns only the block between its own markers.\n'
-    + `Resolve it by hand — the block to carry is this package's machine/${MACHINE_PATCH_FILENAME} —\n`
-    + 'or re-run with --force to replace the managed block regardless.'
+    + `Resolve it by hand — the block to carry is this package's machine/${MACHINE_PATCH_FILENAME}`
+    + (conflict.releasable === true
+      ? ' —\nor re-run with --force to replace the managed block regardless.'
+      : '.\n--force does NOT release this one: it releases this installer\'s claim over its own block,'
+        + ' which\nis not what stands in the way here.')
+}
+
+/**
+ * Write the machine patch atomically, and only onto the state it was planned from.
+ *
+ * Two hazards, one writer. The plan was computed from a snapshot, so a bare
+ * write would clobber whatever appeared in between — the sibling
+ * `writeDefaultSelection` refuses that at the syscall with `flag: 'wx'`, and
+ * this file is more the operator's than that one is, so it may not get weaker
+ * treatment. And a partial write of a document upstream parses strictly is not
+ * a lost edit but an unbootable machine, under every profile, so the new
+ * contents land through a temp file and one rename rather than a truncate.
+ * @param path - the machine-wide patch file.
+ * @param next - the full contents to store.
+ * @param expected - contents the plan was made from, `undefined` for a create.
+ */
+function writeMachinePatch(path, next, expected) {
+  const current = readMachinePatch(path)
+  if (current !== expected) {
+    throw new InstallError(
+      `${BIN}: the machine-wide patch layer changed while this install was running:\n`
+      + `  ${path}\n`
+      + 'Nothing was written. Re-run the installer to plan against the current contents.',
+    )
+  }
+  const temporary = `${path}.${PRESET_NAME}.tmp`
+  try {
+    writeFileSync(temporary, next, { encoding: 'utf8' })
+    // Same directory, so this is a rename rather than a copy, and it replaces
+    // the destination in one step on every platform this ships to.
+    renameSync(temporary, path)
+  } catch (cause) {
+    try {
+      rmSync(temporary, { force: true })
+    } catch { /* the temp file is not worth failing the install over */ }
+    throw new InstallError(`${BIN}: could not write the machine-wide patch layer at ${path}: ${String(cause)}`)
+  }
 }
 
 /** Read the machine patch, distinguishing "absent" from "unreadable". */
@@ -633,12 +775,13 @@ export function install({
   // changed the machine, and this one edits a file the operator owns.
   const machinePatchPath = join(home, MACHINE_PATCH_FILENAME)
   const block = machinePatchBlock(packageRoot)
-  const machinePatch = planMachinePatch(readMachinePatch(machinePatchPath), block, {
+  const machinePatchSnapshot = readMachinePatch(machinePatchPath)
+  const machinePatch = planMachinePatch(machinePatchSnapshot, block, {
     force,
     previousDigest: receipt.files[MACHINE_PATCH_RECEIPT_KEY],
   })
   if (machinePatch.action === 'conflict') {
-    throw new InstallError(refuseMachinePatchMessage(machinePatchPath, machinePatch.reason))
+    throw new InstallError(refuseMachinePatchMessage(machinePatchPath, machinePatch))
   }
   let statePath
   if (setDefault) {
@@ -658,16 +801,18 @@ export function install({
     writeFileSync(destinationPath, contents)
   }
   if (machinePatch.next !== undefined && !dryRun) {
-    writeFileSync(machinePatchPath, machinePatch.next)
+    writeMachinePatch(machinePatchPath, machinePatch.next, machinePatchSnapshot)
     // The claim is only true if the block is really in the file the harness
     // will read, so it is read back rather than assumed from a successful
     // write — this is the whole reason the route moved planes.
-    const written = findManagedBlock(readMachinePatch(machinePatchPath) ?? '')
-    if (written === undefined || written === null || written.text !== block) {
+    const stored = findManagedBlock(readMachinePatch(machinePatchPath) ?? '')
+    if (stored === undefined || stored === null || stored.text !== block) {
       throw new InstallError(
         `${BIN}: wrote the machine-wide patch layer but could not read the managed block back:\n`
         + `  ${machinePatchPath}\n`
-        + 'The parametria-vision route is NOT installed; nothing else on this machine can supply it.',
+        + 'The parametria-vision route is NOT installed; nothing else on this machine can supply it.'
+        + ' Check that file before starting the app: the harness refuses to boot ANY profile on a'
+        + ' machine patch it cannot parse.',
       )
     }
   }
@@ -742,7 +887,8 @@ export function parseArgs(argv) {
  * An explicit `--user-data-dir` is the deliberate pairing of a home with a data
  * root, so it opts back in against that root.
  * @param options - resolved home, optional userDataDir, and platform seams.
- * @returns lines to print, plus the refusal message when one applies.
+ * @returns `{ lines }` to print. Never a refusal: since the route went
+ *   machine-wide, every profile serves it, so this reports and does not gate.
  */
 export function reportProfileSelection({
   home,
@@ -825,15 +971,30 @@ if (process.argv[1] !== undefined
     // Which profile boots is reported, never refused on: the route is
     // machine-wide now (issue #1, owner ruling), so every profile serves it.
     const readiness = reportProfileSelection({ home, userDataDir: options.userDataDir })
-    const machine = result.machinePatch.action === 'unchanged'
-      ? `${BIN}: machine-wide route already current: ${result.machinePatch.path}\n`
-      : `${BIN}: ${result.machinePatch.action} the parametria-vision route in ${result.machinePatch.path}\n`
+    // Same voice as the file lines above: past tense for a write that happened,
+    // "would ..." for a rehearsal.
+    const machineVerb = {
+      unchanged: 'left the parametria-vision route as it was in',
+      create: 'wrote the parametria-vision route to',
+      append: 'added the parametria-vision route to',
+      update: 'replaced the parametria-vision route in',
+      'would-create': 'would write the parametria-vision route to',
+      'would-append': 'would add the parametria-vision route to',
+      'would-update': 'would replace the parametria-vision route in',
+    }[result.machinePatch.action]
+    const machine = `${BIN}: ${machineVerb} ${result.machinePatch.path}\n`
     process.stdout.write(
       `${BIN}: ${verb} ${result.written.length} file(s), ${result.unchanged.length} already current, under ${home}\n`
       + result.written.map(name => `  ${marker} ${name}\n`).join('')
       + machine
       + selection
-      + readiness.lines.map(line => `${line}\n`).join(''),
+      + readiness.lines.map(line => `${line}\n`).join('')
+      // The route reaches every profile, so selecting this one is optional —
+      // said once, plainly, rather than left for the operator to infer from the
+      // readiness line.
+      + (result.defaultSelection === undefined
+        ? `${BIN}: selecting the ${PRESET_NAME} profile is optional; the route serves whichever profile boots\n`
+        : ''),
     )
   } catch (error) {
     process.stderr.write(`${error instanceof InstallError ? error.message : String(error)}\n`)
@@ -858,4 +1019,6 @@ export {
   MACHINE_PATCH_FILENAME,
   MACHINE_PATCH_RECEIPT_KEY,
   otherProfileNoticeMessage,
+  refuseMachinePatchMessage,
+  writeMachinePatch,
 }

@@ -77,10 +77,13 @@ function declaredRoutes(home: string, profileName: string): string[] {
 }
 
 describe('the parametria-vision route through the desktop composition pipeline', {
-  // Sized from the neighbouring profile.spec.ts budget, whose measurement note
-  // explains the win32 cost: each prepareDesktopProfile relinks a ~527-package
-  // junction closure. This file prepares three profiles plus two installs.
-  timeout: process.platform === 'win32' ? 45_000 : 5_000,
+  // MEASURED on win32, not inherited: four installs and four
+  // prepareDesktopProfile calls, 428-482ms per test, 2.0s for the file. These
+  // temp homes do NOT pay profile.spec.ts's ~527-package junction relink — its
+  // 45s budget would be ~90x here, which hides a real stall rather than
+  // tolerating load. 10s is ~20x the slowest test, matching the ratio PR #44
+  // settled on when it derived a budget from a tree that actually trims.
+  timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
   it('reaches the `desktop` profile — the one the operator actually boots', () => {
     // The whole point of the machine-wide plane. Before it, this list was

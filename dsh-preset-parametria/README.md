@@ -43,7 +43,14 @@ its block when the file exists without one, replaces its own block when the
 receipt still matches what it wrote, and refuses otherwise — a hand-edited
 block, an unterminated one, or a machine patch that already targets the
 `llm-pi-ai` row itself. Everything outside the markers is never read as its own
-and never rewritten. `--force` releases that claim; nothing else does.
+and never rewritten.
+
+`--force` releases *this installer's claim over its own block* — a block edited
+since it was written, or one carrying no receipt. It is deliberately not a
+release for the other two refusals, and those refusals say so rather than
+advertising a flag that would refuse again: an `llm-pi-ai` row of your own is
+your configuration, not this installer's to replace, and a block whose closing
+marker is missing has no known extent for a forced write to overwrite.
 
 ```sh
 yarn workspace dsh-preset-parametria install:profile            # install
@@ -191,8 +198,8 @@ carries a second `dsh-tool-subagent` instance, `subagent_validator`, whose
 `agentOptions` pin the route and model explicitly — explicit values override
 what a child would inherit. Child model policy is fixed per instance and
 per-call model selection does not exist, so "another model" means "another
-distinctly named tool", which is exactly what this row is. The profile declares
-a `parametria-vision` pi-ai route whose model entry states
+distinctly named tool", which is exactly what this row is. The machine-wide
+patch layer declares a `parametria-vision` pi-ai route whose model entry states
 `input: [text, image]`, which is what makes that route pass the gate. The
 modality field exists only on `dsh-llm-pi-ai`; `dsh-llm-deepseek` exposes none,
 which is why the vision route has to be a pi-ai route.

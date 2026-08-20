@@ -25,6 +25,12 @@
  *     --profile parametria  ->  parametria-vision registered? true
  *     --profile desktop     ->  parametria-vision registered? true
  *
+ * The full route line both AFTER runs print is the artifact behind the claim
+ * that the adapter merges the composition base with the user's settings section
+ * per provider — the operator's own route is still there, beside ours:
+ *
+ *     live llm routes: deepseek-official, parametria-vision, openrouter
+ *
  * The first pair is run 4's `NO_ADAPTER`, reproduced: the differentiator was the
  * ACTIVE PROFILE, not the settings merge, the patch order, or a missing pnpm
  * step. The second is the fix — the route reaches the profile the operator

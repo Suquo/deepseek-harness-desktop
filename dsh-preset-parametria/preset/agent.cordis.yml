@@ -224,8 +224,12 @@
     # otherwise inherit from this session: a text-only session model no longer
     # decides whether the validator can see.
     #
-    # The route is `parametria-vision`, declared by the profile's
-    # `cordis.patch.yml` with `input: [text, image]`.
+    # The route is `parametria-vision`, declared with `input: [text, image]` in
+    # the MACHINE-WIDE `$DSH_HOME/cordis.patch.yml` (this package's
+    # `machine/cordis.patch.yml`), not in any one profile: this preset is
+    # home-level and loads under EVERY profile, so its route has to be too.
+    # Issue #1 lost two live runs to that asymmetry — children spawned with this
+    # exact pin under a profile that could not serve it.
     #
     # What that declaration buys, precisely. Upstream's image gate is already
     # fail-closed and route-agnostic: `assertImageCapableRoute`
