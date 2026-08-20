@@ -190,8 +190,8 @@ describe('Parametria shell identity', () => {
       expect([...selector.matchAll(/\.[A-Za-z][\w-]*/g)].length).toBeGreaterThanOrEqual(2)
     }
 
-    // The exemption must stay narrow: the only rules it lets through are the two that generate the
-    // brand's own content.
+    // The exemption must stay narrow: the only rules it lets through are the three that generate the
+    // brand's own boxes — the lockup mark, the lockup wordmark, and the headline.
     expect(selectors.filter(selector => selector.includes('::'))).toHaveLength(3)
   })
 

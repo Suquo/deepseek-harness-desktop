@@ -35,9 +35,11 @@ stylesheet.
   A pin bump that changes any of them fails a named test rather than silently un-branding the app.
 - **Lane C inherits this at every pin bump**: re-run that spec and re-derive the class table before
   accepting a new pin.
-- The override reaches advanced mode only. AGENTS.md requires compatibility mode to run the upstream
-  default client without overrides, and compatibility is the default shell mode, so a default install
-  still shows upstream branding until the user switches modes. Changing that is a rule change, not a
-  code change.
+- ~~The override reaches advanced mode only.~~ **Superseded 2026-08-20 (owner "brand everywhere"
+  ruling, issue #26):** AGENTS.md now permits visual branding overrides (and, per the later ruling on
+  issue #36, additive desktop-owned UI) in compatibility mode; PR #29 landed a compat-mode brand
+  sheet, so a default install shows Parametria branding in both shell modes. Behavior overrides in
+  compatibility mode remain forbidden. (Bullet corrected by the RM after PR #37 flagged it stale —
+  both its review axes caught the drift independently.)
 - A stylesheet cannot read the active locale, so the replacement headline is one string in every
   locale; under `zh` it supersedes upstream's `探索未至之境` with English.

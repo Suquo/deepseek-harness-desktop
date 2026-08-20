@@ -30,8 +30,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   HERO_HEADLINE_TEXT,
-  PARAMETRIA_ACCENT_DARK,
-  PARAMETRIA_ACCENT_LIGHT,
   PARAMETRIA_PRODUCT_NAME,
   PARAMETRIA_WORDMARK,
   UPSTREAM_BRAND_CLASSES,
@@ -143,9 +141,9 @@ export function serveShellAsset(
 /**
  * Build the compatibility-shell brand stylesheet.
  *
- * The same three mark sites and the same headline the advanced sheet treats, selected without the
- * desktop wrappers. Selectors are composed from the upstream class table rather than written out,
- * so the pin-drift guards that stand behind that table stand behind this sheet too.
+ * The same three upstream mark sites and the same headline the advanced sheet treats, selected
+ * without the desktop wrappers. Selectors are composed from the upstream class table rather than
+ * written out, so the pin-drift guards that stand behind that table stand behind this sheet too.
  *
  * Every rule is two classes deep. That is not decoration: upstream's CSS modules are injected by
  * the shell's own module script, which runs after this document-level sheet, so a rule that merely
@@ -154,12 +152,17 @@ export function serveShellAsset(
  * and the nesting each one claims is upstream's own (`SidebarRoot.tsx`: the rail button lives
  * inside `.logoRow`).
  *
+ * The wordmark's neutral ink arrives here the same way it does in the advanced sheet — by
+ * inheriting the sidebar's own themed label ink through a `color` declaration neither sheet writes —
+ * so this sheet, like that one, names no colour and carries no theme-conditional rule of its own.
+ *
  * The accessibility arrangement is the advanced sheet's, for the same reason: upstream's marks are
  * `aria-hidden` decoration, so repainting their boxes costs no accessible name, and the lockup
  * button keeps announcing the "New session" action its `aria-label` names — generated `::after`
- * text is only reached by name-from-content, which that label pre-empts. The superseded headline is
- * removed with `display: none` so it leaves the accessibility tree rather than being announced
- * beside its replacement.
+ * text is only reached by name-from-content, which that label pre-empts, and the lockup mark's
+ * `::before` carries an empty `content` so it has no text to be gathered under any label. The
+ * superseded headline is removed with `display: none` so it leaves the accessibility tree rather
+ * than being announced beside its replacement.
  * @returns the stylesheet text injected into the compatibility shell's document.
  */
 export function compatibilityBrandStyles(): string {
@@ -168,8 +171,8 @@ export function compatibilityBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
-${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }
-body[data-ds-dark-theme] ${lockup}.${SIDEBAR.wide}::after { color: ${PARAMETRIA_ACCENT_DARK}; }
+${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
+${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} { background: ${mark}; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }
