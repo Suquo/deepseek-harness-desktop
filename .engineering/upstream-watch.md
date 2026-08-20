@@ -109,15 +109,15 @@ decision is "inherit" or "adapt".
 3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
    **This paragraph is the authoritative statement of what that surface holds; the
    rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
-   restating the arithmetic.** At `0.1.0-rc.7` it is **166** entries:
+   restating the arithmetic.** At `0.1.0-rc.7` it is **167** entries:
 
    | Where | Entries | Enforced by |
    |---|---|---|
-   | `dsh-plugin-desktop/package.json` `dependencies` | 96 | `pinSurface` |
+   | `dsh-plugin-desktop/package.json` `dependencies` | 97 | `pinSurface` |
    | `dsh-community-market/package.json` `devDependencies` | 32 | `pinSurface` |
    | `dsh-community-market/package.json` `peerDependencies` | 29 | `pinSurface` |
    | root `package.json` `resolutions` selectors | 9 | `patchedPackages` |
-   | **total** | **166** | |
+   | **total** | **167** | |
 
    The middle two are the "61 dev+peer" the script prints as one line. Both enforcing
    lists live in `scripts/verify-layout.mjs` and hold package **names**, not counts,

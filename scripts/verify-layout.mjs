@@ -219,6 +219,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-client-ui-slots',
     '@deepseek-ai/dsh-client-ui-theme',
     '@deepseek-ai/dsh-client-ui-tool',
+    '@deepseek-ai/dsh-client-ui-trajectory',
     '@deepseek-ai/dsh-client-ui-workspace',
     '@deepseek-ai/dsh-client-web-react',
     '@deepseek-ai/dsh-cmdline',
