@@ -36,10 +36,61 @@ never touched.
 yarn workspace dsh-preset-parametria install:profile            # install
 yarn workspace dsh-preset-parametria install:profile --dry-run  # show the writes
 yarn workspace dsh-preset-parametria install:profile --force    # overwrite local edits
+yarn workspace dsh-preset-parametria install:profile --default  # ...and boot into it
 ```
 
 Then pick **Parametria** in the desktop profile picker (selecting a profile
 restarts the app), or run `dsh --profile parametria`.
+
+### Making it the profile the app boots into
+
+`--default` is for a machine that has never run DSH Desktop — a fresh install,
+a new workstation, a reset `userData`. On any machine that *has* run it, the
+tray profile picker is the answer instead: that choice already persists across
+restarts, so a profile picked once is the default from then on.
+
+Read this before reaching for an environment variable:
+**`DSH_DESKTOP_DEFAULT_PROFILE` cannot make a profile the one the app boots.**
+It looks like it should, and it does not. It is an *output* of the boot
+decision, not an input — the launcher writes it into the built-in terminal's
+environment from the profile it has already selected, so that a bare `dsh …`
+typed there targets the same profile you are looking at. `desktop-cli.ts` takes
+it, deletes it, and turns it into a `--profile` flag for the *upstream* DSH
+CLI. The desktop launcher itself rejects `--profile` outright, and Electron is
+started with no arguments at all. The only input to which profile boots is the
+launcher's own selection state:
+
+```
+<userData>/profile-selection/state.json    %APPDATA%\DSH Desktop\… on Windows
+```
+
+That is the file `--default` seeds, and seeding it is the only mechanism that
+works. It writes exactly what a first pick in the tray picker writes — the
+profile in `pending`, with `active` and `lastKnownGood` left on `desktop`:
+
+```json
+{ "version": 1, "active": "desktop", "pending": "parametria", "lastKnownGood": "desktop" }
+```
+
+Going through `pending` rather than claiming `active` means the launcher's
+existing rollback contract still covers it. If the profile turns out not to be
+selectable, or its shell fails to mount, startup falls back to `desktop` on its
+own; the profile is promoted to `lastKnownGood` only after it has actually come
+up. The installer asserts nothing it cannot know.
+
+**It refuses when that file already exists**, and no flag releases that refusal
+— `--force` releases this installer's claim over the files *it* wrote under
+`$DSH_HOME`, which the selection state is not. The test is deliberately
+"absent", not "unchosen": the launcher rewrites this file on every boot, and
+deliberately picking `desktop` produces a document identical to the untouched
+default, so once the file exists nothing can tell "never chose" from "chose the
+other one". Absence is the only unambiguous permission, so absence is the whole
+permission. The refusal names the file and points at the tray picker.
+
+`--user-data-dir <dir>` overrides where that state is looked for, for a
+non-default Electron data root (`--user-data-dir` on the app, isolated test
+instances). It only means anything with `--default`, and says so rather than
+being ignored.
 
 ## The five things it composes
 
@@ -327,11 +378,13 @@ root chain again.
 | `tests/vision-route.test.mjs` | Every declared field of the `parametria-vision` model entry diffed against the **installed** pi-ai catalog entry — modalities, endpoint, protocol, capacities, reasoning dialect. A hand-declared route inherits nothing, so an unstated field silently falls back to the route guesses. |
 | `tests/profile-patch.test.mjs` | The patch restates every field of each bundle row it replaces (an id-targeted patch has no deep merge), targets only rows the composed bundles provide, inserts nothing, and keeps the manifest web-capable and free of the launcher-owned desktop bundle. Also that each patch entry carries `id` and `config` and nothing else — a patch key lands on the target **row**, so a stray `disabled`/`group`/`isolate` would unmount or relocate a plugin while every config-shaped assertion stayed green — and that the permission table is neither patched nor extended, per the issue #9 ruling. |
 | `tests/evidence-hygiene.test.mjs` | The **dot-prefixed** workspace directories the persona tells a run to create, **derived** from the persona text rather than restated, each asserted ignored by *this repository's own* `.gitignore` via `git check-ignore --no-index --verbose` with `core.excludesFile` emptied — so a persona naming a new dot-prefixed directory fails until `.gitignore` covers it, and a rule inherited from a developer's global excludes cannot stand in for one that travels. A non-dot name is not separable from prose and stays a review question, which the fence documents. Two counter-assertions (a plain tracked file and a dot-prefixed one) keep an over-broad rule — `*` or `.*` — from making it vacuous. |
-| `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. |
+| `tests/install-profile.test.mjs` | The installed file set, idempotent re-install, refusal on a locally modified file, and `--force` as that claim's release. For `--default`: the whole seeded document (not a probe for the profile name), that an ordinary install leaves the state absent, that the refusal fires **before any other write** so a rejected `--default` cannot half-apply an install, that `--force` does *not* release it, and that the exclusivity survives the check being bypassed — `flag: 'wx'` is asserted separately from `planDefaultSelection`, because the check only produces the message while the flag makes the guarantee. |
+| `tests/desktop-selection-drift.test.mjs` | The four values `--default` **mirrors** from `dsh-plugin-desktop/src`, each read back from that source and anchored to its declaration: the `PRODUCT_NAME` passed to `app.setName` (which is what names `userData`, asserted in all three platform branches of the launcher's own headless mirror *and* against this installer's resolver output), the two `selectionStatePath` segments, and `STATE_VERSION` / `DEFAULT_PROFILE_NAME`. Plus the two claims the installer's design rests on: that `selectDesktopProfile` still writes a first selection as a `pending` one, and that startup still rolls an unselectable `pending` back. The values are duplicated because this package is dependency-free `.mjs` that `yarn check` runs *before* `dsh-plugin-desktop` is built, so there is nothing to import; this fence is what makes the duplication safe. It is also the tripwire for the pending `app.setName` rebrand migration, which moves `userData` wholesale. |
 
-Every drift fence reads the pinned upstream checkout, so
-`git submodule update --init deepseek-harness` is a prerequisite — the same one
-`yarn check:layout` already has.
+Every drift fence except `desktop-selection-drift` reads the pinned upstream
+checkout, so `git submodule update --init deepseek-harness` is a prerequisite —
+the same one `yarn check:layout` already has. That one fence looks the other
+way, at this repository's own `dsh-plugin-desktop/src`.
 
 ## Related issues
 
