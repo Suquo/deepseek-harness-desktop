@@ -56,10 +56,29 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { composeEntries } from '@deepseek-ai/dsh-app-boot'
-import LlmRuntime from '@deepseek-ai/dsh-llm'
-import * as piAiPlugin from '@deepseek-ai/dsh-llm-pi-ai'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { prepareDesktopProfile } from '../src/profile.ts'
+
+/**
+ * The two LLM plugins are loaded through COMPUTED specifiers, not static
+ * imports, and that is deliberate rather than stylistic.
+ *
+ * Both `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-llm-pi-ai` reach
+ * `@anthropic-ai/sdk`, whose `internal/types.d.mts:48` probes `undici-types`
+ * through eight relative paths behind a MISPLACED `@ts-ignore` — the pragma
+ * sits at the start of the same line, so it suppresses the line after it rather
+ * than that one. This package keeps `skipLibCheck` off, so a static import of
+ * either plugin fails `yarn typecheck` with seven `TS2307`s inside a dependency
+ * this repository does not own and cannot patch from here (measured: adding one
+ * static import to an otherwise empty spec reproduces them exactly).
+ *
+ * A computed specifier keeps the runtime edge and drops the type edge. The cost
+ * is confined to this file, and the surface actually used is declared below as
+ * `LlmService`; the alternative was turning lib checking off for every test in
+ * the package to accommodate one dependency's packaging bug.
+ */
+const LLM_RUNTIME_SPECIFIER = '@deepseek-ai/dsh-llm'
+const PI_AI_SPECIFIER = '@deepseek-ai/dsh-llm-pi-ai'
 
 const PRESET_ROOT = fileURLToPath(new URL('../../dsh-preset-parametria/', import.meta.url))
 const INSTALLER = join(PRESET_ROOT, 'scripts', 'install-profile.mjs')
@@ -144,27 +163,28 @@ async function streamOnce(route: RouteProfile, effort?: string): Promise<Outcome
   const baseURL = `http://127.0.0.1:${port}/v1`
   if (!baseURL.startsWith('http://127.0.0.1:')) throw new Error('refusing to mount a non-loopback endpoint')
   const ctx = new Context()
+  // The route config is the YAML the composition pipeline produced, unedited
+  // except for the endpoint.
+  const mountConfig = { providers: { [ROUTE]: { ...route, baseURL } } }
+  const [llmRuntimeModule, piAiModule] = await Promise.all([
+    import(LLM_RUNTIME_SPECIFIER),
+    import(PI_AI_SPECIFIER),
+  ])
+  // `undefined` is the config the runtime takes: it is a Service with no
+  // options, and passing it explicitly is what the typed overload expects.
+  const runtime = ctx.plugin(llmRuntimeModule.default as never, undefined as never)
+  const provider = ctx.plugin(piAiModule as never, mountConfig as never)
   try {
-    ctx.plugin(LlmRuntime)
-    ctx.plugin(piAiPlugin, { providers: { [ROUTE]: { ...route, baseURL } } })
-    // Both plugins mount on their own fibers, so readiness is polled through
-    // the registry itself rather than slept on: the service is absent until
-    // `LlmRuntime` attaches, and `listModels` throws `NO_ADAPTER` until
-    // `llm-pi-ai` has registered this route.
-    const deadline = Date.now() + 10_000
-    let llm: LlmService
-    for (;;) {
-      const service = (ctx as unknown as { llm?: LlmService }).llm
-      try {
-        if (service === undefined) throw new Error('the llm service has not attached yet')
-        await service.listModels(ROUTE)
-        llm = service
-        break
-      } catch (error) {
-        if (Date.now() > deadline) throw error
-        await new Promise(resolve => setTimeout(resolve, 20))
-      }
-    }
+    // Awaiting each fiber is the readiness signal — no sleep, and no polling
+    // window that could pass for "registered" on a slow machine. `llm-pi-ai`
+    // declares `inject: ['llm']`, so its fiber settles only once the runtime is
+    // attached and its own routes are registered.
+    await runtime
+    await provider
+    const llm = (ctx as unknown as { llm: LlmService }).llm
+    // Throws `NO_ADAPTER` if the route did not register, which is a failure of
+    // the thing under test rather than a reason to keep waiting.
+    await llm.listModels(ROUTE)
     const info = await llm.resolveModelInfo(ROUTE, MODEL)
     offeredEfforts = (info.reasoning?.efforts ?? []).map(entry => entry.id)
     for await (const chunk of llm.stream({
@@ -174,7 +194,8 @@ async function streamOnce(route: RouteProfile, effort?: string): Promise<Outcome
       ...effort === undefined ? {} : { reasoningEffort: effort },
     })) chunks.push(chunk as Outcome['chunks'][number])
   } finally {
-    await ctx.stop?.()
+    await provider.dispose()
+    await runtime.dispose()
     server.close()
   }
   return { bodies, chunks, offeredEfforts }
@@ -197,13 +218,14 @@ interface LlmService {
  */
 async function wireBody(route: RouteProfile, effort?: string): Promise<Record<string, unknown>> {
   const outcome = await streamOnce(route, effort)
-  if (outcome.bodies.length !== 1) {
+  const [body] = outcome.bodies
+  if (outcome.bodies.length !== 1 || body === undefined) {
     throw new Error(
       `expected exactly one captured request, got ${outcome.bodies.length}`
       + ` (stream chunks: ${JSON.stringify(outcome.chunks)})`,
     )
   }
-  return outcome.bodies[0]
+  return body
 }
 
 /**
@@ -301,9 +323,10 @@ describe('the parametria-vision route on the wire', {
     // and cannot be disabled` to. If upstream ever changes that branch, this
     // fails and the green assertions above are re-derived rather than trusted.
     const preFix = await streamOnce(withValuelessOff(composedRoute))
-    expect(preFix.bodies).toHaveLength(1)
-    expectRealRequest(preFix.bodies[0])
-    expect(preFix.bodies[0].reasoning).toEqual(DISABLE)
+    const [preFixBody] = preFix.bodies
+    if (preFixBody === undefined) throw new Error('the pre-fix route sent no request at all')
+    expectRealRequest(preFixBody)
+    expect(preFixBody.reasoning).toEqual(DISABLE)
     // The same key is also what made Off selectable, which is how a control
     // that could only ever 400 came to be offered in the first place.
     expect(preFix.offeredEfforts).toEqual(['off', 'high'])
