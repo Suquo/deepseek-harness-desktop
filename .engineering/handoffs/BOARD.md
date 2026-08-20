@@ -24,7 +24,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, cjjmaster).
 - **Lane A (general, `claude/*`)**: FREE — gen-7 delivered #49 (PR #51 merged: openBrowser: false in our web-runtime patch row; browser popups ended). Next: #55 (pnpm shim) per relief-plan order; #45 low.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-10 delivered the #1 unblock (PR #50 merged on green: machine-wide parametria-vision route, ownership-guarded installer, ADR H-0005; root cause was profile-scoped route + never-switched profile). #1 OPEN pending-live: operator does ONE install:profile then runs. Queue: #23/#24/#30/#45/#48 available, #6 buildable, #7 owner-gated.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-11 on #40** (parent-side error laundering; branch `pm/issue-40-error-surface`; post-rc.8 re-ground required; upstream-shaped patch preferred, anywhere-labs report stays owner-gated). #1 OPEN pending-live (install done — operator runs once). Queue after #40: #24 → #23 → #52 → #53 → #54; #30/#45 available, #6 buildable, #7 owner-gated.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
 
