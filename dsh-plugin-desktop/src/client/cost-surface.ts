@@ -8,14 +8,41 @@
  * owner asked for: one Parametria definition build is one turn. Contributing to
  * a list slot is composition, not override; nothing upstream is replaced.
  *
- * WHERE IT DOES NOT MOUNT. Only the desktop-composed (advanced) shell installs
- * this. Compatibility mode runs the upstream default client without overrides
- * (AGENTS.md), and this is a desktop-owned surface, so it is installed from
- * `applyAdvancedShell` and by nothing else.
+ * That render site is not merely equivalent across the two shell modes; it is
+ * the same one. Both modes load the same served SPA, differing only by the
+ * `dsh-desktop-mode` query parameter `desktopRendererUrl` sets (`src/index.ts`),
+ * so `conversation.chat.assistant-actions` — declared by upstream's own
+ * `ui-conversation` package and rendered from its `TurnTailNodeView` — is a
+ * single declaration that both modes reach.
+ *
+ * IT MOUNTS IN BOTH MODES, which is why it is installed from the client's
+ * mode-independent entry point rather than from `applyAdvancedShell`. AGENTS.md
+ * permits ADDITIVE desktop-owned UI in compatibility mode (owner rulings
+ * 2026-08-20, issues #26 and #5/#36): injecting into a documented slot is
+ * allowed there, replacing or altering upstream slots, services or behaviour is
+ * not. The owner runs compatibility mode, where the cost of a Parametria build
+ * was invisible. Additive is the whole permission and therefore the whole
+ * fence: this surface declares no slot, provides no service, writes nothing to
+ * upstream's DOM, and reads session state without ever dispatching into it.
+ *
+ * ONE SHEET IS ENOUGH, and the brand precedent explains why that is a property
+ * rather than luck. `src/shell-branding.ts` carries a second, compatibility-only
+ * copy of the brand sheet because `src/client/brand.ts` selects UPSTREAM
+ * CSS-module classes scoped inside desktop wrappers
+ * (`.dshDesktopUpstreamSidebar`, `.dshDesktopConversationSurface`) that the
+ * unwrapped compatibility document does not have, so those selectors would match
+ * nothing there. Every selector below instead begins with a `.dshDesktopCost*`
+ * class this surface renders itself, and every colour is an upstream alias token
+ * that `ui-theme`'s `design-platform.css` defines on `body` in both modes.
+ * Nothing here depends on a wrapper, so nothing here needs a second expression —
+ * and `tests/cost-surface-gating.spec.ts` holds that shape rather than trusting
+ * it.
  *
  * Its stylesheet is its own `<style>` element, deliberately not folded into the
  * advanced-shell sheet: those styles are the window frame's and the brand's,
- * this one belongs to a slot contribution with a different lifetime.
+ * this one belongs to a slot contribution with a different lifetime. That
+ * separation is now load-bearing rather than tidy — the advanced sheet must stay
+ * out of compatibility mode, and this one must reach it.
  */
 
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'

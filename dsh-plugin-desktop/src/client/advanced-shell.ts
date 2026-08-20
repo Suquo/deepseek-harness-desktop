@@ -3,7 +3,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from './contracts.ts'
 import type { DesktopClientEnvironment } from './environment.ts'
 import { AdvancedFrame } from './AdvancedFrame.tsx'
-import { installCostSurface } from './cost-surface.ts'
 import { DesktopLayoutState } from './layout-state.ts'
 import { provideDesktopLayout } from './layout-service.ts'
 import { installAdvancedStyles } from './styles.ts'
@@ -45,11 +44,6 @@ export function applyAdvancedShell(ctx: ClientContext, environment: DesktopClien
       presenter.dispose()
     }
   }, 'desktop: theme presenter')
-
-  // Desktop-owned reporting surface. It contributes to an upstream list slot
-  // rather than replacing anything, and it lives here — not in `apply` — so
-  // that compatibility mode never installs it.
-  ctx.effect(() => installCostSurface(ctx), 'desktop: turn cost surface')
 
   ctx.effect(() => ctx.slots.register({
     name: 'root',
