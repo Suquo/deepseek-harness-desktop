@@ -37,12 +37,6 @@ export const PARAMETRIA_WORDMARK = 'PARAMETRIA'
  */
 export const PARAMETRIA_PRODUCT_NAME = 'Parametria'
 
-/** Wordmark accent under a light theme. */
-export const PARAMETRIA_ACCENT_LIGHT = '#0288d1'
-
-/** Wordmark accent under a dark theme. */
-export const PARAMETRIA_ACCENT_DARK = '#4fc3f7'
-
 /**
  * Empty-state headline this product shows in place of the upstream one.
  *
@@ -95,9 +89,14 @@ export const UPSTREAM_BRAND_CLASSES = {
  * the leftmost letterform path starts at x 26.96 — so upstream drew 17.0px of mark ink with a 3.7px
  * optical gap before the text. The Parametria mark's ink spans 74.6..425.4 of its 500-unit box
  * (70.2%), so a 24px box renders 16.8px of ink with 3.6px of its own padding to the right of it.
- * Both numbers land within a fifth of a pixel of upstream's, which is why the rule below sets a 24px
- * box and no gap: the gap is already inside the artwork, and adding one on top would open the pair
- * to roughly double what this lockup ever had.
+ * Both numbers land within a fifth of a pixel of upstream's, so a 24px box reproduces the mark
+ * upstream drew here at the size it drew it.
+ *
+ * The pair is then set wider than upstream's on purpose. Reproducing upstream's 3.7px exactly reads
+ * as too tight against these letterforms (owner call on the rendered lockup, 2026-08-20), so the
+ * mark carries `margin-right: 8px` on top of the 3.6px its own artwork already supplies. 8px is not
+ * an eyeballed number: it is the `gap` upstream sets on `.logoRow` itself, so the space inside the
+ * lockup now matches the space between the lockup and the control beside it.
  *
  * The wordmark that takes the lockup's place is decorative too, and deliberately so. The lockup is
  * a `<button>` carrying `aria-label={t('session.new.label')}` (`ui-sidebar/src/client/
@@ -127,9 +126,21 @@ export const UPSTREAM_BRAND_CLASSES = {
  * (`grid-area: 1 / 2`) — every child of the headline grid is explicitly placed, so an auto-placed
  * replacement would only land correctly by accident.
  *
- * The wordmark is the only themed value: it carries the accent Parametria uses for the theme in
- * play, keyed off the dark-theme attribute the desktop theme presenter sets on `<body>`. The mark
- * keeps its own brand blues in both themes, exactly as its source paints it.
+ * The wordmark takes NEUTRAL ink rather than Parametria's accent blue (owner call, 2026-08-20,
+ * superseding the accent treatment this sheet shipped with). It gets there by riding the sidebar's
+ * own text ink — `color: inherit` — which is the arrangement upstream's wordmark had, where the
+ * letterforms were `currentColor` inside a `.hHd-Xa_brand` upstream declares `color: inherit`. So
+ * the ink is dark on the light sidebar and light on the dark one without this sheet naming either
+ * colour, and this sheet now pins no colour at all.
+ *
+ * Inheriting is what makes "neutral" a single declaration rather than a palette this sheet has to
+ * maintain. Two literals keyed on `body[data-ds-dark-theme]` would also work — upstream's own theme
+ * boot script sets that attribute on every index response, in both shell modes — but they would pin
+ * two colours whose entire purpose is to match a palette upstream owns, and they would drift the
+ * first time upstream retuned its label ink. Inheriting cannot drift from a palette it reads.
+ *
+ * The mark keeps its own brand blues in both themes, exactly as its source paints it; the accent
+ * change is the wordmark TEXT only.
  * @returns the stylesheet text appended to the advanced-shell styles.
  */
 export function parametriaBrandStyles(): string {
@@ -138,9 +149,8 @@ export function parametriaBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
-${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; background: ${mark}; }
-${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }
-body[data-ds-dark-theme] ${lockup}.hHd-Xa_wide::after { color: ${PARAMETRIA_ACCENT_DARK}; }
+${lockup}.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
+${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish { background: ${mark}; }
 .dshDesktopUpstreamSidebar .hHd-Xa_railFish > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }

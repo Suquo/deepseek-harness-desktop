@@ -5,8 +5,6 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import {
   HERO_HEADLINE_TEXT,
-  PARAMETRIA_ACCENT_DARK,
-  PARAMETRIA_ACCENT_LIGHT,
   PARAMETRIA_WORDMARK,
   UPSTREAM_BRAND_CLASSES,
   parametriaBrandStyles,
@@ -30,15 +28,23 @@ const OVERLAY_CLASS_PREFIX = 'dshDesktop'
 /**
  * Pinned upstream facts a brand override's REASONING rests on, beyond the classes it selects.
  *
- * The sidebar lockup is the one such fact today. The wordmark rides that button's `::after`, and
- * both brand sheets justify leaving it unlabelled by upstream's own `aria-label`: the accessible
- * name computation reaches `aria-label` (step 2C) before name-from-content (step 2F), so the
- * generated wordmark text is never gathered and the button keeps announcing its "New session"
- * action. Were that label dropped upstream, the `::after` would silently start naming the button.
- * The label is therefore load-bearing and gets a guard like every other pinned fact.
+ * Both of today's entries are sidebar-lockup facts, and both are load-bearing in the same way a
+ * class name is: the override still applies if they change, it just stops being correct.
+ *
+ * 1. The wordmark rides that button's `::after`, and both brand sheets justify leaving it unlabelled
+ *    by upstream's own `aria-label`: the accessible name computation reaches `aria-label` (step 2C)
+ *    before name-from-content (step 2F), so the generated wordmark text is never gathered and the
+ *    button keeps announcing its "New session" action. Were that label dropped upstream, the
+ *    `::after` would silently start naming the button.
+ * 2. The wordmark pins no colour and inherits instead, which is only NEUTRAL INK because upstream
+ *    declares `color: inherit` on `.brand` and lets the sidebar's themed label ink flow through.
+ *    Were upstream to pin a colour there, the wordmark would silently take it in both themes.
  */
-const UPSTREAM_BRAND_ANCHORS: Record<string, RegExp> = {
-  '@deepseek-ai/dsh-client-ui-sidebar': /\.brand, \w+\.wide\),\s*"aria-label": t\("session\.new\.label"\)/,
+const UPSTREAM_BRAND_ANCHORS: Record<string, readonly RegExp[]> = {
+  '@deepseek-ai/dsh-client-ui-sidebar': [
+    /\.brand, \w+\.wide\),\s*"aria-label": t\("session\.new\.label"\)/,
+    /\.hHd-Xa_brand\{[^}]*color:inherit/,
+  ],
 }
 
 /**
@@ -78,8 +84,8 @@ describe('Parametria brand presentation', () => {
     // BrandWordmark is a single svg carrying whale AND letterforms, so the mark is not an addition
     // to this site — a wordmark alone is what dropped a graphic the lockup already had.
     expect(css).toMatch(/\.dshDesktopUpstreamSidebar \.hHd-Xa_logoRow \.hHd-Xa_brand svg \{ display: none; \}/)
-    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; background: ${mark}; }`)
-    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }`)
+    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }`)
+    expect(css).toContain(`.hHd-Xa_brand.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }`)
 
     // Left of the wordmark, not right of it: both boxes are flex children of the same lockup, so
     // their order is source order, and this is the whole of what the site asks for.
@@ -99,15 +105,15 @@ describe('Parametria brand presentation', () => {
       .map(block => (block.split('{')[0] ?? '').trim())
       .filter(selector => selector.includes(`.${sidebar.brand}`))
 
-    // Exhaustive: the two rules that reshape the button, and the three that generate boxes in it. A
-    // fourth generated box appearing here without a decision is exactly what this count catches.
-    expect(lockupRules).toHaveLength(5)
+    // Exhaustive: the two rules that reshape the button, and the two that generate boxes in it. A
+    // third generated box appearing here without a decision is exactly what this count catches.
+    expect(lockupRules).toHaveLength(4)
 
     // Every generated box is qualified by upstream's expanded-state class. The rail renders no
     // `.brand` element at all, so this is defence in depth rather than the only thing keeping the
     // 56px rail icon-only — but it is the difference between "cannot happen" and "does not today".
     const generated = lockupRules.filter(selector => selector.includes('::'))
-    expect(generated).toHaveLength(3)
+    expect(generated).toHaveLength(2)
     for (const selector of generated) {
       expect(selector).toContain(`.${sidebar.brand}.${sidebar.wide}`)
     }
@@ -120,18 +126,19 @@ describe('Parametria brand presentation', () => {
     expect(markContent?.[1]).toBe('')
   })
 
-  it('carries an accent for each theme and pins no other colour', () => {
+  it('pins no colour at all, so both themes come from the ink the sidebar already sets', () => {
     const css = parametriaBrandStyles()
 
-    // The dark accent must arrive through the attribute the desktop theme presenter sets, and the
-    // light accent must be the unqualified default, or one theme silently inherits the other's.
-    expect(css).toContain(`body[data-ds-dark-theme] .dshDesktopUpstreamSidebar .hHd-Xa_logoRow .hHd-Xa_brand.hHd-Xa_wide::after { color: ${PARAMETRIA_ACCENT_DARK}; }`)
-    expect(PARAMETRIA_ACCENT_LIGHT).not.toBe(PARAMETRIA_ACCENT_DARK)
-
-    // Exactly two colour declarations exist, and they are exactly the two accents: anything else
-    // would be a theme-blind value the sheet has no business pinning.
+    // Exactly one colour declaration, and it names no colour. A single literal would be theme-blind;
+    // a pair of literals keyed on the dark-theme attribute would work, but would pin two values
+    // whose whole job is to match a palette upstream owns and retunes. An inherited value cannot
+    // drift from the palette it reads, and it is the arrangement upstream's own wordmark had.
     const declared = [...css.matchAll(/(?:^|[\s;{])color:\s*([^;}]+)/g)].map(match => match[1] as string)
-    expect(declared).toEqual([PARAMETRIA_ACCENT_LIGHT, PARAMETRIA_ACCENT_DARK])
+    expect(declared).toEqual(['inherit'])
+
+    // And the sheet must not have grown a theme-conditional branch by another route.
+    expect(css).not.toContain('data-ds-dark-theme')
+    expect(css).not.toContain('prefers-color-scheme')
   })
 
   it('replaces the empty-state headline without leaving the upstream string readable', () => {
@@ -210,8 +217,7 @@ describe('Parametria brand presentation', () => {
       for (const [local, emitted] of Object.entries(classes)) {
         expect(bundle).toContain(`"${local}": "${emitted}"`)
       }
-      const anchor = UPSTREAM_BRAND_ANCHORS[packageName]
-      if (anchor !== undefined) expect(bundle).toMatch(anchor)
+      for (const anchor of UPSTREAM_BRAND_ANCHORS[packageName] ?? []) expect(bundle).toMatch(anchor)
     },
   )
 

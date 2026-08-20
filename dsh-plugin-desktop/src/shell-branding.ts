@@ -30,8 +30,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import {
   HERO_HEADLINE_TEXT,
-  PARAMETRIA_ACCENT_DARK,
-  PARAMETRIA_ACCENT_LIGHT,
   PARAMETRIA_PRODUCT_NAME,
   PARAMETRIA_WORDMARK,
   UPSTREAM_BRAND_CLASSES,
@@ -154,6 +152,10 @@ export function serveShellAsset(
  * and the nesting each one claims is upstream's own (`SidebarRoot.tsx`: the rail button lives
  * inside `.logoRow`).
  *
+ * The wordmark's neutral ink arrives here the same way it does in the advanced sheet — by
+ * inheriting the sidebar's own themed label ink — so this sheet, like that one, names no colour and
+ * carries no theme-conditional rule of its own.
+ *
  * The accessibility arrangement is the advanced sheet's, for the same reason: upstream's marks are
  * `aria-hidden` decoration, so repainting their boxes costs no accessible name, and the lockup
  * button keeps announcing the "New session" action its `aria-label` names — generated `::after`
@@ -169,9 +171,8 @@ export function compatibilityBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
-${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; background: ${mark}; }
-${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: ${PARAMETRIA_ACCENT_LIGHT}; }
-body[data-ds-dark-theme] ${lockup}.${SIDEBAR.wide}::after { color: ${PARAMETRIA_ACCENT_DARK}; }
+${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
+${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; color: inherit; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} { background: ${mark}; }
 .${SIDEBAR.logoRow} .${SIDEBAR.railFish} > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }
