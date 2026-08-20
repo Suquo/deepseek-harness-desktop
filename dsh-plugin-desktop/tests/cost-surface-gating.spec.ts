@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -20,8 +21,15 @@ import { describe, expect, it } from 'vitest'
  * fences keep that property from regressing between launches.
  */
 
+const CLIENT_DIRECTORY = fileURLToPath(new URL('../src/client/', import.meta.url))
+
 function clientSource(name: string): string {
-  return readFileSync(fileURLToPath(new URL(`../src/client/${name}`, import.meta.url)), 'utf8')
+  return readFileSync(join(CLIENT_DIRECTORY, name), 'utf8')
+}
+
+/** Every client module, read off disk — never a hand-kept list (see the caller sweep). */
+function clientModules(): string[] {
+  return readdirSync(CLIENT_DIRECTORY).filter(name => name.endsWith('.ts') || name.endsWith('.tsx'))
 }
 
 /** Strip block and line comments so a fence matches code, never prose about code. */
@@ -52,8 +60,14 @@ describe('the cost surface is gated to the desktop-composed shell', () => {
   })
 
   it('is installed by exactly one caller across the whole client', () => {
-    const callers = ['index.ts', 'advanced-shell.ts', 'cost-surface.ts', 'TurnCostBadge.tsx', 'turn-cost.ts', 'cost-model.ts', 'cost-rates.ts']
-      .filter(name => new RegExp(String.raw`${INSTALL}\(ctx\)`).test(code(clientSource(name))))
+    // Read the DIRECTORY, never a hand-kept list. The first version named seven
+    // files while `src/client/` held twenty, so a caller added in any of the
+    // other thirteen passed this fence in silence — the same class as PR #10's
+    // single-workspace-list fix.
+    const modules = clientModules()
+    expect(modules.length).toBeGreaterThan(7)
+    expect(modules).toContain('advanced-shell.ts')
+    const callers = modules.filter(name => new RegExp(String.raw`${INSTALL}\(ctx\)`).test(code(clientSource(name))))
     expect(callers).toEqual(['advanced-shell.ts'])
   })
 

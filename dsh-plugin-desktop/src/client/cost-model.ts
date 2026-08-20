@@ -75,6 +75,30 @@ export type CostLine =
   | { readonly status: 'unpriced'; readonly reason: string }
   | { readonly status: 'untokenized'; readonly reason: string }
 
+/** Applying this to a non-`never` type is a compile error — the assertion behind {@link COST_STATUSES}. */
+type AssertNever<T extends never> = T
+
+/**
+ * Every status a {@link CostLine} can carry, as a value a test can iterate.
+ *
+ * `CostLine` is a type and so invisible at runtime, which is exactly what let a
+ * status sweep enumerate one implementation and silently miss the other's. This
+ * list is the union's runtime witness, pinned to it in BOTH directions at
+ * compile time: `satisfies` rejects a member the union does not have, and
+ * {@link UnlistedCostStatus} rejects a union arm this list omits.
+ */
+export const COST_STATUSES = ['priced', 'free', 'unpriced', 'untokenized'] as const satisfies readonly CostLine['status'][]
+
+/**
+ * Compile-time proof that {@link COST_STATUSES} omits no arm of {@link CostLine}.
+ *
+ * Resolves to `never` while the two agree. Add a fifth arm to `CostLine`
+ * without listing it here and `Exclude` yields that arm, `AssertNever` refuses
+ * it, and the build fails at the declaration — rather than in a test that
+ * happens to enumerate the old four and passes.
+ */
+export type UnlistedCostStatus = AssertNever<Exclude<CostLine['status'], (typeof COST_STATUSES)[number]>>
+
 /** Bucket field names paired with the rate field that prices them. */
 const BUCKET_RATES = [
   ['inputTokens', 'input'],

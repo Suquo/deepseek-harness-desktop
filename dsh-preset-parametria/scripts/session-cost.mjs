@@ -44,6 +44,19 @@ export const PRICED = 'priced'
 /** The step assembled no usage report at all (cancelled or interrupted before the provider answered). */
 export const UNTOKENIZED = 'untokenized'
 
+/**
+ * Every status {@link priceStep} can report, as one list.
+ *
+ * DERIVED from the constants above rather than restating their spellings, so
+ * this cannot drift from them by a typo. Its purpose is to be comparable: the
+ * desktop client declares the same set as `COST_STATUSES`, and
+ * `dsh-plugin-desktop/tests/client-cost-parity.spec.ts` requires the two sets
+ * to be equal in BOTH directions. A status added to either implementation and
+ * not the other fails there — which the first version of that sweep could not
+ * catch, because it enumerated only the desktop side.
+ */
+export const STATUSES = [PRICED, FREE, UNPRICED, UNTOKENIZED]
+
 /** The four disjoint buckets upstream records, in the order a report reads them. */
 export const BUCKETS = /** @type {const} */ ([
   ['inputTokens', 'input'],

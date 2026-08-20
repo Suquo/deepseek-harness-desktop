@@ -20,15 +20,18 @@
 import { describe, expect, it } from 'vitest'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error - plain-JS sibling package, deliberately untyped and not a dependency of this one
-import { priceStep } from '../../dsh-preset-parametria/scripts/session-cost.mjs'
+import { STATUSES as OFFLINE_STATUSES, priceStep } from '../../dsh-preset-parametria/scripts/session-cost.mjs'
 import type { CostLine, ModelRates, TokenBuckets } from '../src/client/cost-model.ts'
-import { NO_TOKENS, priceTokens } from '../src/client/cost-model.ts'
+import { COST_STATUSES, NO_TOKENS, priceTokens } from '../src/client/cost-model.ts'
 
 interface OfflineCostLine {
   status: string
   usd?: number
   reason?: string
 }
+
+/** The offline module is plain JS; this is the only place its shape is asserted. */
+const priceOffline = priceStep as (row: unknown, table: unknown) => OfflineCostLine
 
 const PROVIDER = 'openrouter'
 const MODEL = 'google/gemini-3.6-flash'
@@ -90,7 +93,7 @@ describe('the in-UI and offline pricing implementations agree', () => {
     const rates = vector.rates === 'absent' ? undefined : RATE_SHAPES[vector.rates]
 
     const inUi = priceTokens(tokens, rates, `${PROVIDER}/${MODEL}`)
-    const offline = (priceStep as (row: unknown, table: unknown) => OfflineCostLine)(
+    const offline = priceOffline(
       { provider: PROVIDER, model: MODEL, ...tokens === undefined ? {} : { usage: tokens } },
       rates === undefined ? { [PROVIDER]: {} } : { [PROVIDER]: { [MODEL]: rates } },
     )
@@ -98,13 +101,36 @@ describe('the in-UI and offline pricing implementations agree', () => {
     expect(comparable(inUi)).toEqual(comparable(offline))
   })
 
-  it('covers every status either implementation can produce', () => {
-    // A vector table that never reaches a state is a fence with a hole in it.
-    const statuses = new Set(VECTORS.map((vector) => {
+  it('declares the same status set on both sides, in both directions', () => {
+    // The first version of this sweep enumerated statuses through `priceTokens`
+    // alone and compared them to a literal, so a status only the OFFLINE
+    // implementation could produce escaped it entirely — while the test's name
+    // claimed to cover both. Each side now publishes its own set and they are
+    // compared as sets: an addition to either that is not mirrored fails here.
+    const inUi: readonly string[] = COST_STATUSES
+    const offline = OFFLINE_STATUSES as readonly string[]
+    expect(offline.filter(status => !inUi.includes(status))).toEqual([])
+    expect(inUi.filter(status => !offline.includes(status))).toEqual([])
+  })
+
+  it('reaches every declared status from the vector table, on both sides', () => {
+    // A declared status neither implementation produces, or a vector table that
+    // never reaches a declared one, is a hole in the fence above. Both arms are
+    // swept, so this no longer speaks for an implementation it never ran.
+    const inUi = new Set<string>()
+    const offline = new Set<string>()
+    for (const vector of VECTORS) {
+      const tokens = bucketsOf(vector)
       const rates = vector.rates === 'absent' ? undefined : RATE_SHAPES[vector.rates]
-      return priceTokens(bucketsOf(vector), rates, 'x/y').status
-    }))
-    expect([...statuses].sort()).toEqual(['free', 'priced', 'unpriced', 'untokenized'])
+      inUi.add(priceTokens(tokens, rates, 'x/y').status)
+      offline.add(priceOffline(
+        { provider: PROVIDER, model: MODEL, ...tokens === undefined ? {} : { usage: tokens } },
+        rates === undefined ? { [PROVIDER]: {} } : { [PROVIDER]: { [MODEL]: rates } },
+      ).status)
+    }
+    const declared = [...COST_STATUSES].sort()
+    expect([...inUi].sort()).toEqual(declared)
+    expect([...offline].sort()).toEqual(declared)
   })
 
   it('states its own divergence: only the reason wording differs', () => {
@@ -113,7 +139,7 @@ describe('the in-UI and offline pricing implementations agree', () => {
     // other a supplied file. The fence compares status and money, and this
     // records why it does not compare prose.
     const inUi = priceTokens({ ...NO_TOKENS, inputTokens: 1 }, undefined, 'openrouter/x')
-    const offline = (priceStep as (row: unknown, table: unknown) => OfflineCostLine)(
+    const offline = priceOffline(
       { provider: 'openrouter', model: 'x', usage: { inputTokens: 1 } },
       { openrouter: {} },
     )
