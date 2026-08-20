@@ -148,7 +148,7 @@ export function serveShellAsset(
  * Every rule is two classes deep. That is not decoration: upstream's CSS modules are injected by
  * the shell's own module script, which runs after this document-level sheet, so a rule that merely
  * tied on specificity would lose the cascade. Each selector here sits one level above the upstream
- * rule it supersedes — `.logoRow .railFish` over `.railFish`, `.fishHitbox .fish` over `.fish` —
+ * rule it supersedes — `.logoRow .railMark` over `.railMark`, `.fishHitbox .fish` over `.fish` —
  * and the nesting each one claims is upstream's own (`SidebarRoot.tsx`: the rail button lives
  * inside `.logoRow`).
  *
@@ -171,10 +171,11 @@ export function compatibilityBrandStyles(): string {
   return `
 ${lockup} { display: inline-flex; align-items: center; }
 ${lockup} svg { display: none; }
+${lockup} .${SIDEBAR.brandName} { display: none; }
 ${lockup}.${SIDEBAR.wide}::before { content: ""; flex: none; width: 24px; height: 24px; margin-right: 8px; background: ${mark}; }
 ${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; font-size: 15px; font-weight: 700; line-height: 1; letter-spacing: 0.05em; white-space: nowrap; }
-.${SIDEBAR.logoRow} .${SIDEBAR.railFish} { background: ${mark}; }
-.${SIDEBAR.logoRow} .${SIDEBAR.railFish} > * { display: none; }
+.${SIDEBAR.logoRow} .${SIDEBAR.railMark} svg { background: ${mark}; }
+.${SIDEBAR.logoRow} .${SIDEBAR.railMark} svg > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} > * { display: none; }
 .${CONVERSATION.headline} .${CONVERSATION.headlineText} { display: none; }
