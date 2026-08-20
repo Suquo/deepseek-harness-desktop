@@ -14,7 +14,7 @@
 
 **PR #50 MERGED (2026-08-20 ~21:05, green CI): the #1 unblock — parametria-vision is now MACHINE-WIDE** (route in `$DSH_HOME/cordis.patch.yml`, ownership-guarded installer, ADR H-0005). #1 reopened (had been auto-closed since PR #19). Phase 0 install DONE (22:52) — the remaining step is one operator run that invokes `subagent_validator`.
 
-**PR #47 MERGED (2026-08-20 ~20:45, green CI): #43 delivered — the fork is on dsh-v0.1.0-rc.8.** Official brand slots → #48; #46 + #49 filed from findings.
+**LIVE DATUM (2026-08-20 ~23:45, first two post-install runs): PR #50's fix VERIFIED — NO_ADAPTER is dead; the new sole blocker for #1 is #53.** Both runs' validator children resolved `parametria-vision`/`google/gemini-3.6-flash` (children de0ce2b8, 2c7adafa), then died OpenRouter `400 reasoning-mandatory` (`INVALID_REQUEST`) — refuting the plan's §3a "valueless `off:` sends nothing" assumption (rc.8 reworked the adapters; ground at current pin). Datums on #1/#53/#40; **#53 escalated and spawned cross-lane to Lane A** (Lane B busy on #40; freeze fence on `patches/` + root manifest — Lane B has right of way).
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -23,7 +23,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AB generation LIVE (`/loop /repo-manager`, cjjmaster).
-- **Lane A (general, `claude/*`)**: FREE — gen-7 delivered #49 (PR #51 merged: openBrowser: false in our web-runtime patch row; browser popups ended). Next: #55 (pnpm shim) per relief-plan order; #45 low.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-8 on #53 (cross-lane RM assignment, priority)** — reasoning-400 hardening, branch `claude/issue-53-reasoning-400`; HARD FREEZE FENCE: must not touch `patches/` or root package.json patch entries (Lane B's surface this cycle — freeze and report instead). #55 next when free; #45 low.
 - **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-11 on #40** (parent-side error laundering; branch `pm/issue-40-error-surface`; post-rc.8 re-ground required; upstream-shaped patch preferred, anywhere-labs report stays owner-gated). #1 OPEN pending-live (install done — operator runs once). Queue after #40: #24 → #23 → #52 → #53 → #54; #30/#45 available, #6 buildable, #7 owner-gated.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
