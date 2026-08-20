@@ -24,15 +24,12 @@
 # A desktop launch has no terminal operator waiting for the Web readiness line,
 # and no browser to hand the URL to: the Electron shell IS the client.
 #
-# This row config REPLACES upstream's whole config object (an id-targeted patch
-# assigns per top-level key, so `config` lands as one value) — every field the
-# upstream row sets must be restated here, and any field left out silently takes
-# the schema default. `openBrowser` is the standing proof: rc.8 added it to the
-# web-app schema defaulting to true, our omission took that default, and every
-# desktop launch and every `verify:profile` gate run opened the operator's
-# default browser. Restating it false also means `--no-open` on the command line
-# is inert for desktop profiles — upstream's `!!js ctx.webStartup.openBrowser`
-# binding is exactly what this replacement removes.
+# This config REPLACES upstream's whole config object, so every field the pinned
+# row sets must be restated here or it silently takes the schema default — how
+# rc.8's new `openBrowser` turned every launch and every gate run into a browser
+# tab (#49). It also means the flags behind the fields we replace (`--no-open`,
+# `--trusted-host`) cannot reach this row. Fenced by package.spec.ts against the
+# pinned bundle's own row, so a bump cannot add a field unnoticed.
 - id: web-runtime
   config:
     openBrowser: false
