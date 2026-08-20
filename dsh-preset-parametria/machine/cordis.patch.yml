@@ -68,6 +68,12 @@
         # pi-ai guesses the reasoning dialect from the endpoint URL; this URL
         # would guess right, but a route that states its dialect keeps working
         # if the endpoint is ever repointed at a proxy.
+        #
+        # This value is also load-bearing for the `reasoningEfforts` shape
+        # below, whose safety is dialect-specific (issue #53). A change here
+        # must be re-measured against
+        # `dsh-plugin-desktop/tests/parametria-reasoning-wire.spec.ts`, which
+        # asserts this exact spelling for that reason.
         compat:
           thinkingFormat: openrouter
         models:
@@ -81,8 +87,55 @@
             # Key = the level selectors offer, value = its wire spelling. A
             # hand-declared model that declares none does not reason at all,
             # which would silently downgrade a model the catalog marks
-            # reasoning-capable. `off:` is valueless on purpose: it offers Off
-            # and sends nothing.
+            # reasoning-capable.
+            #
+            # `off` IS DELIBERATELY ABSENT, and its absence is the fix for
+            # issue #53. This block used to carry a valueless `off:`, on the
+            # documented premise that it "offers Off and sends nothing"
+            # (upstream states exactly that at
+            # `packages/llm/llm-pi-ai/src/catalog.ts:657-661`). MEASURED at the
+            # current pin, that premise is false for THIS dialect, and the
+            # valueless spelling is what MANUFACTURED the failure:
+            #
+            #   1. `adapter.ts:92` collapses effort `off` to `undefined`, so
+            #      "Off selected" and "nothing selected" are the same request.
+            #   2. `catalog.ts:711-719` pins every UNDECLARED level to `null`
+            #      but leaves a declared-but-valueless `off` ABSENT from
+            #      `thinkingLevelMap`.
+            #   3. pi-ai `dist/api/openai-completions.js:598-608`, the
+            #      `openrouter` branch, then runs
+            #      `else if (map?.off !== null) params.reasoning = { effort: map?.off ?? 'none' }`.
+            #      `undefined !== null`, so an absent key SENDS `"none"`.
+            #
+            # Live consequence (2026-08-20, sessions de0ce2b8 and 2c7adafa):
+            # every validator child died at its first request with OpenRouter
+            # `400 Reasoning is mandatory for this endpoint and cannot be
+            # disabled` (`INVALID_REQUEST`).
+            #
+            # Omitting `off` puts `null` in the map instead, which is the one
+            # state that dialect reads as "send no reasoning field at all".
+            # MEASURED consequence, stated because it is a real surface change:
+            # pi-ai reports a null level as unsupported, so Off is no longer
+            # OFFERED for this route, and a caller that names it anyway is
+            # refused by the adapter with `UNSUPPORTED_REASONING_EFFORT` before
+            # anything is sent. That is the honest surface here — OpenRouter
+            # mandates reasoning on this endpoint, so Off was never a capability
+            # this route had, only a control that produced a mid-turn 400.
+            # Upstream's "send nothing" semantics
+            # do hold for the plain `openai` dialect
+            # (`openai-completions.js:636-641` guards on
+            # `typeof offValue === 'string'`); they do not hold for
+            # `openrouter`, `deepseek`, `zai`, `qwen`, `together`, or
+            # `string-thinking`. Hence the rule this block now follows, and
+            # `tests/vision-route.test.mjs` enforces for every model on every
+            # route this preset declares: NEVER declare a valueless `off:` —
+            # either give it a real wire spelling, meaning you intend to send a
+            # disable, or leave it out.
+            #
+            # The whole matrix is measured end-to-end (installer -> profile
+            # composition -> llm registry -> pi-ai -> captured HTTP body) in
+            # `dsh-plugin-desktop/tests/parametria-reasoning-wire.spec.ts`,
+            # including the red half: re-adding `off:` there reproduces the
+            # exact 400-producing body.
             reasoningEfforts:
-              off:
               high: high
