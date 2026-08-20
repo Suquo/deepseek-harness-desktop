@@ -287,6 +287,15 @@ const pinSurface = [
     '@deepseek-ai/dsh-web-app',
     '@deepseek-ai/dsh-workflow',
   ]],
+  // Test-only pins. These three are NOT product dependencies: they exist so
+  // `tests/subagent-error-surface.spec.ts` can mount the real host services a
+  // delegating parent needs (issue #40) instead of doubling them. They still
+  // move with the pin, so they belong on the recorded surface.
+  ['dsh-plugin-desktop/package.json', 'devDependencies', [
+    '@deepseek-ai/dsh-agent-loop',
+    '@deepseek-ai/dsh-subagent-spawn-in-process',
+    '@deepseek-ai/dsh-tool-subagent',
+  ]],
   ['dsh-community-market/package.json', 'devDependencies', [
     '@deepseek-ai/dsh-agent',
     '@deepseek-ai/dsh-agent-presets',
@@ -469,6 +478,8 @@ const patchedPackages = [
   ['@deepseek-ai/dsh-client-ui-workspace', ['caret', 'exact']],
   ['@deepseek-ai/dsh-llm-deepseek', ['caret']],
   ['@deepseek-ai/dsh-sandbox-windows-acl', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-subagent', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-subagent-in-process-driver', ['caret', 'exact']],
 ]
 const observedPatched = [...patchedShapes].sort(([left], [right]) => left.localeCompare(right))
 if (JSON.stringify(observedPatched) !== JSON.stringify(patchedPackages)) {
