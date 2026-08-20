@@ -27,7 +27,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **RM**: AB generation LIVE (`/loop /repo-manager`, fresh session, cjjmaster).
 - **Lane A (general, `claude/*`)**: **BUSY — gen-6 on #41** (quadratic appendOwned fix + budget restoration; branch `claude/issue-41-appendowned`). Set: lifecycle-events.ts + its spec ONLY.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-9 delivered #36 (PR #38 merged on green CI: cost surface mounts in BOTH shell modes from the mode-independent entry). Queue: #23/#24/#30 available, #6 buildable, #7 owner-gated.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-4 on the rc.8 PIN BUMP** (first real execution of the upstream-watch protocol; branch `up/pin-bump-rc8`). Set: everything version-shaped + fence re-derivations. OVERLAY SYNC DELIVERED (PR #42 merged on green: 65 commits inherited, 4 conflicts resolved fences-intact, lifecycle budget TEMPORARY pending #41).
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **FROZEN-SCHEDULED — gen-4 on the rc.8 bump (#43)**: yarn npmMinimalAgeGate blocks rc.8 resolution until 2026-08-20T15:42Z (RM ruled WAIT, zero policy change). Steps 1-4 done+fenced at head 44b3ac9ba6; resume after 15:42Z. Six fallout items pre-triaged on #43 (reportDelivery vs #40 · brand-region restructuring vs #28/#37 · trademark guidelines vs #26 · SQLite · multimodal · PTY).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gen-3 delivered the sidebar lockup (PR #37 merged on green CI: mark beside wordmark, neutral inherited ink, upstream-derived geometry).
 
 ## Second run harvested (weaker model, 2026-08-19)
