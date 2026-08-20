@@ -11,8 +11,12 @@
  * pi-ai's OpenRouter branch (`dist/api/openai-completions.js:598-608`) reads
  * "absent" as "send the disable":
  *
- *   else if (model.thinkingLevelMap?.off !== null)
- *     params.reasoning = { effort: model.thinkingLevelMap?.off ?? 'none' }
+ *   else if (model.thinkingLevelMap?.off !== null) {
+ *       openRouterParams.reasoning = { effort: model.thinkingLevelMap?.off ?? "none" };
+ *   }
+ *
+ * (`openRouterParams` is the request params object itself, aliased one line
+ * earlier at `:600` — quoted verbatim so the branch is greppable.)
  *
  * Two validator children died on that body — OpenRouter
  * `400 Reasoning is mandatory for this endpoint and cannot be disabled` — on
@@ -35,7 +39,15 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { PACKAGE_ROOT, readComposition } from './helpers.mjs'
 
-/** Every YAML document this package ships, by repo-relative path. */
+/**
+ * Every YAML document this package ships, by package-relative path.
+ *
+ * Deliberately broad — the point is that a route added to a file nobody thought
+ * of still inherits the rule — so the only exclusions are `node_modules` and
+ * this directory. The cost of the breadth is that every shipped YAML must be
+ * parseable as a composition document, which for a package whose YAML IS its
+ * product is a property worth failing on rather than an accident to tolerate.
+ */
 function shippedYamlFiles(root = PACKAGE_ROOT, found = []) {
   for (const name of readdirSync(root)) {
     if (name === 'node_modules' || name === 'tests') continue

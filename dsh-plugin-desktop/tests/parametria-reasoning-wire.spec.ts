@@ -36,14 +36,23 @@
  * 400-producing body. The red half is executed, not described, so this fence
  * cannot rot into an assertion about a shape upstream no longer produces.
  *
- * NOTHING HERE REACHES THE NETWORK. The composed route's `baseURL` is the real
- * `https://openrouter.ai/api/v1` (fenced by `dsh-preset-parametria`'s
- * `vision-route.test.mjs` against the installed catalog); this file replaces it
- * with the loopback server's origin and asserts the replacement took before
- * mounting anything. `OPENROUTER_API_KEY` is overwritten with a placeholder for
- * the duration and restored afterwards, so an operator running the gate with
- * their real key exported never sends it anywhere, and no captured header is
- * ever asserted on or printed.
+ * NOTHING HERE REACHES THE NETWORK, by three independent means. The composed
+ * route's `baseURL` is the real `https://openrouter.ai/api/v1` (fenced by
+ * `dsh-preset-parametria`'s `vision-route.test.mjs:106` against the installed
+ * catalog); `streamOnce` replaces it with the loopback server's origin, then
+ * reads the endpoint back OFF THE OBJECT IT IS ABOUT TO MOUNT and refuses to
+ * mount anything that is not `http://127.0.0.1:`. Every assertion then runs
+ * through `wireBody`/`streamOnce`, which insist on exactly one CAPTURED body —
+ * a request that escaped to the real endpoint would be zero captures and fail.
+ *
+ * `OPENROUTER_API_KEY` is overwritten with a placeholder in `beforeAll` and
+ * restored in `afterAll`, so an operator running the gate with their real key
+ * exported never sends it anywhere, and no captured header is ever inspected,
+ * asserted on, or printed. That window is process-local because this package
+ * leaves Vitest's defaults in place (`pool: 'forks'`, `isolate: true`), so the
+ * overwrite is confined to this file's own worker; a future config that shares
+ * a process across files would widen it and this comment is the note that says
+ * so.
  */
 
 import { execFileSync } from 'node:child_process'
@@ -148,33 +157,55 @@ async function streamOnce(route: RouteProfile, effort?: string): Promise<Outcome
   const chunks: Outcome['chunks'] = []
   let offeredEfforts: string[] = []
   const server: Server = createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on('data', chunk => chunks.push(chunk as Buffer))
+    const received: Buffer[] = []
+    request.on('data', chunk => received.push(chunk as Buffer))
     request.on('end', () => {
       // Only the body is read. Headers carry the credential reference's value
       // and are deliberately never inspected, asserted on, or logged.
-      bodies.push(JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>)
+      //
+      // A body that does not parse is recorded rather than thrown: a throw in a
+      // request listener is an uncaught exception that takes the worker down
+      // with a stack naming no test, where a recorded value fails the assertion
+      // that asked for the body.
+      const text = Buffer.concat(received).toString('utf8')
+      try {
+        bodies.push(JSON.parse(text) as Record<string, unknown>)
+      } catch {
+        bodies.push({ unparseableBody: text })
+      }
       response.writeHead(200, { 'content-type': 'text/event-stream' })
       response.end('data: [DONE]\n\n')
     })
   })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  const { port } = server.address() as AddressInfo
-  const baseURL = `http://127.0.0.1:${port}/v1`
-  if (!baseURL.startsWith('http://127.0.0.1:')) throw new Error('refusing to mount a non-loopback endpoint')
-  const ctx = new Context()
-  // The route config is the YAML the composition pipeline produced, unedited
-  // except for the endpoint.
-  const mountConfig = { providers: { [ROUTE]: { ...route, baseURL } } }
-  const [llmRuntimeModule, piAiModule] = await Promise.all([
-    import(LLM_RUNTIME_SPECIFIER),
-    import(PI_AI_SPECIFIER),
-  ])
-  // `undefined` is the config the runtime takes: it is a Service with no
-  // options, and passing it explicitly is what the typed overload expects.
-  const runtime = ctx.plugin(llmRuntimeModule.default as never, undefined as never)
-  const provider = ctx.plugin(piAiModule as never, mountConfig as never)
+  // Everything after the socket is bound runs under the cleanup below —
+  // including the dynamic imports and both mounts, any of which can throw.
+  const disposers: (() => Promise<unknown> | unknown)[] = [() => server.close()]
   try {
+    const { port } = server.address() as AddressInfo
+    const baseURL = `http://127.0.0.1:${port}/v1`
+    const ctx = new Context()
+    // The route config is the YAML the composition pipeline produced, unedited
+    // except for the endpoint.
+    const mountConfig = { providers: { [ROUTE]: { ...route, baseURL } } }
+    // The endpoint the request will actually go to, read back off the object
+    // being mounted rather than off the string built for it: this is the check
+    // that keeps a composed `https://openrouter.ai/api/v1` from surviving into
+    // a mount, which would spend real credit and answer a real 400.
+    const mounted = mountConfig.providers[ROUTE]?.baseURL
+    if (mounted !== baseURL || !mounted.startsWith('http://127.0.0.1:')) {
+      throw new Error(`refusing to mount a non-loopback endpoint: ${String(mounted)}`)
+    }
+    const [llmRuntimeModule, piAiModule] = await Promise.all([
+      import(LLM_RUNTIME_SPECIFIER),
+      import(PI_AI_SPECIFIER),
+    ])
+    // `undefined` is the config the runtime takes: it is a Service with no
+    // options, and passing it explicitly is what the typed overload expects.
+    const runtime = ctx.plugin(llmRuntimeModule.default as never, undefined as never)
+    disposers.unshift(() => runtime.dispose())
+    const provider = ctx.plugin(piAiModule as never, mountConfig as never)
+    disposers.unshift(() => provider.dispose())
     // Awaiting each fiber is the readiness signal — no sleep, and no polling
     // window that could pass for "registered" on a slow machine. `llm-pi-ai`
     // declares `inject: ['llm']`, so its fiber settles only once the runtime is
@@ -194,9 +225,10 @@ async function streamOnce(route: RouteProfile, effort?: string): Promise<Outcome
       ...effort === undefined ? {} : { reasoningEffort: effort },
     })) chunks.push(chunk as Outcome['chunks'][number])
   } finally {
-    await provider.dispose()
-    await runtime.dispose()
-    server.close()
+    // Every disposer runs even if an earlier one rejects: a failing dispose
+    // must not leak the socket behind it, and must not replace the failure the
+    // test was about with its own.
+    await Promise.allSettled(disposers.map(dispose => dispose()))
   }
   return { bodies, chunks, offeredEfforts }
 }
@@ -247,11 +279,17 @@ function withValuelessOff(route: RouteProfile): RouteProfile {
   }
 }
 
+// The budget is passed to the HOOK, not inherited from the `describe` below: a
+// suite-level `timeout` applies to tests only, and a hook falls back to
+// `config.hookTimeout`, which this package does not set. The install here is the
+// single slowest step in the file, so leaving it on the 5s default would have
+// given it a TIGHTER ceiling than the sibling spec that runs four of them inside
+// `it` blocks under 10s.
 beforeAll(() => {
   priorKey = process.env[API_KEY_ENV]
   process.env[API_KEY_ENV] = PLACEHOLDER_KEY
   composedRoute = composeRoute()
-})
+}, process.platform === 'win32' ? 20_000 : 10_000)
 
 afterAll(() => {
   if (priorKey === undefined) delete process.env[API_KEY_ENV]
@@ -260,12 +298,12 @@ afterAll(() => {
 })
 
 describe('the parametria-vision route on the wire', {
-  // MEASURED on win32: one install + one composition in `beforeAll`, then five
-  // loopback round trips at ~200-400ms each, 2.4s for the file. The sibling
-  // `parametria-machine-route.spec.ts` derived 10s for four installs; this file
-  // pays one install and adds only local HTTP, so the same ceiling is generous
-  // by the same margin.
-  timeout: process.platform === 'win32' ? 20_000 : 10_000,
+  // MEASURED on win32: 2.2-2.4s for the whole file, of which the tests are
+  // ~0.9-1.8s across five mounts and loopback round trips; the install and
+  // composition are paid once in the hook above, under its own budget. The
+  // sibling `parametria-machine-route.spec.ts` derived 10s from ~480ms tests;
+  // the same ~20x ratio over the slowest test here lands in the same place.
+  timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
   it('still speaks the dialect this fence measured, so a change re-opens the question', () => {
     // Every assertion below is a statement about the `openrouter` branch of
