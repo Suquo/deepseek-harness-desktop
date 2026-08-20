@@ -79,10 +79,16 @@ describe('which plane declares the route', () => {
 })
 
 describe('planning a write into the operator\'s machine patch', () => {
-  it('creates the file, with the block inside it, when there is none', () => {
+  it('creates the file as exactly a header and one copy of the block', () => {
+    // The WHOLE document, not just "the block is findable in it":
+    // `findManagedBlock` returns the first match, so a probe for it passes on a
+    // file carrying the block twice — which is what a careless edit to this
+    // branch produces, and what a mutation of it slipped past.
     const plan = planMachinePatch(undefined, block)
     assert.equal(plan.action, 'create')
-    assert.equal(findManagedBlock(plan.next).text, block)
+    assert.equal(plan.next.split(MACHINE_PATCH_BEGIN).length - 1, 1, 'the block must appear exactly once')
+    assert.equal(plan.next.endsWith(`${block}\n`), true)
+    assert.equal(plan.next.slice(0, plan.next.length - `${block}\n`.length).trimEnd().startsWith('# $DSH_HOME/'), true)
   })
 
   it('appends to an operator-authored file without touching a byte of it', () => {
