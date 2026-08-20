@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
@@ -48,9 +49,25 @@ describe('the trajectory view target we depend on', () => {
     expect(finalNode).not.toContain('provenance')
   })
 
-  it('is a declared dependency, since we read its contract', () => {
-    const manifest = JSON.parse(read(join(trajectoryRoot, '..', '..', '..'), 'package.json')) as { dependencies?: Record<string, string> }
-    expect(manifest.dependencies?.['@deepseek-ai/dsh-client-ui-trajectory']).toBeDefined()
+  it('is deliberately NOT a declared dependency of this package', () => {
+    // Declaring it was tried and reverted: `verify:runtime-closure` refused it,
+    // because the package requires `react-dom` as a first-party peer and the
+    // packaged runtime closure would have had to grow to carry it. Nothing here
+    // imports the package — the view is read through an untyped edge at runtime
+    // and its contract is read off disk by these fences — so the dependency
+    // would buy a wider shipped closure for a types-only need. It resolves
+    // transitively because the composed web-app bundle already carries it,
+    // which is also why the view is present for the surface to read.
+    const manifest = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')) as {
+      dependencies?: Record<string, string>
+      devDependencies?: Record<string, string>
+    }
+    expect(manifest.dependencies?.['@deepseek-ai/dsh-client-ui-trajectory']).toBeUndefined()
+    expect(manifest.devDependencies?.['@deepseek-ai/dsh-client-ui-trajectory']).toBeUndefined()
+    // The claim that keeps the above true: no source module imports it.
+    const sources = ['turn-cost.ts', 'TurnCostBadge.tsx', 'cost-surface.ts', 'cost-model.ts', 'cost-rates.ts']
+      .map(name => readFileSync(fileURLToPath(new URL(`../src/client/${name}`, import.meta.url)), 'utf8'))
+    expect(sources.some(source => source.includes('dsh-client-ui-trajectory'))).toBe(false)
   })
 })
 
