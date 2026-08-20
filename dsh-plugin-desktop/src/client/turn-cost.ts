@@ -20,7 +20,7 @@
  * says so rather than presenting a partial total as a complete one.
  */
 
-import type { AssistantMessageNode, ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CostLine, RateTable, TokenBuckets } from './cost-model.ts'
 import { NO_TOKENS, addTokens, formatCost, priceTokens, ratesFor, readTokenBuckets } from './cost-model.ts'
 
@@ -115,6 +115,62 @@ export function rateProvenance(fetchedAt: number | undefined, modelCount: number
 
 function isAssistant(node: ConversationNode): node is AssistantMessageNode {
   return node.kind === 'assistant'
+}
+
+/**
+ * Choose the node source that can actually be costed.
+ *
+ * `AssistantMessageNode` declares `provenance`, but the Chat Definition that
+ * builds `chat.legacy.nodes` never populates it — verified at the pinned source
+ * and then measured in the running app, where every row's model read `—` and
+ * every generation priced as `unpriced`. The **trajectory** view target builds
+ * the same node shape from the same events AND carries
+ * `provenance: { provider, model }` straight off `assistant/message`'s
+ * `message.source`. Model attribution is therefore already client-readable; it
+ * just lives on the other target.
+ *
+ * Chat stays the fallback rather than being dropped: it is the target that is
+ * always composed, and losing money is better than losing the timings too if a
+ * profile ever omits the trajectory view (fail-open, standard 4). The caller
+ * can tell the two apart — nodes without provenance price as `unpriced`, never
+ * as free.
+ * @param snapshot - the session's conversation snapshot.
+ * @returns the nodes to fold, preferring the attributable source.
+ */
+export function selectCostNodes(snapshot: ConversationSnapshot): readonly ConversationNode[] {
+  const trajectory = readTrajectoryNodes(snapshot.views)
+  return trajectory !== undefined && trajectory.length > 0 ? trajectory : snapshot.chat.legacy.nodes
+}
+
+/**
+ * The one member of the trajectory view snapshot this surface reads.
+ *
+ * Restated here rather than imported: the package DECLARES
+ * `ConversationViewSnapshotMap.trajectory` inside `trajectory-contract.d.ts`,
+ * but its `./client` entry re-exports only `inject` and `apply`, so the module
+ * augmentation is not reachable from an importer and `views.get('trajectory')`
+ * does not type-check. `tests/client-trajectory-view.spec.ts` diffs this
+ * restatement against the INSTALLED `.d.ts`, so a pin bump that renames or
+ * reshapes the target fails the gate here instead of silently returning
+ * undefined and quietly costing nothing.
+ */
+export interface TrajectoryViewSnapshot {
+  /** Session events assembled as nodes — the assistant ones carrying `provenance`. */
+  readonly eventNodes: readonly ConversationNode[]
+}
+
+/** The registered view target that carries model attribution. */
+export const TRAJECTORY_VIEW_TARGET = 'trajectory'
+
+/**
+ * Read the trajectory view's nodes through the untyped edge of the view store.
+ * @param views - the snapshot's registered view targets.
+ * @returns the trajectory event nodes, when that view is composed.
+ */
+export function readTrajectoryNodes(views: ConversationSnapshot['views']): readonly ConversationNode[] | undefined {
+  const get = (views as unknown as { get(target: string): unknown }).get.bind(views)
+  const snapshot = get(TRAJECTORY_VIEW_TARGET) as Partial<TrajectoryViewSnapshot> | undefined
+  return Array.isArray(snapshot?.eventNodes) ? snapshot.eventNodes : undefined
 }
 
 /**

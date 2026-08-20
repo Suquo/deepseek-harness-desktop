@@ -3,7 +3,7 @@ import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RateSource } from './cost-rates.ts'
 import { formatCost, formatDuration } from './cost-model.ts'
-import { costHeadline, foldTurnCost, rateProvenance, turnOfMessage } from './turn-cost.ts'
+import { costHeadline, foldTurnCost, rateProvenance, selectCostNodes, turnOfMessage } from './turn-cost.ts'
 
 /** Values the cost-surface registration hands every badge. */
 export interface TurnCostBadgeInjected {
@@ -29,7 +29,7 @@ export function TurnCostBadge({ messageId, useSession, rateSource }: TurnCostBad
   const getSnapshot = useCallback(() => rateSource.getSnapshot(), [rateSource])
   const rates = useSyncExternalStore(subscribe, getSnapshot)
 
-  const nodes = useSession(state => state.chat.legacy.nodes)
+  const nodes = useSession(selectCostNodes)
   const turnTimings = useSession(state => state.chat.legacy.turnTimings)
   const turn = useMemo(() => turnOfMessage(nodes, messageId), [nodes, messageId])
   const cost = useMemo(
