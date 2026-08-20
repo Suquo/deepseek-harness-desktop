@@ -111,62 +111,66 @@ describe('desktop lifecycle events', {
   // class its siblings document — its cost is synchronous evidence-file I/O. One
   // test ('replaces stale run evidence and keeps current evidence within byte
   // caps') drives 900 transitionStartupStage calls, each of which rewrites the
-  // byte-capped lifecycle JSONL under a fresh temp user-data dir; that single test
-  // measures 359-472ms over twelve isolated runs (median 390) against a
-  // second-worst of <=28ms, and 347-556ms over seven full-suite runs.
+  // byte-capped lifecycle JSONL under a fresh temp user-data dir.
   //
-  // It is in this PR because it demonstrably reds: a full-suite run at this branch
-  // head killed it with `Test timed out in 5000ms`, which puts the stall it met at
-  // >=12.8x its isolated median — the same class measured directly at 14.9x in
-  // desktop-plugins.spec.ts. On the loaded worst, 556ms x 14.9 = 8.3s, so the 5s
-  // default cannot cover the load this host produces.
+  // HISTORY, kept because the numbers below are meaningless without it. PR #17 sized
+  // this budget to 15s from 359-472ms isolated / 347-556ms full-suite measurements,
+  // and the a80c504f7f overlay merge raised it to a TEMPORARY 300s for an inherited
+  // quadratic read (PR #42: 6993-33729ms isolated, 183942ms in a loaded gate). BOTH
+  // sets of pre-merge numbers were measuring a recorder that had stopped recording.
+  // `replaceOwned` opened with `O_WRONLY | O_TRUNC`, which libuv rejects without
+  // `O_CREAT` on Windows: at ffce58c63b this test's run logs 'failed to persist
+  // lifecycle evidence (EINVAL)' at its FIRST trim, latches evidenceUnavailable, and
+  // drops the remaining ~826 events — 976 lines written of 1802 events driven, last
+  // retained event 'renderer-startup' where the 900th transition is 'install-recovery'.
+  // The overlay merge fixed that accidentally (upstream opens O_RDWR and truncates
+  // separately), so the merge is the first tree on which this test's trimming work
+  // ran on win32 at all, and issue #41 is the first budget derived from a run that
+  // does it. Nothing here is comparable to a number recorded before that.
   //
-  // Sized to 15s rather than the 20s its siblings carry, because it is genuinely
-  // cheaper and the number is derived, not copied: 15s clears the 8.3s compound
-  // worst by 1.8x — the same clearance electron-runtime.spec.ts was ruled to — and
-  // sits 27x above the 556ms loaded worst, keeping all four budgets inside one
-  // tolerance band (1.4-1.8x over compound worst) instead of drifting apart.
+  // Measured at this head, same host, back to back:
+  //
+  //   isolated, 3 runs:                 1424 / 1466 / 1399 ms
+  //   full-suite, quiet, 2 runs:        2015 / 2203 ms
+  //   full-suite, 8-worker contention:  3070 / 3352 ms
+  //
+  // Same load, same day, on the merged tree without #41's fix: 35601 ms — so the fix
+  // is a 10.6x improvement measured against the tree it actually replaces, and the
+  // dominant remaining cost is not the append path (which now reads nothing back;
+  // see 'appends startup transitions without reading the evidence file back') but
+  // the trimming path, which rewrites the full 256 KiB once the cap is reached and
+  // does so for every event after that. That is pre-existing, in-scope for nobody
+  // here, and worth its own issue.
+  //
+  // Sized to 30s. The stall factor this file cites for the load-contention class is
+  // 14.9x, measured in desktop-plugins.spec.ts against an ISOLATED median: applied
+  // to this head's isolated median of 1424ms that gives a 21.2s compound worst, and
+  // 30s clears it 1.41x, inside the 1.4-1.8x tolerance band the four budgets share.
+  // It sits 9x above the heaviest datum actually observed (3352ms, under eight
+  // concurrent write/read workers — a load heavier than the gate produces on its own,
+  // under which unbudgeted 5s tests elsewhere in the suite red on BOTH this tree and
+  // the pre-fix tree, rotating by position rather than by name).
+  //
+  // Disclosed: PR #17's arithmetic applied that same 14.9x to a LOADED worst rather
+  // than to an isolated median. Read that way, this head would want 46-59s. The
+  // consistent-with-definition reading is used here and the inconsistency is named
+  // rather than silently inherited; the RM can rule the other way, and it is one
+  // number. What this budget is NOT is a regression detector for the quadratic read
+  // it replaced — the append-cost test asserts that mechanism directly, which is what
+  // PR #17's "at 15s a ~15x regression would still pass green" deferral wanted and
+  // could not express as a timeout.
   //
   // No ceiling constraint: this file declares no hooks, so its temp-dir work runs
   // inside this same budget. The POSIX arm keeps the 5s default — the load
   // characteristic sized here is NTFS/Defender and was not measured on a POSIX host.
+  // (POSIX takes the content-comparison arm, which reads a fixed prefix per append
+  // where win32 reads nothing; that arm is measured only under the mocked file-id
+  // case in this suite, never on a real POSIX host.)
   //
-  // ---------------------------------------------------------------------------
-  // The TEMPORARY 300_000 accommodation the a80c504f7f overlay merge carried here
-  // is RETIRED: issue #41 removed the per-append whole-file read it was holding at
-  // arm's length, and the budget is back to 15s. What that accommodation recorded
-  // (merged tree: 4044-4610ms full-suite quiet, 6993-33729ms isolated, 19452ms in a
-  // quiet gate, 183942ms in a loaded one) is history; it lives in PR #42 and #41.
-  //
-  // Re-measured at the fixed tree, same host, `replaces stale run evidence…`:
-  //
-  //   isolated, 3 runs:                   265 / 257 / 260 ms
-  //   full-suite, quiet, 2 runs:          315 / 328 ms
-  //   full-suite, 8-worker contention:    874 / 961 ms
-  //   pre-merge parent ffce58c63b, same host, same day, isolated: 429 / 431 / 446 ms
-  //
-  // So the write path is cheaper than the pre-merge side this budget was derived
-  // from, not merely restored: the append path no longer reads the file back at all.
-  // Re-running the derivation on these numbers: the quiet full-suite worst of 328ms
-  // against the 14.9x stall factor this file already cites gives a 4.9s compound
-  // worst, which 15s clears by 3.1x, and the heaviest observed datum (961ms under
-  // eight concurrent write/read workers) sits 15.6x below it.
-  //
-  // Disclosed rather than acted on: a band-faithful re-derivation (1.4-1.8x over the
-  // 4.9s compound worst) would put this at 7-9s, tighter than the 15s restored here.
-  // 15s is kept because it is the value this file's own retirement condition named,
-  // and because the budget is no longer what detects a regression in this path —
-  // 'appends startup transitions without reading the evidence file back' asserts the
-  // mechanism directly (zero whole-file reads across 600 appends), which is what the
-  // old comment's "at 15s a ~15x regression would still pass green" deferral wanted
-  // and could not express in a timeout. Retighten on the RM's word, not silently.
-  //
-  // Also retired: tests/install-recovery.spec.ts kept vitest's 5s default through
-  // all of this rather than take a budget for a cost that was not its own. Re-checked
-  // at this head — 753 passed / 11 skipped with zero `Test timed out`, in a quiet
-  // full gate AND in a full gate run under the eight-worker contention above.
-  // ---------------------------------------------------------------------------
-  timeout: process.platform === 'win32' ? 15_000 : 5_000,
+  // tests/install-recovery.spec.ts, whose 7 collateral timeouts PR #42 deliberately
+  // did not accommodate, keeps vitest's 5s default and is green at this head in the
+  // quiet full gate and in every loaded run above.
+  timeout: process.platform === 'win32' ? 30_000 : 5_000,
 }, () => {
   it.each([
     ['schema version', { schemaVersion: 2 }],
