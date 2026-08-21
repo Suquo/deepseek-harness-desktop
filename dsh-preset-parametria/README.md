@@ -31,6 +31,26 @@ $DSH_HOME/cordis.patch.yml               YOUR machine-wide patch layer —
   # <<< ... managed <<<                  the parametria-vision route
 ```
 
+### One environment variable the operator sets once
+
+The preset mounts the `parametria_capture` tool (issue #24), which runs the
+skill's `screenshot-definition.py` from the Host plane. It has to be told where
+that script is, and that path cannot live in this repository: `agent.cordis.yml`
+is version-controlled and installed machine-wide, so a literal there would ship
+one machine's path to every machine. Set it once, in the environment DSH Desktop
+launches with:
+
+```
+DSH_PARAMETRIA_CAPTURE_SCRIPT=C:\Users\<you>\.agents\skills\suquo-systems-parametria\scripts\screenshot-definition.py
+```
+
+Until it is set the tool refuses **by name** rather than silently registering a
+capability it cannot perform, and the persona tells the run to report the
+missing variable instead of working around it. An explicit `captureScript`
+config key on the row outranks the variable for a deployment that prefers to pin
+it. Issue #7's skill-root canonicalization will change what this defaults to,
+not how it is spelled.
+
 The first two land in directories upstream already scans — `includeUserRoot`
 makes `$DSH_HOME/.agent-presets` a preset root, and `profiles/` is where
 `resolveProfileDir` looks — so the deployment's read-only shipped install is
@@ -295,13 +315,16 @@ the whole shape of the fix:
   composition either.
 
 Two of the three refusals therefore have a **relocation** answer rather than a
-policy answer, and the third has no answer at all short of a wider mode:
+policy answer. The third has no answer inside the sandbox at all — issue #24
+took it out of the sandbox instead, by making the capture a Host-plane tool
+(`dsh-plugin-desktop/parametria-capture`, mounted by this preset) rather than a
+shell command that has to be escalated:
 
 | Refusal | Why | What this profile does |
 |---|---|---|
 | uv cache at `%LOCALAPPDATA%\uv\cache` | outside the session workspace | persona sets `$env:UV_CACHE_DIR = "$PWD\.uv-cache"` before `uv run` — the live run proved a workspace-local cache works unescalated |
 | uv cache at `C:\tmp\uv-cache` | an arbitrary absolute path is outside both granted roots. Temp *is* writable under `workspace-write` — but only the private per-session directory the runner creates and rewrites `TMP`/`TEMP` to, never an ambient path that merely looks temporary | same |
-| `screenshot-definition.py` (Playwright) | **inference from the live trace, over a documented mechanism.** The win32 ACL backend documents that a confined process's `stdio: 'pipe'` children fail — named pipes carry a default SD that denies the client-end write — while `inherit`/`ignore` spawns work, so *"tools that must capture output cannot run confined"*. That Playwright's sync driver spawn is the piped shape is not stated upstream; it is what the live traceback shows (`asyncio/windows_utils.py`, `PermissionError(13)`), plus every post-escalation call succeeding | persona instructs the **per-call** `sandbox_permissions: danger-full-access` retry, once per capture |
+| `screenshot-definition.py` (Playwright) | **inference from the live trace, over a documented mechanism.** The win32 ACL backend documents that a confined process's `stdio: 'pipe'` children fail — named pipes carry a default SD that denies the client-end write — while `inherit`/`ignore` spawns work, so *"tools that must capture output cannot run confined"*. That Playwright's sync driver spawn is the piped shape is not stated upstream; it is what the live traceback shows (`asyncio/windows_utils.py`, `PermissionError(13)`), plus every post-escalation call succeeding | **retired by issue #24**: the run calls the `parametria_capture` tool, which spawns the same script from the Host plane where nothing is confined. No escalation, no approval — and it is the only capture path a delegated child can use at all |
 
 **Why per-call and not a named preset.** A fourth permission preset was built
 for this and did not survive review — the record is on issue #9. It would have

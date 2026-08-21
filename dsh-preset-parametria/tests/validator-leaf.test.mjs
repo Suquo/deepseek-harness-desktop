@@ -129,32 +129,93 @@ function sourceTextOf(dir) {
 const NON_PACKAGE_ROW_NAMES = new Set(['cordis:group'])
 
 /**
+ * The workspace packages of THIS repository, indexed the same way as upstream's.
+ *
+ * The preset may mount a desktop-owned plugin beside the upstream rows —
+ * issue #24's `dsh-plugin-desktop/parametria-capture` is the first. Classifying
+ * such a row from its OWN source is what keeps this fence derived rather than
+ * enumerated: a desktop plugin that later grew a child-start seam joins the
+ * delegation set here, instead of slipping past as "not upstream, so not
+ * checked".
+ *
+ * WHOLE-PACKAGE reading — the rule for upstream rows — is deliberately NOT used
+ * for these. `dsh-plugin-desktop` is one package holding the entire Electron
+ * shell, so its whole-`src/` corpus would classify `parametria-capture` by code
+ * it does not contain: the day any unrelated desktop module gains a
+ * `subagents.start(`, this fence would start DEMANDING that `parametria_capture`
+ * join the validator's deny list — withdrawing from the delegate the one tool
+ * the preset mounts for it (issue #24's first acceptance clause), with a green
+ * suite. For upstream packages over-inclusion is the conservative direction;
+ * for a monolith addressed by subpath it inverts, so a local row is classified
+ * from the module its `name` actually points at.
+ * @returns a Map of package name to its absolute directory.
+ */
+function localPackageIndex() {
+  const index = new Map()
+  const root = join(PACKAGE_ROOT, '..')
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'node_modules') continue
+    const manifest = join(root, entry.name, 'package.json')
+    if (!existsSync(manifest)) continue
+    const { name } = JSON.parse(readFileSync(manifest, 'utf8'))
+    if (typeof name === 'string') index.set(name, join(root, entry.name))
+  }
+  return index
+}
+
+/**
  * The package a row's plugin name refers to. A row may name a subpath export
- * (`.../dsh-tool-subagent-control/list-agents`); the package is the scope and
- * the name after it.
+ * (`.../dsh-tool-subagent-control/list-agents`, `dsh-plugin-desktop/parametria-capture`);
+ * the package is the scope and the name after it for a scoped name, and the
+ * first segment for an unscoped local one.
+ *
+ * Loudness is preserved by checking the RESULT against the indexes rather than
+ * by the shape of the name: an unscoped name that resolves to no known package
+ * still throws, so relaxing the scope requirement did not open a hole.
  * @param pluginName - the row's `name` field.
  * @returns the bare package name, or undefined for a known non-package row.
- * @throws when the name is neither a scoped package nor a known non-package row.
+ * @throws when the name resolves to no indexed package and is not a known non-package row.
  */
 function packageNameOf(pluginName) {
   if (NON_PACKAGE_ROW_NAMES.has(pluginName)) return undefined
-  const [scope, name] = pluginName.split('/')
-  if (!pluginName.startsWith('@') || name === undefined) {
+  const segments = pluginName.split('/')
+  const candidate = pluginName.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]
+  if (candidate === undefined || !packages.has(candidate)) {
     throw new Error(
-      `preset row name "${pluginName}" is neither a scoped package nor a known non-package row — `
-      + 'the delegation classification cannot decide it, and a row it cannot decide must not pass unclassified. '
-      + `Add it to NON_PACKAGE_ROW_NAMES with a reason, or ground its source.`,
+      `preset row name "${pluginName}" resolves to no package of the pinned upstream checkout or this `
+      + 'workspace — the delegation classification cannot decide it, and a row it cannot decide must not '
+      + 'pass unclassified. Add it to NON_PACKAGE_ROW_NAMES with a reason, or ground its source.',
     )
   }
-  return `${scope}/${name}`
+  return candidate
 }
 
-const packages = upstreamPackageIndex()
+const upstreamPackages = upstreamPackageIndex()
+const localPackages = localPackageIndex()
+for (const localName of localPackages.keys()) {
+  // The two indexes are merged below; a collision would let a local package
+  // silently answer for an upstream one, which is the loud-failure discipline
+  // this file keeps everywhere else.
+  if (upstreamPackages.has(localName)) {
+    throw new Error(`package name "${localName}" exists both upstream and in this workspace; the classification cannot decide which source to read`)
+  }
+}
+const packages = new Map([...upstreamPackages, ...localPackages])
 const sources = new Map()
 
-/** Memoized source text for one package name, failing loud on an unknown package. */
-function sourceOf(packageName) {
-  if (!sources.has(packageName)) {
+/**
+ * Memoized source text for one preset row, failing loud on an unknown package.
+ *
+ * Keyed by the ROW NAME, not the package name, because the corpus differs: an
+ * upstream row reads its whole package, a local row reads only the module its
+ * subpath points at (see {@link localPackageIndex} for why the usual
+ * over-inclusion inverts here).
+ * @param pluginName - the row's `name` field.
+ * @param packageName - its resolved package name.
+ * @returns the source text the classification reads.
+ */
+function sourceOf(pluginName, packageName) {
+  if (!sources.has(pluginName)) {
     const dir = packages.get(packageName)
     if (dir === undefined) {
       throw new Error(
@@ -163,9 +224,21 @@ function sourceOf(packageName) {
         + '`git submodule update --init deepseek-harness`, or re-ground this fence if the row is local.',
       )
     }
-    sources.set(packageName, sourceTextOf(dir))
+    if (!localPackages.has(packageName)) {
+      sources.set(pluginName, sourceTextOf(dir))
+    } else {
+      const subpath = pluginName.slice(packageName.length + 1)
+      const entry = join(dir, 'src', `${subpath.length === 0 ? 'index' : subpath}.ts`)
+      if (!existsSync(entry)) {
+        throw new Error(
+          `local preset row "${pluginName}" points at no module: expected ${entry}. `
+          + 'A local row is classified from its own entry, so an unresolvable one must not pass.',
+        )
+      }
+      sources.set(pluginName, readFileSync(entry, 'utf8'))
+    }
   }
-  return sources.get(packageName)
+  return sources.get(pluginName)
 }
 
 /**
@@ -180,7 +253,7 @@ function sourceOf(packageName) {
 function registeredToolName(row, packageName) {
   const configured = row.config?.toolName
   if (typeof configured === 'string') return { name: configured, from: 'the row\'s own `toolName`' }
-  const source = sourceOf(packageName)
+  const source = sourceOf(row.name, packageName)
   const schemaDefault = source.match(/\btoolName:\s*z\.string\(\)\.default\('([^']+)'\)/)
   if (schemaDefault !== null) {
     return { name: schemaDefault[1], from: `${packageName}'s Config schema default` }
@@ -213,7 +286,7 @@ function delegationRows(entries) {
   for (const [id, row] of entries) {
     const packageName = packageNameOf(row.name)
     if (packageName === undefined) continue
-    const source = sourceOf(packageName)
+    const source = sourceOf(row.name, packageName)
     if (!TOOL_REGISTRATION.test(source)) continue
     if (!CHILD_START_SEAMS.some(seam => seam.test(source))) continue
     found.push({ id, row, ...registeredToolName(row, packageName) })
