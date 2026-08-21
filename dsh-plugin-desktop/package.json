@@ -59,6 +59,10 @@
       "types": "./lib/types/parametria-capture.d.ts",
       "default": "./lib/parametria-capture.js"
     },
+    "./parametria-evidence": {
+      "types": "./lib/types/parametria-evidence.d.ts",
+      "default": "./lib/parametria-evidence.js"
+    },
     "./profiles": {
       "types": "./lib/types/profiles.d.ts",
       "default": "./lib/profiles.js"

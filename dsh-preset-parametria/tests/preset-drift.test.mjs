@@ -19,11 +19,18 @@ import { describe, it } from 'node:test'
 import {
   PACKAGE_ROOT,
   UPSTREAM_ROOT,
+  desktopDeclaration,
   indexRows,
   readComposition,
   rowConfig,
   sameValue,
 } from './helpers.mjs'
+
+/**
+ * The shell variable the run reads its evidence directory from, taken from the
+ * module that declares it rather than restated here (issue #23).
+ */
+const EVIDENCE_DIR_ENV = desktopDeclaration('parametria-evidence', 'EVIDENCE_DIR_ENV')
 
 const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
 const UPSTREAM_STANDARD = join(
@@ -47,6 +54,12 @@ const DECLARED_DELTA = {
       + 'capture had to become a capability rather than a sandbox grant. It rides the preset '
       + 'because the preset is what makes it needed: a machine-wide row would work (host tool '
       + 'rows ARE inherited by preset agents) but would enter every profile\'s roster',
+    'parametria-evidence':
+      'issue #23: the run-evidence surface. Where artifacts land stopped being a paragraph the '
+      + 'agent executes and became a `ctx.shellEnv` contributor the host resolves per shell call, '
+      + 'sharing one derivation with the capture tool. It rides the preset for the same reason the '
+      + 'capture row does: a host-plane contributor would publish the variable into every '
+      + 'profile\'s shell calls, including sessions that never open Parametria',
   },
   /** Rows this preset drops. Empty on purpose: parity with `standard` is the point. */
   removed: {},
@@ -54,9 +67,9 @@ const DECLARED_DELTA = {
   reconfigured: {
     persona:
       'the run states its own shape: load the skill, delegate visual checks to '
-      + 'subagent_validator rather than subagent, keep every artifact under the workspace-local '
-      + '`.parametria-evidence/` run directory, and meet the two sandbox facts this '
-      + 'host has (workspace-local uv cache; captures go through `parametria_capture` '
+      + 'subagent_validator rather than subagent, keep every artifact under the run directory the '
+      + 'host publishes as `DSH_PARAMETRIA_EVIDENCE_DIR` (issue #23), and meet the two sandbox '
+      + 'facts this host has (workspace-local uv cache; captures go through `parametria_capture` '
       + 'because the screenshot script cannot run confined at all — issue #24)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
@@ -175,43 +188,65 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
       'the persona must not route the run toward a session-wide widening: the full-access preset also '
       + 'switches approval prompts off, which is the state the per-call escalation exists to avoid',
     )
-    // The evidence half of issue #9 item 1. Where a run's files land is decided
-    // by an argument the model types, and the skill's own examples type an
-    // absolute `C:/tmp/...` that `workspace-write` denies — so a run either
-    // escalates or improvises bare filenames into the workspace root, which is
-    // the litter the issue was filed for. Nothing in composition governs a CLI
-    // argument, so this reaches the run as persona text or not at all.
+    // The evidence half of issue #9 item 1, as issue #23 rebuilt it. Where a
+    // run's files land is decided by an argument the model types, and the
+    // skill's own examples type an absolute `C:/tmp/...` that `workspace-write`
+    // denies — so a run either escalates or improvises bare filenames into the
+    // workspace root, which is the litter the issue was filed for.
     //
-    // Anchored on the whole path, including the run-scoping segment. A bare
-    // /\.parametria-evidence/ would stay green if the run directory lost its
-    // per-run segment, and one shared directory across runs is how a validator
-    // reads the previous run's screenshot and passes the current one.
+    // What changed in #23: the path is no longer something the persona teaches
+    // the run to BUILD. The host publishes it per shell call and the persona
+    // points at it, so the assertion pins the variable rather than a path
+    // spelling — and it reads that variable's name from the module that
+    // declares it, so a rename in the plugin fails here instead of leaving a
+    // persona quoting a variable nothing sets.
     assert.ok(
-      persona.includes('`.parametria-evidence/$env:DSH_SESSION_ID/`'),
-      'the persona must name the run-scoped artifact directory verbatim: the workspace is the root '
-      + 'writable under the standing workspace-write policy and above it, and DSH_SESSION_ID is the '
-      + 'run-scoping token shell calls already carry when an agent owns them',
+      persona.includes(`$env:${EVIDENCE_DIR_ENV}`) && persona.includes(`$${EVIDENCE_DIR_ENV}`),
+      `the persona must name ${EVIDENCE_DIR_ENV} in both shell spellings: it is the run directory the `
+      + 'host resolves and creates, and a run that cannot name it goes back to inventing paths',
     )
-    // The variable is injected only when the execution HAS an agent
-    // (`shell-env/src/index.ts:157-159`), and an unset `$env:X` expands to the
-    // empty string in PowerShell without erroring — which silently collapses
-    // the run directory back to the shared root the segment above exists to
-    // prevent. The persona must therefore carry its own fallback; nothing
-    // downstream can detect the collapse.
+    // A run directory shared across runs is how a validator reads the PREVIOUS
+    // run's screenshot and passes the current one, so run-scoping is
+    // load-bearing. It is now the host's job rather than the persona's, and the
+    // fence for it lives beside the derivation in
+    // `dsh-plugin-desktop/tests/parametria-evidence.spec.ts`. What must stay
+    // HERE is the instruction not to rebuild the path by hand: a persona that
+    // regrew its own derivation would reintroduce every spelling bug the
+    // structure removed, and it would do so silently because the variable
+    // assertion above would still pass.
     assert.ok(
-      persona.includes('if it came out empty, put a timestamp there instead'),
-      'the persona must handle an empty session-id segment: DSH_SESSION_ID is absent for an '
-      + 'agent-less execution and PowerShell expands it to nothing, silently sharing one directory '
-      + 'across every run',
+      persona.includes('Read that variable rather than rebuilding the path yourself'),
+      'the persona must send the run to the variable rather than to a recipe: the host owns the '
+      + 'derivation now, and a second derivation in prose is a second answer that can disagree',
+    )
+    assert.doesNotMatch(
+      persona, /\.parametria-evidence\/\$(env:)?DSH_SESSION_ID/,
+      'the persona has regrown the hand-derived run directory that issue #23 replaced with '
+      + `${EVIDENCE_DIR_ENV}; two derivations mean two answers, and the one the capture tool uses `
+      + 'is the plugin\'s',
+    )
+    // The variable is contributed only when the execution HAS an agent
+    // (`shell-env/src/index.ts:157-159`, and this contributor returns nothing
+    // for an unresolvable site), and an unset `$env:X` expands to the empty
+    // string in PowerShell without erroring. Absence is therefore silent, and
+    // nothing downstream can detect it — so the persona carries the fallback,
+    // which is what keeps a missing surface distinguishable from a working one
+    // rather than collapsing every run into one shared directory.
+    assert.ok(
+      persona.includes('if it comes back empty this machine has not finished being set up'),
+      `the persona must handle an empty ${EVIDENCE_DIR_ENV}: the contributor withholds the value for `
+      + 'an agent-less or unresolvable site and PowerShell expands the absent variable to nothing, '
+      + 'silently sharing one directory across every run',
     )
     // The delegate half, and the reason it is not optional: a subagent runs
     // under its OWN session id (verified in export dsh-session-60658537, whose
-    // child header reads a different `id` with `parentSession` set), so a
-    // delegate that expands $env:DSH_SESSION_ID for itself resolves a directory
-    // the parent never wrote to. The instruction that closes that gap is
-    // passing absolute paths down, so the instruction is what gets pinned.
+    // child header reads a different `id` with `parentSession` set), and the
+    // contributor resolves from the CALLING session — so the delegate's own
+    // copy of the variable names the delegate's directory, not the parent's.
+    // Moving the derivation into the host did not close that gap; the
+    // instruction that closes it is passing absolute paths down.
     assert.ok(
-      persona.includes('pass ABSOLUTE paths built from that directory to every command and to every `subagent_validator` prompt'),
+      persona.includes('ABSOLUTE paths built from that directory to every command and to every `subagent_validator` prompt'),
       'the persona must instruct passing absolute paths to the delegate: a child resolves a different '
       + 'session id, so a path it derives itself is not the path the capture wrote to',
     )

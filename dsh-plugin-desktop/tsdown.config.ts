@@ -14,6 +14,7 @@ export default defineConfig([
       'desktop-plugins': 'src/desktop-plugins.ts',
       pnpm: 'src/pnpm.ts',
       'parametria-capture': 'src/parametria-capture.ts',
+      'parametria-evidence': 'src/parametria-evidence.ts',
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',

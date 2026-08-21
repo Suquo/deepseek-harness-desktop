@@ -13,6 +13,42 @@ export const REPO_ROOT = resolve(PACKAGE_ROOT, '..')
 export const UPSTREAM_ROOT = join(REPO_ROOT, 'deepseek-harness')
 
 /**
+ * Read one `export const NAME = '<literal>'` out of a desktop plugin module.
+ *
+ * This is how a preset fence pins a string the DESKTOP PLUGIN owns — the
+ * evidence root segment and the shell variable that carries it (issue #23) —
+ * without restating it. A restated literal is a second declaration wearing a
+ * test's clothes: rename the constant and the fence keeps asserting the old
+ * spelling, green, while the persona and the plugin have parted company.
+ *
+ * DECLARATION-anchored on purpose (standard 3): the pattern requires the
+ * `export const <NAME> =` head, so the value cannot be matched out of a
+ * comment, a doc block, or an unrelated occurrence further down the file. An
+ * absent declaration THROWS rather than returning undefined, because a fence
+ * that cannot find its anchor has stopped being a fence.
+ *
+ * @param moduleName - module basename under `dsh-plugin-desktop/src`.
+ * @param name - the exported constant's name.
+ * @returns the declared string literal.
+ */
+export function desktopDeclaration(moduleName, name) {
+  const path = join(REPO_ROOT, 'dsh-plugin-desktop', 'src', `${moduleName}.ts`)
+  if (!existsSync(path)) {
+    throw new Error(`desktop module ${path} does not exist; this fence's anchor has moved`)
+  }
+  const source = readFileSync(path, 'utf8')
+  const match = new RegExp(String.raw`export const ${name} = '([^']*)'`).exec(source)
+  if (match === null) {
+    throw new Error(
+      `dsh-plugin-desktop/src/${moduleName}.ts declares no \`export const ${name} = '…'\`; `
+      + 'the constant this fence pins has been renamed, moved, or given a non-literal value, and '
+      + 'a fence that cannot find its anchor must fail rather than pass',
+    )
+  }
+  return match[1]
+}
+
+/**
  * A composition YAML is not plain YAML: `!!js <expression>` marks a Loader
  * expression evaluated at mount. A parser that does not know the tag would
  * either throw or silently drop the value, so the fences would compare
