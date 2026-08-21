@@ -353,9 +353,11 @@ trade for *this* repository: `.uv-cache/` is ignored here, and the fence there
 derives the ignore list from the persona, so the next dot-prefixed workspace
 directory the persona names fails the gate until it is ignored too.
 
-### 5. A run whose artifacts land in one ignored directory
+### 5. A run whose artifacts land in one directory the host resolves
 
-The same relocation move as section 4, applied to output instead of caches.
+The same relocation move as section 4, applied to output instead of caches —
+and, since issue #23, the one place the relocation is *computed* rather than
+described.
 
 Where a run's files land is decided by an argument the model types, and nothing
 in composition governs a CLI argument: `screenshot-definition.py` hands its
@@ -363,67 +365,77 @@ positional path straight to Playwright without normalising it, and
 `convex-parametria.mjs decompile-definition` defaults to a POSIX `/tmp/spec.json`
 that lands at `C:\tmp\spec.json` here. The skill's own output-path examples are
 absolute paths under `C:/tmp/...` or `/tmp/...` — and both are outside the
-session workspace, which is what `workspace-write` grants. So a run faces a
-two-sided trap: follow the skill and
-escalate, or improvise bare filenames that land in the workspace root. Runs
-improvised, and the workspace root was this repository — which is how
-`cabinet-*.png`, `spec.json`, and a later run's `gen-*.js` generators became
-untracked litter beside real work.
+session workspace, which is what `workspace-write` grants. So a run faced a
+two-sided trap: follow the skill and escalate, or improvise bare filenames that
+land in the workspace root. Runs improvised, and the workspace root was this
+repository — which is how `cabinet-*.png`, `spec.json`, and a later run's
+`gen-*.js` generators became untracked litter beside real work.
 
-The persona therefore names one artifact root for all three producers —
-screenshots, spec dumps, and the generator scripts the model writes itself,
-which no CLI argument or environment variable can reach:
+**The run directory is now a fact of the host, not a recipe in the persona.**
+The `parametria-evidence` row (`dsh-plugin-desktop/parametria-evidence`)
+registers a `ctx.shellEnv` contributor that resolves, per shell call, from the
+CALLING session's workspace and id:
 
-    .parametria-evidence/$env:DSH_SESSION_ID/
+    $env:DSH_PARAMETRIA_EVIDENCE_DIR   →   <cwd>/.parametria-evidence/<session id>/
 
-Three properties this shape is chosen for:
+`dsh-plugin-desktop/src/parametria-evidence.ts` is the single declaration of that
+root and the single derivation of the path; `parametria-capture` re-exports the
+segment and calls the same two functions, so the directory the tool writes into
+and the directory the run's own commands are handed cannot disagree. The
+persona's job shrank to one sentence — read the variable, do not rebuild the
+path — plus the parts no surface covers (below).
+
+Four properties this shape is chosen for:
 
 - **The workspace is the root `workspace-write` grants**, and every wider mode
   grants it too, so the same run directory serves the confined commands and the
-  escalated capture command. (Not `read-only`, which grants nothing — but a run
-  that cannot write has no artifacts to place.)
-- **`DSH_SESSION_ID` rides every shell call an agent owns** — injected by
-  `dsh-shell-env` (`shell-env/src/index.ts`), including per-call escalated ones,
-  because `ctx.shellEnv.collect(exec)` is called by the shell *tool*
-  (`tool-pwsh/src/index.ts:363`) rather than by the sandbox runner. So
-  run-scoping costs no new runtime surface. It is absent for an execution with
-  no agent, and an unset `$env:X` expands to nothing rather than failing, so the
-  persona carries a timestamp fallback and the fence pins it. Note the registry
-  is plugin-facing — `register()` takes a contributor resolving `DSH_*` values
-  *per execution* — which is the seam issue #23 would use; it is the YAML
-  surface that cannot set arbitrary variables.
-- **The orchestrator resolves the directory once and passes absolute paths
-  down.** A delegate runs under its own session id (verified in export
-  `dsh-session-60658537`, whose child header carries a different `id` with
-  `parentSession` set), so a path a validator expands for itself is not the path
-  the capture wrote to.
+  Host-plane capture tool alike. (Not `read-only`, which grants nothing — but a
+  run that cannot write has no artifacts to place.)
+- **The value rides every shell call an agent owns**, including per-call
+  escalated ones, because `ctx.shellEnv.collect(exec)` is called by the shell
+  *tool* (`tool-pwsh/src/index.ts:363`, `tool-bash/src/index.ts:341`) rather
+  than by the sandbox runner — and the sandbox executor is a subclass of the
+  local one (`pwsh-sandbox/src/index.ts:52`), so the merge at
+  `pwsh-local/src/index.ts:240` is the same line for confined and unconfined
+  work. Ambient `DSH_*` is discarded first, which is what makes a registered
+  contributor the only way the value can exist.
+- **It is created before it is published**, together with a self-ignoring
+  `.gitignore` (`*`) at the evidence ROOT. Naming a directory that does not
+  exist was most of the original problem: a script writing into a missing parent
+  fails, and the model's recovery is a bare filename in the workspace root.
+- **The orchestrator still passes absolute paths down.** A delegate is its own
+  session (verified in export `dsh-session-60658537`, whose child header carries
+  a different `id` with `parentSession` set), and the contributor resolves from
+  the calling session — so the delegate's copy of the variable names the
+  *delegate's* directory. Moving the derivation into the host did not close that
+  gap, and the persona still owns the instruction that does.
 
 **What this does not do**, stated precisely, because the containment is
 narrower than it first reads:
 
-- **It instructs; it does not enforce.** A model that ignores the persona still
-  writes `cabinet-verify.png` and a bare `spec.json` into the workspace root —
-  and the two `.gitignore` entries do not match those names. What they contain
-  is the output of a run that *follows* the persona. The non-compliant case is
-  exactly as visible in `git status` as it was before, which is the right
-  outcome (it stays reviewable) but is not the one "gitignored" suggests.
-  Enforcement would need evidence to travel through a desktop-owned surface
-  instead of a shell argument — issue #23.
-- **The ignore entries only help when the session workspace is this
-  repository.** It was for all three harvested runs, but a run driven from
-  another checkout organises its artifacts there and gitignores nothing; only
-  the persona reaches those. A consumer installing this preset gets the
-  convention and none of the ignore rules.
-- **The run directory has no reaper, and this change makes its growth
-  invisible.** One directory per session accumulates screenshots, spec dumps and
-  generator scripts under the workspace, and gitignoring them removes the
-  `git status` nag that previously made the litter self-limiting. Its RELEASE is
-  deliberately manual and total: nothing in the harness, the preset or the skill
-  reads `.parametria-evidence/` after the run that wrote it, so the whole
-  directory can be deleted at any time, wholesale, with no recovery step — that
-  is the retention answer for what ships here, and issue #23 owes a real
-  retention policy only because a session-store location could not be cleared so
-  freely.
+- **It governs the path; it does not police the write.** A model that ignores
+  the variable still writes `cabinet-verify.png` into the workspace root, and no
+  ignore rule matches that name. Refusing a write by path is not expressible at
+  this pin — `PreToolDecision` is `allow | deny | ask` with input rewriting
+  explicitly excluded (`core/tools/src/index.ts:588`, `:585`) and
+  `SandboxExecutionPolicy` carries no extra writable roots
+  (`sandbox/sandbox/src/index.ts:39-52`). What changed is that following the
+  convention now costs the run nothing: there is no path to derive, no directory
+  to create, and no session-id expansion to check.
+- **The self-ignore travels; the repository entry does not.** The `*` marker
+  inside `.parametria-evidence/` means a run working in *any* checkout ignores
+  its own evidence. This repository's `.gitignore` entry stays as belt and
+  braces. The same is NOT true of `.uv-cache` (section 4), which is still
+  created bare in whatever repository the run opens and is ignored only here.
+- **The run directory has no reaper.** One directory per session accumulates
+  screenshots, spec dumps and generator scripts under the workspace, and
+  ignoring them removes the `git status` nag that previously made the litter
+  self-limiting. Its RELEASE is deliberately manual and total: nothing in the
+  harness, the preset or the skill reads `.parametria-evidence/` after the run
+  that wrote it, so the whole directory can be deleted at any time, wholesale,
+  with no recovery step. That is the retention answer for what ships here, and
+  it survives issue #23 unchanged — the debt a real policy would settle belongs
+  to a location that cannot be cleared so freely, which this one is not.
 
 ## What this deliberately does not ship
 
@@ -440,14 +452,13 @@ carry their own issues, because #9 closes with this section:
   Increment 3 of the harness research (`parametria-tools`), not profile
   composition. No *grant* narrower than a sandbox mode exists to compose, which
   is why section 4 ships a per-call escalation instead.
-- **An enforced evidence surface — issue #23.** Section 5 ships the
-  *convention* (one ignored run directory, stated by the persona and fenced
-  against the `.gitignore`), which is as far as composition reaches: the output
-  path is a CLI argument the model types. Making it structural — a desktop
-  plugin contributing a `DSH_*` evidence directory through
-  `ctx.shellEnv.register`, with evidence landing beside the session transcript
-  in upstream's reserved `sessionDir` — is recorded there, together with the
-  retention question it owes.
+- **A write the harness can REFUSE by path — no issue, because no surface.**
+  Issue #23 delivered the structural half of section 5 (the host resolves,
+  creates and publishes the run directory, and one module owns the derivation),
+  but not enforcement: nothing at this pin can deny a write outside a root, per
+  the citations in section 5. Evidence landing beside the session transcript in
+  upstream's reserved `sessionDir` remains the reversible alternative recorded
+  on issue #9 — it costs the confined producers, which cannot write there.
 - **The skill's own documented paths** — its examples write to `C:/tmp/...` and
   `/tmp/...`, both outside what this host grants, so loaded skill text competes
   with the persona on every run. That is an SK-class change outside this
@@ -514,6 +525,8 @@ real `boot()` and the live `llm` registry — is
   pending-live datum); item 1 shipped in two halves — the sandbox half in
   PR #21 (section 4) and the evidence half here (section 5). What neither half
   could express became #23 and #24.
-- **#23** — an enforced evidence surface, if the convention in section 5 is ever
-  not enough. **#24** — command-level execution policy, the half of item 1 no
-  composition surface can grant.
+- **#23** — the structural evidence surface (section 5): the run directory is
+  resolved, created and published by the host through `ctx.shellEnv`, derived in
+  one module shared with the capture tool. **#24** — command-level execution
+  policy, the half of item 1 no composition surface can grant; it landed as the
+  `parametria_capture` tool (section 4).
