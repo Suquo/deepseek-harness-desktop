@@ -274,6 +274,22 @@ describe('the capability never touches the escalation surface (acceptance 1 and 
   })
 })
 
+describe('the module loads as a Cordis namespace plugin', () => {
+  // Postmortem 0001: `export default apply` makes Loader.unwrapExports discard
+  // the sibling `inject`/`name`/`Config` exports, so the fiber mounts with an
+  // empty inject and `ctx.tools` throws "cannot get property tools without
+  // inject". That exact storm was observed live on the parametria preset
+  // (2026-08-21) and broke commands, new-chat, and model selection for any
+  // session that applied it. Namespace form only — no default export.
+  it('exports name, inject, and apply as siblings, and never a default apply', () => {
+    const source = readFileSync(SOURCE_PATH, 'utf8')
+    expect(source).toMatch(/^export const name = 'parametria-capture'$/m)
+    expect(source).toMatch(/^export const inject = \['tools', 'subprocess'\]$/m)
+    expect(source).toMatch(/^export function apply\(/m)
+    expect(source).not.toMatch(/^export default\b/m)
+  })
+})
+
 describe('the module declares the boundary it crosses', () => {
   /**
    * Every upstream file:line this change cites as its justification, with the

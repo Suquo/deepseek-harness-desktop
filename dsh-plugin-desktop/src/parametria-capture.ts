@@ -600,5 +600,3 @@ export function apply(ctx: Context, config: Config): void {
     },
   }))
 }
-
-export default apply
