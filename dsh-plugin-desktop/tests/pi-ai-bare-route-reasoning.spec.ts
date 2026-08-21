@@ -250,6 +250,20 @@ function expectRealRequest(body: Record<string, unknown>): void {
   expect(body).toMatchObject({ model: MODEL, stream: true })
 }
 
+/**
+ * The request carried no reasoning field at all.
+ *
+ * Two assertions rather than one, and the order is the point: the first PRINTS
+ * whatever was sent, so a regression's failure message names the invented body
+ * (`{ effort: 'none' }`) instead of reporting `expected true to be false`; the
+ * second is the precise claim, because a key present with an `undefined` value
+ * is still a key and `JSON.stringify` would drop it from the wire either way.
+ */
+function expectNoReasoning(body: Record<string, unknown>): void {
+  expect(body.reasoning).toBeUndefined()
+  expect(Object.hasOwn(body, 'reasoning')).toBe(false)
+}
+
 beforeAll(async () => {
   priorKey = process.env[API_KEY_ENV]
   process.env[API_KEY_ENV] = PLACEHOLDER_KEY
@@ -296,7 +310,7 @@ describe('a bare OpenRouter route on the wire', {
     // `reasoning: { effort: "none" }`, invented from an absent declaration.
     const body = await wireBody(bareRoute())
     expectRealRequest(body)
-    expect(Object.hasOwn(body, 'reasoning')).toBe(false)
+    expectNoReasoning(body)
   })
 
   it('still sends the selected effort, so the fix did not disable reasoning', async () => {
@@ -344,7 +358,7 @@ describe('a bare OpenRouter route on the wire', {
     const [body] = outcome.bodies
     if (body === undefined) throw new Error('the valueless-off route sent no request at all')
     expectRealRequest(body)
-    expect(Object.hasOwn(body, 'reasoning')).toBe(false)
+    expectNoReasoning(body)
   })
 
   it('reproduces the pre-fix invention live, through the branch this patch deliberately left alone', async () => {
@@ -373,6 +387,6 @@ describe('a bare OpenRouter route on the wire', {
     // test and not to the catalog entry.
     const viaPatchedBranch = await wireBody(bareRoute())
     expectRealRequest(viaPatchedBranch)
-    expect(Object.hasOwn(viaPatchedBranch, 'reasoning')).toBe(false)
+    expectNoReasoning(viaPatchedBranch)
   })
 })
