@@ -29,6 +29,7 @@
     "@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.0-rc.8": "patch:@deepseek-ai/dsh-client-ui-directory-picker-browse@npm%3A0.1.0-rc.8#./patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.8.patch",
     "@deepseek-ai/dsh-client-ui-workspace@npm:0.1.0-rc.8": "patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.0-rc.8#./patches/dsh-client-ui-workspace@0.1.0-rc.8.patch",
     "@deepseek-ai/dsh-client-ui-workspace@npm:^0.1.0-rc.8": "patch:@deepseek-ai/dsh-client-ui-workspace@npm%3A0.1.0-rc.8#./patches/dsh-client-ui-workspace@0.1.0-rc.8.patch",
+    "@earendil-works/pi-ai@npm:^0.82.1": "patch:@earendil-works/pi-ai@npm%3A0.82.1#./patches/pi-ai@0.82.1.patch",
     "koffi@npm:^3.1.0": "3.1.5"
   },
   "dependenciesMeta": {
