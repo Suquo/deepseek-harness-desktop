@@ -71,6 +71,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-subprocess'
+import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'parametria-capture'
@@ -401,8 +402,12 @@ export function captureEnvironment(
   return { ...env, ...plan.env }
 }
 
+// The product name is READ from its one declaration rather than restated. A
+// tool description is a user-visible surface — the model quotes it back — and
+// `tests/shell-branding.spec.ts` is the fence that keeps every such surface on
+// the constant; it caught this literal on its first gate run.
 const DESCRIPTION =
-  'Capture a screenshot of a Suquo Systems Parametria definition and write it into this run\'s '
+  `Capture a screenshot of a Suquo Systems ${PARAMETRIA_PRODUCT_NAME} definition and write it into this run's `
   + 'evidence directory. Use this INSTEAD of running the skill\'s screenshot script through a shell: '
   + 'the shell path needs a sandbox escalation for every capture and cannot work at all in a delegated '
   + 'session, while this tool runs the same script from the Host and needs no approval. '
