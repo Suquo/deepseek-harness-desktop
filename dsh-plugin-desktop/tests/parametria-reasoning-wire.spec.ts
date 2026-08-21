@@ -21,20 +21,24 @@
  *      but leaves a declared-but-valueless `off` ABSENT from
  *      `thinkingLevelMap`.
  *   3. pi-ai `dist/api/openai-completions.js:598-608` — the `openrouter` branch
- *      this route selects — then runs
+ *      this route selects — then ran
  *      `else if (map?.off !== null) params.reasoning = { effort: map?.off ?? 'none' }`.
- *      `undefined !== null`, so ABSENT sends `"none"`. The plain `openai`
+ *      `undefined !== null`, so ABSENT sent `"none"`. The plain `openai`
  *      branch at `:636-641` guards on `typeof offValue === 'string'` and really
  *      does send nothing, which is why the upstream comment reads true.
+ *
+ * STEP 3 IS NOW PATCHED (issue #60, `patches/pi-ai@0.82.1.patch`): the
+ * `openrouter` branch takes the same `typeof offValue === 'string'` guard, so
+ * an absent `off` no longer manufactures `"none"`. The last test in this file
+ * changed direction because of it and carries the full account; the route's own
+ * fix is unaffected and still measured below.
  *
  * WHAT THIS FILE ASSERTS. The whole chain the operator's machine runs — the
  * real installer, `prepareDesktopProfile` + `composeEntries`, the real `llm`
  * registry, the real `llm-pi-ai` adapter, the pinned pi-ai — against a loopback
- * endpoint that records the request body. Both directions: the fixed route
- * cannot emit a disable under any effort selection, and re-introducing the
- * valueless `off:` into that same composed config reproduces the exact
- * 400-producing body. The red half is executed, not described, so this fence
- * cannot rot into an assertion about a shape upstream no longer produces.
+ * endpoint that records the request body: the fixed route cannot emit a disable
+ * under any effort selection, and neither — since #60 patched step 3 — can the
+ * same composed config with the valueless `off:` put back.
  *
  * NOTHING HERE REACHES THE NETWORK, by three independent means. The composed
  * route's `baseURL` is the real `https://openrouter.ai/api/v1` (fenced by
@@ -354,23 +358,45 @@ describe('the parametria-vision route on the wire', {
     expect(body.reasoning).toEqual({ effort: 'high' })
   })
 
-  it('reproduces the 400-producing body the moment a valueless `off:` comes back', async () => {
-    // THE RED HALF, executed rather than asserted from memory. This is the
-    // pre-fix composed config, one key different, and the body it produces is
-    // the one OpenRouter answered `400 Reasoning is mandatory for this endpoint
-    // and cannot be disabled` to. If upstream ever changes that branch, this
-    // fails and the green assertions above are re-derived rather than trusted.
+  it('no longer reproduces the 400-producing body when a valueless `off:` comes back', async () => {
+    // THIS TEST CHANGED WITH ISSUE #60, and the change is the point.
+    //
+    // As written for #53 this was the red half: re-introducing the valueless
+    // `off:` reproduced `{ effort: 'none' }`, the body OpenRouter answered
+    // `400 Reasoning is mandatory for this endpoint and cannot be disabled` to.
+    // That was true because the pinned `openrouter` branch invented `"none"`
+    // for an `off` key that is ABSENT from `thinkingLevelMap` — which is what a
+    // valueless `off:` produces (`llm-pi-ai/src/catalog.ts:711-719`).
+    //
+    // `patches/pi-ai@0.82.1.patch` removes the invention: that branch now
+    // requires a declared STRING before it emits a disable, matching the plain
+    // OpenAI-style branch of the same function. So the valueless spelling
+    // finally means what upstream documents it to mean (`catalog.ts:657-661`,
+    // "supported, send nothing"), and this config no longer produces the 400.
+    //
+    // The assertion is inverted rather than deleted, and it still fences: drop
+    // the pi-ai patch and this test fails with the invented body in the message.
+    // What it no longer does is re-derive the PRE-patch behaviour on every run,
+    // because the patched library cannot produce it — that half now lives in
+    // `pi-ai-bare-route-reasoning.spec.ts`, against the `deepseek` branch the
+    // patch deliberately leaves alone.
+    //
+    // Note for the route itself: PR #59's removal of `off:` is no longer what
+    // keeps this route safe — the patch is. Whether the route should offer Off
+    // again is a product decision about `dsh-preset-parametria`, not a safety
+    // one, and it is untouched here.
     const preFix = await streamOnce(withValuelessOff(composedRoute))
     const [preFixBody] = preFix.bodies
-    if (preFixBody === undefined) throw new Error('the pre-fix route sent no request at all')
+    if (preFixBody === undefined) throw new Error('the valueless-off route sent no request at all')
     expectRealRequest(preFixBody)
-    expect(preFixBody.reasoning).toEqual(DISABLE)
-    // The same key is also what made Off selectable, which is how a control
-    // that could only ever 400 came to be offered in the first place.
+    expect(preFixBody.reasoning).not.toEqual(DISABLE)
+    expect(preFixBody.reasoning).toBeUndefined()
+    expect(Object.hasOwn(preFixBody, 'reasoning')).toBe(false)
+    // The key still makes Off selectable — that half of its behaviour is the
+    // adapter's and the patch does not touch it.
     expect(preFix.offeredEfforts).toEqual(['off', 'high'])
-    // ... and with the key back out, the same request carries nothing. Stated
-    // as a pair so the difference is attributed to the declaration under test
-    // and not to anything else in the composed route.
+    // ... and with the key back out, the same request also carries nothing.
+    // Both spellings now agree, which is the state #60 was filed to reach.
     const fixed = await wireBody(composedRoute)
     expectRealRequest(fixed)
     expect(Object.hasOwn(fixed, 'reasoning')).toBe(false)
