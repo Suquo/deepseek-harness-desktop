@@ -109,12 +109,21 @@ export const CAPTURE_DISPLAY_MODES: readonly string[] = ['shaded', 'wireframe', 
 export const CAPTURE_THEMES: readonly string[] = ['light', 'dark']
 
 /**
- * Environment entries forwarded from the Host to the capture child, by exact
- * name and only when the Host has them. A CLOSED list rather than a prefix or a
- * passthrough: the script documents exactly these three
- * (`screenshot-definition.py` reads `CONVEX_URL`, `PARAMETRIA_OWNER_ID`, and
- * `PARAMETRIA_APP_URL`), and a forwarding rule wide enough to carry an
- * unlisted name is a rule wide enough to carry a credential.
+ * Environment entries this tool states EXPLICITLY for the capture child: the
+ * three the script documents reading (`screenshot-definition.py` reads
+ * `CONVEX_URL`, `PARAMETRIA_OWNER_ID`, and `PARAMETRIA_APP_URL`).
+ *
+ * NOT a whitelist of the child's environment, and this module does not claim to
+ * be one. `SubprocessSpawnSpec.env` is documented as entries "merged onto the
+ * implementation's scrubbed parent base"
+ * (`packages/subprocess/subprocess/src/types.ts:96-103`), and
+ * `subprocess-local` builds that base with `scrubbedParentEnv()` — the whole
+ * ambient environment minus credential-shaped names and `DSH_*`. The child
+ * therefore inherits what every other subprocess in this deployment inherits;
+ * naming these three buys determinism (they are stated rather than assumed to
+ * survive the scrub), not confinement. Closing the environment properly would
+ * mean tombstoning every ambient name, which this seam supports but which is a
+ * deployment-wide policy rather than one tool's business.
  */
 export const FORWARDED_ENV_KEYS: readonly string[] = ['CONVEX_URL', 'PARAMETRIA_OWNER_ID', 'PARAMETRIA_APP_URL']
 
@@ -351,7 +360,14 @@ export function planCapture(
     )
   }
 
-  const argv: string[] = [config.uv ?? 'uv', 'run', script, request.definitionId, outputPath]
+  // `--no-project` is load-bearing, not tidiness. `uv run` performs PROJECT
+  // DISCOVERY from its working directory, and this one is the user's own
+  // repository: a `pyproject.toml` sitting there would make uv resolve and sync
+  // THAT project's environment, unconfined, before the script ran. Pinning the
+  // argv is worth nothing if the effective behaviour still depends on what the
+  // cwd happens to contain. The script's PEP 723 header supplies its own
+  // dependencies, so it needs no project at all.
+  const argv: string[] = [config.uv ?? 'uv', 'run', '--no-project', script, request.definitionId, outputPath]
   if (wait !== undefined) argv.push(`--wait=${String(wait)}`)
   if (request.viewportOnly === true) argv.push('--viewport-only')
   if (request.view !== undefined) argv.push(`--view=${request.view}`)
@@ -415,11 +431,72 @@ const DESCRIPTION =
   + 'path of the finished capture is returned for you (or a delegate) to read as an image.'
 
 /**
+ * Describe why a capture ended, distinguishing the three causes the caller
+ * cannot tell apart from an exit code. A caller-initiated abort reported as
+ * "exited with signal SIGTERM" tells the model the script crashed when in fact
+ * the user cancelled.
+ * @param outcome - the process exit facts.
+ * @param cause - which of the two signals fired, and the deadline in force.
+ * @returns the clause naming the cause.
+ */
+function describeExit(
+  outcome: { exitCode: number | null; signal: NodeJS.Signals | null },
+  cause: { aborted: boolean; timedOut: boolean; timeoutMs: number },
+): string {
+  // Caller cancellation is checked FIRST: both signals feed one composite, so
+  // a timeout that fires while an abort is already pending would otherwise
+  // rename the user's cancellation.
+  if (cause.aborted) return 'was cancelled'
+  if (cause.timedOut) return `timed out after ${String(cause.timeoutMs)}ms`
+  return outcome.exitCode === null
+    ? `exited on signal ${String(outcome.signal)}`
+    : `exited with code ${String(outcome.exitCode)}`
+}
+
+/**
+ * The most useful captured output for a failure message: stderr when it has
+ * anything, else stdout. Truncation is DISCLOSED rather than hidden — a
+ * head-lost tail presented as a whole traceback is how a diagnosis goes wrong.
+ * @param handle - the settled subprocess handle.
+ * @returns the detail block, with a truncation notice when the tail slid.
+ */
+function collectedDetail(handle: {
+  collected: { stdout?: { readFrom: (from: number) => { text: string; lossy: boolean } }
+    stderr?: { readFrom: (from: number) => { text: string; lossy: boolean } } }
+}): string {
+  const err = handle.collected.stderr?.readFrom(0)
+  const out = handle.collected.stdout?.readFrom(0)
+  const chosen = (err !== undefined && err.text.trim().length > 0) ? err : out
+  if (chosen === undefined) return ''
+  return chosen.lossy ? `[output truncated; showing the tail]\n${chosen.text.trim()}` : chosen.text.trim()
+}
+
+/**
  * Register the capture tool.
  * @param ctx - the mounting context.
  * @param config - the resolved plugin config.
  */
 export function apply(ctx: Context, config: Config): void {
+  /**
+   * Captures in flight, owned by THIS generation.
+   *
+   * `ctx.tools.register` self-scopes, so disposing this plugin withdraws the
+   * tool — but it cannot abort an `execute` already running (the registry says
+   * so itself: it "does not abandon this promise, but it cannot hard-kill
+   * same-process code"). Without the effect below, a generation disposed
+   * mid-capture would leave `uv run` and a headless browser running unowned
+   * for up to `timeoutMs`, still writing PNGs into the user's repository.
+   * `terminate()` is documented idempotent and tree-scoped, which is what
+   * makes this a release rather than a best-effort kill.
+   */
+  const live = new Set<{ terminate: () => void; waitForExit: () => Promise<boolean> }>()
+  ctx.effect(() => async () => {
+    const draining = [...live]
+    live.clear()
+    for (const handle of draining) handle.terminate()
+    await Promise.all(draining.map(handle => handle.waitForExit()))
+  }, `${name}: in-flight capture teardown`)
+
   ctx.tools.register(defineTool({
     name: CAPTURE_TOOL_NAME,
     description: DESCRIPTION,
@@ -495,22 +572,31 @@ export function apply(ctx: Context, config: Config): void {
         signal: AbortSignal.any([exec.signal, deadline]),
         env: captureEnvironment(plan),
       })
-      const outcome = await handle.done
-      if (outcome.exitCode !== 0) {
-        const stderr = handle.collected.stderr?.readFrom(0).text ?? ''
-        const stdout = handle.collected.stdout?.readFrom(0).text ?? ''
-        const detail = (stderr.trim().length > 0 ? stderr : stdout).trim()
-        const cause = deadline.aborted
-          ? `timed out after ${String(timeoutMs)}ms`
-          : `exited with ${outcome.exitCode === null ? `signal ${String(outcome.signal)}` : `code ${String(outcome.exitCode)}`}`
-        throw new Error(`${CAPTURE_TOOL_NAME}: the capture script ${cause}.\n${detail}`)
+      live.add(handle)
+      try {
+        const outcome = await handle.done
+        if (outcome.exitCode !== 0) {
+          throw new Error(`${CAPTURE_TOOL_NAME}: the capture script ${describeExit(outcome, {
+            aborted: exec.signal.aborted, timedOut: deadline.aborted, timeoutMs,
+          })}.\n${collectedDetail(handle)}`)
+        }
+        if (!existsSync(plan.outputPath)) {
+          throw new Error(
+            `${CAPTURE_TOOL_NAME}: the capture script succeeded but wrote no file at ${plan.outputPath}.`,
+          )
+        }
+        return { outputPath: plan.outputPath, exitCode: outcome.exitCode }
+      } finally {
+        // `done` settles when the DIRECT child closes; this capture's child is
+        // `uv run`, whose grandchildren are the Playwright driver and a
+        // browser. Upstream draws the distinction deliberately —
+        // `waitForExit` observes "the tree, not just the direct child"
+        // (`packages/subprocess/subprocess/src/types.ts:187-193`) — so
+        // returning on `done` alone would report a finished capture while the
+        // browser tree was still alive in the user's workspace.
+        await handle.waitForExit()
+        live.delete(handle)
       }
-      if (!existsSync(plan.outputPath)) {
-        throw new Error(
-          `${CAPTURE_TOOL_NAME}: the capture script succeeded but wrote no file at ${plan.outputPath}.`,
-        )
-      }
-      return { outputPath: plan.outputPath, exitCode: outcome.exitCode }
     },
   }))
 }

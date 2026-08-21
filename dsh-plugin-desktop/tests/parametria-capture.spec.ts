@@ -93,9 +93,20 @@ describe('argv is pinned to the configured script (acceptance 2)', () => {
     ]
     for (const candidate of requests) {
       const { argv } = plan(candidate)
-      expect(argv[0]).toBe('uv')
-      expect(argv[1]).toBe('run')
-      expect(argv[2]).toBe(SCRIPT)
+      // Read from the config rather than restating 'uv': a widened default
+      // must not be able to agree with a literal repeated here.
+      expect(argv[0]).toBe(CONFIG.uv)
+      expect(argv.slice(1, 4)).toEqual(['run', '--no-project', SCRIPT])
+    }
+  })
+
+  it('always disables uv project discovery', () => {
+    // `uv run` resolves a `pyproject.toml` found in its working directory —
+    // and the working directory is the USER'S repository. Without this the
+    // pinned argv would still let the cwd decide what environment gets synced
+    // and executed on the Host plane.
+    for (const candidate of [request(), request({ wait: 3, theme: 'dark' })]) {
+      expect(plan(candidate).argv).toContain('--no-project')
     }
   })
 
@@ -107,9 +118,9 @@ describe('argv is pinned to the configured script (acceptance 2)', () => {
     const { argv, outputPath } = plan(
       request({ wait: 12, viewportOnly: true, view: 'front', display: 'ghosted', theme: 'dark' }),
     )
-    expect(argv[3]).toBe(DEFINITION)
-    expect(argv[4]).toBe(outputPath)
-    for (const element of argv.slice(5)) expect(element).toMatch(closedFlag)
+    expect(argv[4]).toBe(DEFINITION)
+    expect(argv[5]).toBe(outputPath)
+    for (const element of argv.slice(6)) expect(element).toMatch(closedFlag)
   })
 
   it('refuses a definition id that could be read as a flag or split an argument', () => {
@@ -137,7 +148,7 @@ describe('argv is pinned to the configured script (acceptance 2)', () => {
     // path cannot live in it; this is the operator's set-once surface, and #7
     // will change only what it defaults to.
     const fromEnv = planCapture(request(), SITE, ConfigSchema({}), present, { [CAPTURE_SCRIPT_ENV]: SCRIPT })
-    expect(fromEnv.argv[2]).toBe(SCRIPT)
+    expect(fromEnv.argv[3]).toBe(SCRIPT)
     expect(resolveCaptureScript(ConfigSchema({}), { [CAPTURE_SCRIPT_ENV]: SCRIPT })).toBe(SCRIPT)
     // Explicit configuration outranks the environment.
     const other = resolve('/other/shot.py')
@@ -202,12 +213,12 @@ describe('output lands only under the run evidence directory (acceptance 3)', ()
   })
 })
 
-describe('the child environment is a closed list (no ambient passthrough)', () => {
+describe('the child environment states what the capture needs', () => {
   it('points uv at the workspace-local cache the persona teaches', () => {
     expect(plan(request()).env).toEqual({ UV_CACHE_DIR: join(CWD, UV_CACHE_SEGMENT) })
   })
 
-  it('forwards exactly the three documented Host variables and nothing else', () => {
+  it('states exactly the three documented Host variables, plus the cache the plan owns', () => {
     const env = captureEnvironment(plan(request()), {
       CONVEX_URL: 'https://example.convex.cloud',
       PARAMETRIA_OWNER_ID: 'owner-1',
@@ -231,14 +242,14 @@ describe('the child environment is a closed list (no ambient passthrough)', () =
 describe('the capability never touches the escalation surface (acceptance 1 and the #21 precedent)', () => {
   it('registers exactly one tool, named parametria_capture', () => {
     const registered: { name: string; description: string }[] = []
-    const ctx = { tools: { register: (tool: { name: string; description: string }) => registered.push(tool) } }
+    const ctx = { effect: () => {}, tools: { register: (tool: { name: string; description: string }) => registered.push(tool) } }
     apply(ctx as unknown as Context, CONFIG)
     expect(registered.map(tool => tool.name)).toEqual([CAPTURE_TOOL_NAME])
   })
 
   it('never names the escalation mechanism in anything the model reads or the OS runs', () => {
     const registered: { description: string }[] = []
-    const ctx = { tools: { register: (tool: { description: string }) => registered.push(tool) } }
+    const ctx = { effect: () => {}, tools: { register: (tool: { description: string }) => registered.push(tool) } }
     apply(ctx as unknown as Context, CONFIG)
     const description = registered[0]?.description ?? ''
     const { argv, env } = plan(request({ wait: 8, view: 'front', theme: 'light' }))
@@ -252,7 +263,7 @@ describe('the capability never touches the escalation surface (acceptance 1 and 
 
   it('states in its description that it replaces the shell path and needs no approval', () => {
     const registered: { description: string }[] = []
-    const ctx = { tools: { register: (tool: { description: string }) => registered.push(tool) } }
+    const ctx = { effect: () => {}, tools: { register: (tool: { description: string }) => registered.push(tool) } }
     apply(ctx as unknown as Context, CONFIG)
     const description = registered[0]?.description ?? ''
     // The delegated case is the one that cannot be rescued at runtime
@@ -264,13 +275,57 @@ describe('the capability never touches the escalation surface (acceptance 1 and 
 })
 
 describe('the module declares the boundary it crosses', () => {
-  it('records in source why the Host plane is the only place this can run', () => {
-    // Standard 12: a comment claiming a mechanism is a checkable claim. The
-    // whole justification for an unconfined spawn is one upstream sentence, so
-    // the citation that carries it must survive refactors.
-    const source = readFileSync(SOURCE_PATH, 'utf8')
-    expect(source).toContain('sandbox-windows-acl/README.md:99')
-    expect(source).toContain('packages/subagent/subagent/src/child-agent.ts:202')
-    expect(source).toContain('packages/interaction/user-approval/src/index.ts:312')
+  /**
+   * Every upstream file:line this change cites as its justification, with the
+   * anchor that must appear AT that line. The whole design rests on these four
+   * facts being true of the pinned harness, so the fence reads the pinned
+   * harness — asserting the citing comment still spells the string would only
+   * prove the comment had not been retyped, which is the substring fence
+   * standard 3 exists to forbid.
+   */
+  const CITATIONS: readonly [string, number, string][] = [
+    ['packages/sandbox/sandbox-windows-acl/README.md', 99, 'tools that must capture output cannot run confined'],
+    ['packages/subagent/subagent/src/child-agent.ts', 202, "approvalPolicy:"],
+    ['packages/interaction/user-approval/src/index.ts', 312, "=== 'never') return 'rejected'"],
+    ['packages/core/tools/src/index.ts', 588, 'export type PreToolDecision ='],
+    ['packages/core/tools/src/index.ts', 585, 'Input rewriting is excluded'],
+    ['packages/shell/tool-bash/src/index.ts', 330, 'async execute(args: BashToolArgs, exec)'],
+    // Cited by the preset row that mounts this tool, for the same reason.
+    ['packages/core/tools/src/index.ts', 1161, 'this.layers.global.tools.entries()'],
+  ]
+
+  it.each(CITATIONS)('%s:%d still says what this change cites it for', (file, line, anchor) => {
+    // Standard 12: a comment naming a mechanism is a CHECKABLE claim, and a pin
+    // bump is exactly the event that silently invalidates one.
+    const root = fileURLToPath(new URL('../../deepseek-harness/', import.meta.url))
+    const lines = readFileSync(join(root, file), 'utf8').split('\n')
+    expect(lines[line - 1] ?? '').toContain(anchor)
+  })
+
+  it('actually cites each of those lines somewhere a reader will find it', () => {
+    // The other half of standard 12: an accurate citation nobody makes is not a
+    // disclosure. Only the line NUMBER is required to appear — the path prefix
+    // is spelled several ways across the two files, and pinning the spelling
+    // would fence prose style rather than the claim.
+    const prose = readFileSync(SOURCE_PATH, 'utf8') + readFileSync(
+      fileURLToPath(new URL('../../dsh-preset-parametria/preset/agent.cordis.yml', import.meta.url)),
+      'utf8',
+    )
+    for (const [file, line] of CITATIONS) {
+      expect(prose, `${file}:${String(line)} is verified above but cited nowhere`).toContain(`:${String(line)}`)
+    }
+  })
+
+  it('leaves the delegated-child dead end unreachable by any listener, as the docstring says', () => {
+    // The load-bearing ORDER, not just the presence of the line: `never` must
+    // be decided BEFORE the `approval/request` waterfall dispatches, or an
+    // answerer plugin could have rescued the child and this whole tool would be
+    // the wrong answer to issue #24.
+    const root = fileURLToPath(new URL('../../deepseek-harness/', import.meta.url))
+    const approval = readFileSync(join(root, 'packages/interaction/user-approval/src/index.ts'), 'utf8')
+    const decidedAt = approval.indexOf("=== 'never') return 'rejected'")
+    const dispatchAt = approval.indexOf("'approval/request'", approval.indexOf('private async decide'))
+    expect(decidedAt).toBeGreaterThan(0)
+    expect(dispatchAt).toBeGreaterThan(decidedAt)
   })
 })

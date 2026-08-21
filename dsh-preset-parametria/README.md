@@ -31,6 +31,26 @@ $DSH_HOME/cordis.patch.yml               YOUR machine-wide patch layer —
   # <<< ... managed <<<                  the parametria-vision route
 ```
 
+### One environment variable the operator sets once
+
+The preset mounts the `parametria_capture` tool (issue #24), which runs the
+skill's `screenshot-definition.py` from the Host plane. It has to be told where
+that script is, and that path cannot live in this repository: `agent.cordis.yml`
+is version-controlled and installed machine-wide, so a literal there would ship
+one machine's path to every machine. Set it once, in the environment DSH Desktop
+launches with:
+
+```
+DSH_PARAMETRIA_CAPTURE_SCRIPT=C:\Users\<you>\.agents\skills\suquo-systems-parametria\scripts\screenshot-definition.py
+```
+
+Until it is set the tool refuses **by name** rather than silently registering a
+capability it cannot perform, and the persona tells the run to report the
+missing variable instead of working around it. An explicit `captureScript`
+config key on the row outranks the variable for a deployment that prefers to pin
+it. Issue #7's skill-root canonicalization will change what this defaults to,
+not how it is spelled.
+
 The first two land in directories upstream already scans — `includeUserRoot`
 makes `$DSH_HOME/.agent-presets` a preset root, and `profiles/` is where
 `resolveProfileDir` looks — so the deployment's read-only shipped install is
