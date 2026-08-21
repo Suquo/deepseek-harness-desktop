@@ -24,8 +24,9 @@
  * `patches/pi-ai@0.82.1.patch` replaces that test in the `openrouter` and
  * `string-thinking` branches — the two whose payload is `map?.off ?? "none"` —
  * with the guard the plain OpenAI-style branch of the same function already
- * uses at `:636-641`, `typeof offValue === "string"`. A declared spelling is
- * still sent; an absent one is no longer manufactured.
+ * uses (pre-patch `:636-641`, `:652-657` in the patched file),
+ * `typeof offValue === "string"`. A declared spelling is still sent; an absent
+ * one is no longer manufactured.
  *
  * WHAT THIS FILE ASSERTS. Real `llm` registry, real `llm-pi-ai` adapter, real
  * pinned pi-ai, real catalog entry, against a loopback endpoint that records
@@ -33,22 +34,32 @@
  * the surface under test is the bare route an operator writes in
  * `~/.dsh/settings.yaml`, which declares nothing but a credential.
  *
- * THE RED HALF IS EXECUTED. The `deepseek` branch of the same function is the
- * one this patch deliberately does NOT touch (its payload is the fixed literal
- * `{ type: "disabled" }`, never the map's value, so there is no spelling for a
- * string guard to require — and 33 catalog models depend on it to honour Off).
- * That branch still runs the pre-fix `map?.off !== null` predicate, so pointing
- * the SAME bare catalog model at it reproduces a manufactured disable live, at
- * this pin, on every run. If upstream ever changes that predicate the fence
- * fails and the green assertions above are re-derived instead of trusted.
+ * THE RED HALF IS EXECUTED, through the `deepseek` branch of the same function
+ * — the third branch that consults `thinkingLevelMap.off`, and the one this
+ * patch deliberately does NOT touch. Two reasons, and neither is "it has no
+ * bug": its payload is the fixed literal `{ type: "disabled" }` and never the
+ * map's value, so there is no declared SPELLING for a string guard to require
+ * — measured, NO catalog model on that dialect declares a string `off`, so the
+ * same guard would not gate the disable but delete it, for all 33 models that
+ * currently receive one (24 with no map, 9 with a map lacking the key; 4 more
+ * declare `off: null` and already send nothing). And `{ type: "disabled" }` is
+ * a field those endpoints accept, where `{ effort: "none" }` is a value
+ * OpenRouter rejects — so deleting it would turn Off into a no-op on 33 models
+ * to fix a failure nothing has observed. That is a separate decision with its
+ * own evidence, not this patch's rule applied consistently.
+ *
+ * The consequence for this fence is that the branch still runs the pre-fix
+ * `map?.off !== null` predicate, so pointing the SAME bare catalog model at it
+ * reproduces a manufactured disable live, at this pin, on every run. If
+ * upstream ever changes that predicate the fence fails and the green
+ * assertions above are re-derived instead of trusted.
  *
  * NOTHING HERE REACHES THE NETWORK. The catalog entry's own `baseUrl` is the
- * real `https://openrouter.ai/api/v1`, so this file never lets a route reach a
- * mount without a loopback override: `streamOnce` builds the endpoint, reads it
- * back OFF THE OBJECT IT IS ABOUT TO MOUNT, and refuses anything that is not
- * `http://127.0.0.1:`. Every reasoning assertion then runs through `wireBody`,
- * which insists on exactly one CAPTURED body, so a request that escaped to the
- * real endpoint is zero captures and a failure rather than a silent pass.
+ * real `https://openrouter.ai/api/v1`, and the mount overrides it with a
+ * loopback origin. The check that this WORKED is not the override itself but
+ * `wireBody`, which insists on exactly one CAPTURED body: a request that went
+ * to the real endpoint instead is zero captures and a failure rather than a
+ * silent pass.
  * `OPENROUTER_API_KEY` is overwritten with a placeholder in `beforeAll` and
  * restored in `afterAll` (process-local under this package's Vitest defaults,
  * `pool: 'forks'` + `isolate: true`), so an operator running the gate with a
@@ -176,16 +187,21 @@ async function streamOnce(route: RouteProfile, effort?: string): Promise<Outcome
     const { port } = server.address() as AddressInfo
     const baseURL = `http://127.0.0.1:${port}/v1`
     const ctx = new Context()
-    const mountConfig = { providers: { [ROUTE]: { ...route, baseURL } } }
-    // The endpoint the request will actually go to, read back off the object
-    // being mounted rather than off the string built for it. This matters more
-    // here than in the sibling fence: a BARE route inherits the catalog entry's
-    // own `https://openrouter.ai/api/v1`, so an override that silently failed
-    // to land would send a real request to a real provider.
-    const mounted = mountConfig.providers[ROUTE]?.baseURL
-    if (mounted !== baseURL || !mounted.startsWith('http://127.0.0.1:')) {
-      throw new Error(`refusing to mount a non-loopback endpoint: ${String(mounted)}`)
+    // A caller must not bring its own endpoint. The override below is appended
+    // last and would silently win, so a route that arrived carrying a real
+    // `baseURL` would look mounted-to-loopback while saying otherwise about
+    // what the file is testing. Checked against the CALLER's object, which is
+    // not built here — re-reading the literal one line above it would assert
+    // nothing.
+    if (route.baseURL !== undefined) {
+      throw new Error(`routes in this file declare no endpoint of their own; got ${route.baseURL}`)
     }
+    const mountConfig = { providers: { [ROUTE]: { ...route, baseURL } } }
+    // What actually proves nothing escaped to `https://openrouter.ai/api/v1` —
+    // which is the endpoint a BARE route inherits from the catalog entry, and
+    // therefore the one an override that failed to land would use — is not this
+    // override but `wireBody`'s insistence on exactly one CAPTURED body. A
+    // request that went elsewhere is zero captures and a named failure.
     const [llmRuntimeModule, piAiModule] = await Promise.all([
       import(LLM_RUNTIME_SPECIFIER),
       import(PI_AI_PLUGIN_SPECIFIER),
@@ -277,9 +293,10 @@ afterAll(() => {
 })
 
 describe('a bare OpenRouter route on the wire', {
-  // MEASURED on win32: the whole file runs in ~1.5-2.5s across five mounts and
-  // loopback round trips, with no per-test install to pay. The same ~20x margin
-  // over the slowest test that the two sibling wire specs derived.
+  // MEASURED on win32: the whole file runs in ~1.5-2.5s across its mounts and
+  // loopback round trips, with no per-test install to pay. The slowest test is
+  // the first, which absorbs the module graph's cold import. The same ~20x
+  // margin over it that the two sibling wire specs derived.
   timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
   it('still finds the incident model in the bug class the patch is about', () => {
@@ -347,8 +364,15 @@ describe('a bare OpenRouter route on the wire', {
     // it can mean "supported, send nothing" (`:657-661`). Under the openrouter
     // branch it did not: absent was read as a declaration of `"none"`, which is
     // what PR #59 had to remove the spelling from the managed route to escape.
-    // With the patch the documented meaning holds for this dialect too, and Off
-    // is a control that works rather than one that 400s.
+    // With the patch the documented meaning holds for this dialect too.
+    //
+    // "Send nothing" is the claim, and it is the whole claim: this branch emits
+    // only `{ effort: ... }`, and OpenRouter's effort enum has no disable
+    // spelling, so selecting Off on such a route now means the provider's own
+    // default applies. That is the documented dispatch, not a disable — and it
+    // is the honest surface for an endpoint that mandates reasoning, where the
+    // alternative was a control that could only 400. A route that wants Off to
+    // actually suppress reasoning needs a wire spelling its provider accepts.
     const valueless: RouteProfile = {
       ...bareRoute(),
       models: [{ id: MODEL, reasoningEfforts: { off: null, high: 'high' } }],
@@ -361,14 +385,39 @@ describe('a bare OpenRouter route on the wire', {
     expectNoReasoning(body)
   })
 
+  it('covers the patch\'s OTHER branch: `string-thinking` obeys the same rule', async () => {
+    // The patch changes two branches, and this is the second. No catalog model
+    // ships on this dialect (measured: zero across every installed
+    // `dist/providers/*.models.js`), so without these two cases half the patch
+    // would be revertible with the gate still green — and it is reachable, by
+    // exactly the route-level `compat` override used below and in the red half.
+    const bare: RouteProfile = { ...bareRoute(), compat: { thinkingFormat: 'string-thinking' } }
+    const nothingDeclared = await wireBody(bare)
+    expectRealRequest(nothingDeclared)
+    // This branch's payload is a bare string on `thinking`, not an object, so
+    // the invention it used to make was the literal `"none"` in that slot.
+    expect(nothingDeclared.thinking).toBeUndefined()
+    expect(Object.hasOwn(nothingDeclared, 'thinking')).toBe(false)
+    // ... and the preserved half: a declared spelling still goes out verbatim.
+    const declared = await wireBody({
+      ...bare,
+      models: [{ id: MODEL, reasoningEfforts: { off: 'none', high: 'high' } }],
+    })
+    expectRealRequest(declared)
+    expect(declared.thinking).toBe('none')
+  })
+
   it('reproduces the pre-fix invention live, through the branch this patch deliberately left alone', async () => {
     // THE RED HALF, executed rather than described. `deepseek` is the third
     // branch of `buildParams` that consults `thinkingLevelMap.off`, and the
     // patch does NOT change it: its payload is the fixed literal
-    // `{ type: "disabled" }` and never the map's value, so there is no spelling
-    // for a string guard to require, and 33 catalog models rely on it to honour
-    // Off. It therefore still runs the pre-fix predicate,
-    // `model.thinkingLevelMap?.off !== null`.
+    // `{ type: "disabled" }` and never the map's value, so the same guard would
+    // not gate that disable but delete it — measured, NO catalog model on this
+    // dialect declares a string `off`, so all 33 that currently receive a
+    // disable would stop receiving one, and `{ type: "disabled" }` is a field
+    // those endpoints accept rather than a value they reject. The file header
+    // carries the full census and the reasoning. It therefore still runs the
+    // pre-fix predicate, `model.thinkingLevelMap?.off !== null`.
     //
     // Pointing the SAME bare catalog model — same absent map, same "no effort
     // selected" — at that branch shows the predicate still reading an absence

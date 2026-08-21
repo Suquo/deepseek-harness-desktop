@@ -491,7 +491,9 @@ if (JSON.stringify(observedPatched) !== JSON.stringify(patchedPackages)) {
 // schedule — `app-builder-lib`, and since #60 `@earendil-works/pi-ai`, which
 // arrives transitively through `@deepseek-ai/dsh-llm-pi-ai` — get the weaker
 // but version-independent half of the same claim: every patch file is wired,
-// and the wiring actually reached the installed tree.
+// and the wiring actually reached the RESOLVED DEPENDENCY GRAPH. Not the same
+// as `node_modules` — a lockfile committed without a matching install still
+// passes here, which is what `yarn install --immutable` is for.
 //
 // The second half is the one that bites. A `resolutions` selector only
 // expresses INTENT: a caret selector whose range stops matching (a transitive
@@ -505,8 +507,11 @@ if (patchFiles.length === 0) {
   fail('patches/ holds no patch files, so the wiring checks below assert nothing')
 }
 for (const file of patchFiles) {
+  // `endsWith`, not `includes`: a target naming `./patches/<file>.orig` would
+  // otherwise satisfy the check for `<file>` on a substring match. The lockfile
+  // scan below is already anchored by the `::` the locator always appends.
   const wiring = Object.entries(workspace.resolutions ?? {})
-    .filter(([, target]) => target.includes(`./patches/${file}`))
+    .filter(([, target]) => target.endsWith(`./patches/${file}`))
   if (wiring.length === 0) {
     fail(`patches/${file} is referenced by no root resolutions entry — it is applied to nothing`)
   }
