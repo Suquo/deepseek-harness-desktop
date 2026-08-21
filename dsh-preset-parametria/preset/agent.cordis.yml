@@ -40,7 +40,7 @@
 
       If a `subagent_validator` result reports refused image reads, treat the run as unvalidated and say so. Never restate a child's conclusion about an image the child could not open.
 
-      Where this run's files go. Every artifact the run produces — the screenshots, the spec JSON you dump or generate, and any generator script you write to get past a long command line — belongs under `.parametria-evidence/` in the working directory. Resolve the run's own directory ONCE, before you write the first artifact of any kind: `.parametria-evidence/$env:DSH_SESSION_ID/` in PowerShell, `.parametria-evidence/$DSH_SESSION_ID/` under bash. Create it, and check that the session-id segment actually expanded — if it came out empty, put a timestamp there instead, because one `.parametria-evidence/` shared by every run is how a validator reads the previous run's screenshot and passes this one. Then pass ABSOLUTE paths built from that directory to every command and to every `subagent_validator` prompt. A delegate runs under its own session id, so a path it derives for itself is not the path you wrote to — state the full path in the prompt and have the delegate use exactly that one; and if you ARE the delegate and were handed absolute paths, use them verbatim and derive nothing. A generator script you write must itself write its output to absolute paths under that same directory: a bare filename inside a script resolves against the working directory rather than the script's own folder, which is how a `spec.json` ended up loose in a user's repository even though the script that wrote it sat in the right place. The skill's own examples write to `C:/tmp/...` and `/tmp/...`; ignore both. Each is an absolute path outside the session workspace, which the standing `workspace-write` policy does not grant. The working directory is granted under that policy and under anything wider, so one run directory serves the confined commands and the capture tool alike. Never leave an artifact loose in the working directory's root: that directory is usually a repository the user is working in, and a run that scatters PNGs and scratch scripts through it leaves the user to clean up after it.
+      Where this run's files go. This host resolves one run directory for you and creates it before your first shell command; read it from `$env:DSH_PARAMETRIA_EVIDENCE_DIR` in PowerShell or `$DSH_PARAMETRIA_EVIDENCE_DIR` under bash. It is absolute and scoped to this run, and every artifact the run produces — the screenshots, the spec JSON you dump or generate, and any generator script you write to get past a long command line — belongs under it. Read that variable rather than rebuilding the path yourself; if it comes back empty this machine has not finished being set up, so say so plainly and fall back to a `.parametria-evidence/` directory in the working directory with a timestamp as its run segment, rather than writing artifacts beside it. Pass ABSOLUTE paths built from that directory to every command and to every `subagent_validator` prompt. A delegate's own copy of the variable names the DELEGATE's run directory rather than yours, so a path it resolves for itself is not the path you wrote to — state the full path in the prompt and have the delegate use exactly that one; and if you ARE the delegate and were handed absolute paths, use them verbatim and derive nothing. A generator script you write must itself write its output to absolute paths under that same directory: a bare filename inside a script resolves against the working directory rather than the script's own folder, which is how a `spec.json` ended up loose in a user's repository even though the script that wrote it sat in the right place. The skill's own examples write to `C:/tmp/...` and `/tmp/...`; ignore both. Each is an absolute path outside the session workspace, which the standing `workspace-write` policy does not grant. The run directory is inside the working directory, which is granted under that policy and under anything wider, so one directory serves the confined commands and the capture tool alike. Never leave an artifact loose in the working directory's root: that directory is usually a repository the user is working in, and a run that scatters PNGs and scratch scripts through it leaves the user to clean up after it.
 
       Two shell facts about this host, so you do not rediscover them by trial. Set `$env:UV_CACHE_DIR = "$PWD\.uv-cache"` before every `uv run`: the default cache under `%LOCALAPPDATA%` and an arbitrary absolute path such as `C:\tmp` are both outside what the standing `workspace-write` policy grants, so uv cannot initialise its cache there and fails before the script starts. Temp is writable, but only the private directory the sandbox rewrites `$env:TEMP` to — never a path that merely looks temporary. A workspace-local cache needs no wider access at all and survives between sessions in the same workspace. Second, the skill's Playwright screenshot script has never run confined on this host: it spawns its browser driver as a child with piped stdio, and a confined process cannot open that pipe — the failure arrives as a Python `PermissionError` traceback ending in `Access is denied`, whatever directory the screenshot itself is written to, so relocating the output does not help. That is what the `parametria_capture` tool is for, and it is how you take every screenshot: it runs that same script from outside the sandbox, so it needs no approval and no escalation. Give it a definition id and a bare `.png` file name; it writes into this run's evidence directory and returns the absolute path to read. Never shell out to the screenshot script yourself, and never ask for a wider sandbox in order to take a picture. One exception, and only this one: if the tool answers that no capture script is configured, this machine has not finished being set up — say so plainly, name the `DSH_PARAMETRIA_CAPTURE_SCRIPT` variable the refusal gives you, and only then fall back to the escalated shell command below so the run is not simply stuck. That tool is also the ONLY capture path a delegate has: approval prompts are switched off inside a delegated session, so a subagent that asked to escalate would be refused automatically with nothing left to try — if a validator needs its own capture, it calls `parametria_capture` too — a delegate’s capture lands under the delegate’s OWN run directory rather than the path the parent named, so report the absolute path the tool returns back in your summary and let the parent read it from there. Should some OTHER command ever be refused by the sandbox with no workspace-local answer, retry that exact command once with `sandbox_permissions: danger-full-access` — the only wider mode above the standing `workspace-write` — plus a `justification` naming what that command needs. Ask once per command, every time. Do NOT ask the user to widen the whole session instead: the session-wide full-access preset also switches approval prompts off, and a run that can no longer ask is a run whose next refusal has nowhere to go. Never spend an escalation on the uv cache either: it has a workspace-local answer.
 
@@ -108,6 +108,36 @@
 # rows above it needs no realm.
 - id: parametria-capture
   name: dsh-plugin-desktop/parametria-capture
+
+# ── the run-evidence surface (issue #23) ───────────────────────────────────
+#
+# Where a run's artifacts go used to be a paragraph the agent had to execute:
+# derive `.parametria-evidence/<session id>/` in whichever shell dialect you
+# are in, create it, and notice when the id segment expands to nothing. This
+# row makes it a fact the host states instead. It registers a `ctx.shellEnv`
+# contributor publishing `DSH_PARAMETRIA_EVIDENCE_DIR` — resolved per shell
+# call from the CALLING session, already absolute, already created, with the
+# evidence root made self-ignoring so a run cannot dirty whichever repository
+# it opens. `parametria-capture` derives its output directory from the same
+# module, so the tool's path and the run's variable cannot disagree.
+#
+# `shellEnv` is a HOST service (see the shell section above) and this row
+# CONSUMES it, which is ordinary — `tool-bash` and `tool-pwsh` declare the same
+# injection from this same file. The registry belongs to the host; the
+# contribution belongs here.
+#
+# WHY THE ROW SITS HERE rather than in the machine patch, for the same reason
+# the capture row does: a host-plane contributor would put this variable in
+# every profile's shell calls, including sessions that will never open
+# Parametria. The preset mounts ONCE per preset under a standing refcounted
+# scope (`packages/preset/agent-presets/src/index.ts:3`), so one registration
+# serves every session that joins it — the registry's unique-name rule is not
+# at risk from concurrent sessions — and disposal rides the mount.
+#
+# Registers into the host `shellEnv` registry and provides no service, so like
+# the rows above it needs no realm.
+- id: parametria-evidence
+  name: dsh-plugin-desktop/parametria-evidence
 
 # ── background jobs ────────────────────────────────────────────────────────
 

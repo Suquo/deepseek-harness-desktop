@@ -65,13 +65,13 @@
  */
 
 import { existsSync } from 'node:fs'
-import { mkdir } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
+import { evidenceDirFor, evidenceSiteProblem, prepareEvidenceDir } from './parametria-evidence.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'parametria-capture'
@@ -83,11 +83,14 @@ export const inject = ['tools', 'subprocess']
 export const CAPTURE_TOOL_NAME = 'parametria_capture'
 
 /**
- * The run-artifact root, relative to the session workspace. Owned by the
- * evidence convention this tool WRITES UNDER — governance of that root is
- * issue #23's slice and deliberately not absorbed here.
+ * The run-artifact root, relative to the session workspace.
+ *
+ * RE-EXPORTED, not redeclared: issue #23 moved the declaration and the whole
+ * derivation into `./parametria-evidence.ts`, which is now the single place this
+ * tool and the shell variable a run reads both compute the run directory from.
+ * The alias stays because this module's subpath is published API.
  */
-export const EVIDENCE_ROOT_SEGMENT = '.parametria-evidence'
+export { EVIDENCE_ROOT_SEGMENT } from './parametria-evidence.ts'
 
 /**
  * The workspace-local uv cache directory. `workspace-write` grants the session
@@ -307,18 +310,13 @@ export function planCapture(
       `the configured capture script does not exist: ${script}`,
     )
   }
-  if (site.cwd.trim().length === 0 || !isAbsolute(site.cwd)) {
-    throw new CaptureRefusal(
-      'CAPTURE_SITE_UNRESOLVED',
-      'the calling session has no absolute working directory, so the run evidence directory '
-      + 'cannot be resolved. This tool requires an agent session.',
-    )
-  }
-  if (site.sessionId.trim().length === 0 || /[\\/]/.test(site.sessionId) || site.sessionId.includes('..')) {
-    throw new CaptureRefusal(
-      'CAPTURE_SITE_UNRESOLVED',
-      'the calling session has no usable id for the run-scoped evidence directory.',
-    )
+  // The site rule lives in `parametria-evidence.ts` so the directory this tool
+  // writes into and the directory the run's own shell calls are handed cannot
+  // disagree about what a usable site is. Here it renders as a typed refusal;
+  // there it renders as an absent variable.
+  const siteProblem = evidenceSiteProblem(site)
+  if (siteProblem !== undefined) {
+    throw new CaptureRefusal('CAPTURE_SITE_UNRESOLVED', siteProblem)
   }
   if (!DEFINITION_ID_PATTERN.test(request.definitionId)) {
     throw new CaptureRefusal(
@@ -346,7 +344,7 @@ export function planCapture(
   assertChoice('theme', request.theme, CAPTURE_THEMES)
 
   const cwd = resolve(site.cwd)
-  const evidenceDir = join(cwd, EVIDENCE_ROOT_SEGMENT, site.sessionId)
+  const evidenceDir = evidenceDirFor(site)
   const outputPath = resolve(evidenceDir, request.outputName)
   // Belt and braces over the name pattern: containment is asserted on the
   // RESOLVED path, so a future loosening of the pattern cannot silently move
@@ -560,7 +558,13 @@ export function apply(ctx: Context, config: Config): void {
         )
       }
       const plan = planCapture(args, { cwd: session.header.cwd ?? '', sessionId: String(session.id) }, config)
-      await mkdir(plan.evidenceDir, { recursive: true })
+      // One creation seam for the evidence root, shared with the shell variable
+      // (issue #23): the run directory and the root's self-ignore marker appear
+      // together no matter which of the two first needs them. Failure stays as
+      // loud here as the bare `mkdir` was — a tool that cannot create its own
+      // output directory must say so rather than spawn into nowhere.
+      const prepareFailure = prepareEvidenceDir(plan.evidenceDir)
+      if (prepareFailure !== undefined) throw prepareFailure
       const timeoutMs = config.timeoutMs ?? 180_000
       const maxBytes = config.maxOutputBytes ?? 65_536
       const deadline = AbortSignal.timeout(timeoutMs)
