@@ -1,0 +1,42 @@
+diff --git a/dist/api/openai-completions.js b/dist/api/openai-completions.js
+index ed81baa3860fa20cf9d38885f9dd4b6b2f639045..7a90f0671cd4cfde07e01fc71b6758937ce24659 100644
+--- a/dist/api/openai-completions.js
++++ b/dist/api/openai-completions.js
+@@ -603,8 +603,18 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
+                 effort: model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort,
+             };
+         }
+-        else if (model.thinkingLevelMap?.off !== null) {
+-            openRouterParams.reasoning = { effort: model.thinkingLevelMap?.off ?? "none" };
++        else {
++            // Only send a disable the model actually declares. An ABSENT `off`
++            // (no `thinkingLevelMap` at all, or a map without the key) is not a
++            // declaration of "none": OpenRouter forwards `reasoning.effort` to
++            // the upstream provider, and reasoning-mandatory endpoints reject an
++            // invented disable with `400 ... cannot be disabled`. Mirrors the
++            // plain OpenAI-style branch below, which already requires a declared
++            // string; `off: null` keeps meaning "send nothing", as before.
++            const offValue = model.thinkingLevelMap?.off;
++            if (typeof offValue === "string") {
++                openRouterParams.reasoning = { effort: offValue };
++            }
+         }
+     }
+     else if (compat.thinkingFormat === "ant-ling" && model.reasoning && options?.reasoningEffort) {
+@@ -625,8 +635,14 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
+         if (options?.reasoningEffort) {
+             stringThinkingParams.thinking = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
+         }
+-        else if (model.thinkingLevelMap?.off !== null) {
+-            stringThinkingParams.thinking = model.thinkingLevelMap?.off ?? "none";
++        else {
++            // Same rule as the openrouter branch above: the disable is the map's
++            // own `off` spelling, so an absent one sends nothing rather than the
++            // invented literal "none".
++            const offValue = model.thinkingLevelMap?.off;
++            if (typeof offValue === "string") {
++                stringThinkingParams.thinking = offValue;
++            }
+         }
+     }
+     else if (options?.reasoningEffort && model.reasoning && compat.supportsReasoningEffort) {
