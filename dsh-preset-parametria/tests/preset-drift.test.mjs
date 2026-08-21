@@ -41,6 +41,12 @@ const DECLARED_DELTA = {
     'delegation/tool-subagent-validator':
       'issue #1: a second delegation instance pinned to the vision route, because child '
       + 'model policy is per-instance and per-call model selection does not exist',
+    'parametria-capture':
+      'issue #24: the Host-plane capture tool. A confined process cannot open the named pipe '
+      + 'Playwright\'s driver spawn needs, and a delegated child cannot escalate at all, so the '
+      + 'capture had to become a capability rather than a sandbox grant. It rides the preset '
+      + 'because the preset is what makes it needed: a machine-wide row would work (host tool '
+      + 'rows ARE inherited by preset agents) but would enter every profile\'s roster',
   },
   /** Rows this preset drops. Empty on purpose: parity with `standard` is the point. */
   removed: {},
@@ -50,7 +56,8 @@ const DECLARED_DELTA = {
       'the run states its own shape: load the skill, delegate visual checks to '
       + 'subagent_validator rather than subagent, keep every artifact under the workspace-local '
       + '`.parametria-evidence/` run directory, and meet the two sandbox facts this '
-      + 'host has (workspace-local uv cache; per-call escalation for the screenshot script)',
+      + 'host has (workspace-local uv cache; captures go through `parametria_capture` '
+      + 'because the screenshot script cannot run confined at all — issue #24)',
     'skill-filesystem':
       'preset-local skill root (`customSkillDirs`) so the skill travels with the preset '
       + 'and registers into this preset\'s nearer registry layer',
@@ -124,7 +131,36 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
     assert.ok(
       persona.includes('retry that exact command once with `sandbox_permissions: danger-full-access`'),
       'the persona must INSTRUCT the per-call escalation, naming the one wider mode above workspace-write — '
-      + 'it is the narrowest path past the one refusal that has no relocation answer',
+      + 'it is the general lever for a refusal with no workspace-local answer',
+    )
+    // Issue #24 narrowed what that lever is FOR. The capture used to be its one
+    // named case; it is now a tool, and the escalation sentence above survives
+    // only as the general fallback. Three assertions, because the interesting
+    // failure is a persona that keeps both paths and lets the model pick.
+    assert.match(
+      persona, /parametria_capture/,
+      'the persona must name the capture tool: the escalation path it replaces is what the '
+      + 'model reaches for otherwise, and 28 of 42 censused sessions did exactly that',
+    )
+    assert.ok(
+      persona.includes('never ask for a wider sandbox in order to take a picture'),
+      'the persona must forbid escalating FOR A CAPTURE outright — the tool is unconditional, '
+      + 'and a persona that left the escalation available for captures leaves the interrupt available too',
+    )
+    assert.doesNotMatch(
+      persona, /Ask once per capture/,
+      'the per-capture escalation instruction is retired by issue #24: it is the sentence that '
+      + 'taught the treadmill, and a capture now needs no approval at all',
+    )
+    // The delegate half, and the reason it cannot be left implicit: a delegated
+    // session is pinned to `approval: never`
+    // (`subagent/src/child-agent.ts:202`), decided before any answerer runs
+    // (`user-approval/src/index.ts:312`), so a validator that tried to escalate
+    // is refused with nothing to fall back on. The tool is its only capture path.
+    assert.ok(
+      persona.includes('approval prompts are switched off inside a delegated session'),
+      'the persona must state why a delegate cannot escalate: without it, a validator that '
+      + 'needs its own capture spends its turn discovering an automatic refusal',
     )
     // Per-call is the WHOLE instruction, not the first of two options. Issue #9
     // ruled against shipping a named whole-run preset for this, and the reason

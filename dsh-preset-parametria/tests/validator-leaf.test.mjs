@@ -129,27 +129,58 @@ function sourceTextOf(dir) {
 const NON_PACKAGE_ROW_NAMES = new Set(['cordis:group'])
 
 /**
+ * The workspace packages of THIS repository, indexed the same way as upstream's.
+ *
+ * The preset may mount a desktop-owned plugin beside the upstream rows —
+ * issue #24's `dsh-plugin-desktop/parametria-capture` is the first. Classifying
+ * such a row from its OWN source is what keeps this fence derived rather than
+ * enumerated: a desktop plugin that later grew a child-start seam joins the
+ * delegation set here, instead of slipping past as "not upstream, so not
+ * checked". Reading the whole package (not just the subpath's entry) is
+ * deliberate over-inclusion — the conservative direction for a fence.
+ * @returns a Map of package name to its absolute directory.
+ */
+function localPackageIndex() {
+  const index = new Map()
+  const root = join(PACKAGE_ROOT, '..')
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'node_modules') continue
+    const manifest = join(root, entry.name, 'package.json')
+    if (!existsSync(manifest)) continue
+    const { name } = JSON.parse(readFileSync(manifest, 'utf8'))
+    if (typeof name === 'string') index.set(name, join(root, entry.name))
+  }
+  return index
+}
+
+/**
  * The package a row's plugin name refers to. A row may name a subpath export
- * (`.../dsh-tool-subagent-control/list-agents`); the package is the scope and
- * the name after it.
+ * (`.../dsh-tool-subagent-control/list-agents`, `dsh-plugin-desktop/parametria-capture`);
+ * the package is the scope and the name after it for a scoped name, and the
+ * first segment for an unscoped local one.
+ *
+ * Loudness is preserved by checking the RESULT against the indexes rather than
+ * by the shape of the name: an unscoped name that resolves to no known package
+ * still throws, so relaxing the scope requirement did not open a hole.
  * @param pluginName - the row's `name` field.
  * @returns the bare package name, or undefined for a known non-package row.
- * @throws when the name is neither a scoped package nor a known non-package row.
+ * @throws when the name resolves to no indexed package and is not a known non-package row.
  */
 function packageNameOf(pluginName) {
   if (NON_PACKAGE_ROW_NAMES.has(pluginName)) return undefined
-  const [scope, name] = pluginName.split('/')
-  if (!pluginName.startsWith('@') || name === undefined) {
+  const segments = pluginName.split('/')
+  const candidate = pluginName.startsWith('@') ? segments.slice(0, 2).join('/') : segments[0]
+  if (candidate === undefined || !packages.has(candidate)) {
     throw new Error(
-      `preset row name "${pluginName}" is neither a scoped package nor a known non-package row — `
-      + 'the delegation classification cannot decide it, and a row it cannot decide must not pass unclassified. '
-      + `Add it to NON_PACKAGE_ROW_NAMES with a reason, or ground its source.`,
+      `preset row name "${pluginName}" resolves to no package of the pinned upstream checkout or this `
+      + 'workspace — the delegation classification cannot decide it, and a row it cannot decide must not '
+      + 'pass unclassified. Add it to NON_PACKAGE_ROW_NAMES with a reason, or ground its source.',
     )
   }
-  return `${scope}/${name}`
+  return candidate
 }
 
-const packages = upstreamPackageIndex()
+const packages = new Map([...upstreamPackageIndex(), ...localPackageIndex()])
 const sources = new Map()
 
 /** Memoized source text for one package name, failing loud on an unknown package. */
