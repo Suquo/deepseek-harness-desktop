@@ -55,6 +55,10 @@
       "types": "./lib/types/desktop-plugins.d.ts",
       "default": "./lib/desktop-plugins.js"
     },
+    "./parametria-capture": {
+      "types": "./lib/types/parametria-capture.d.ts",
+      "default": "./lib/parametria-capture.js"
+    },
     "./profiles": {
       "types": "./lib/types/profiles.d.ts",
       "default": "./lib/profiles.js"

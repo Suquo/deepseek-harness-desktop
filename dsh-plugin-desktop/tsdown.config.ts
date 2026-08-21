@@ -13,6 +13,7 @@ export default defineConfig([
       'profile-service': 'src/profile-service.ts',
       'desktop-plugins': 'src/desktop-plugins.ts',
       pnpm: 'src/pnpm.ts',
+      'parametria-capture': 'src/parametria-capture.ts',
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
