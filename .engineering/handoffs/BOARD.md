@@ -23,7 +23,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **RM**: AC generation LIVE (`/loop /repo-manager`, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — gen-10 on #55** (pnpm shim corepack transparency; authored-where grounding FIRST; branch `claude/issue-55-pnpm-shim`). SURFACE: patches/ + root manifest if grounding lands there; freezes if the authoring site is dsh-plugin-desktop src (Lane B holds it). #45 low.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-10 on #55 (resumed post-freeze, rulings recorded on-issue)**: shim authored in OUR overlay (desktop-runtime-environment.ts:256-276 + desktop-terminal.ts) — 4 named plugin paths RELEASED to Lane A this cycle; design = bump + pin-comparison fence + packageManager-aware pass-through (corepack delegation rejected, Electron-as-Node ABI); plan §4 premises corrected (clear-env claim refuted). #45 low.
 - **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-13 on #23** (evidence governance as a structural surface; dedupe EVIDENCE_ROOT_SEGMENT with the capture tool; freeze-with-options if designs diverge; branch `pm/issue-23-evidence-surface`). SURFACE: preset + desktop plugin. Queue after: #52 → #54 → #58.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
@@ -37,6 +37,6 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Owner items (batched, non-blocking)
 
 - **#3 — the fork Actions tab enable-workflows click** (UI-only; ruleset `master-required-checks` is active with admin bypass; #3 closes on the first real PR-event rollup).
-- **Live-run items:** agy sign-in still failing (antigravity status ERROR persists after sign-in — re-verify with `modlens doctor` or agy's own status); claude-cli vision fails under a SessionEnd hook cancellation (operator's Claude plugin config); codex spawn EINVAL (modlens Windows bug — report to @liustack?).
+- **Live-run items:** RELAUNCH DSH Desktop from the primary checkout — the installed pnpm shim execs from a STALE deleted worktree (.pm-resolver-worktrees/issue-2), found by gen-10; relaunch regenerates runtime-commands. Also: agy sign-in still failing (re-verify with modlens doctor); claude-cli vision fails under a SessionEnd hook cancellation; codex spawn EINVAL (modlens Windows bug — report to @liustack?).
 - **Rulings pending:** skill-root canonicalization (#7) · SK-1..4 landing surface · rebrand identity migrations + product NAMING ("DSH Terminal" → ?) · report the appendOwned quadratic + O_TRUNC EINVAL forensics to anywhere-labs? · modlens into the parametria profile?
 - **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` — rotate + move to `scripts/.env` (outside this repo's fleet surface; flagged only).
