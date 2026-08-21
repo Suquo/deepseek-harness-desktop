@@ -53,6 +53,12 @@ import { isAbsolute, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-shell-env'
+// The product name is READ from its one declaration rather than restated: both
+// strings below are user-visible (the marker lands in the user's repository, the
+// description is quoted back by the model), and `tests/shell-branding.spec.ts`
+// is the fence that keeps every such surface on the constant. It caught both of
+// these on the first gate run.
+import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'parametria-evidence'
@@ -87,7 +93,7 @@ export const EVIDENCE_DIR_ENV = 'DSH_PARAMETRIA_EVIDENCE_DIR'
  * run opens instead of being a property of one checkout.
  */
 export const EVIDENCE_IGNORE_MARKER = [
-  '# Written by the Suquo Systems Parametria harness (dsh-plugin-desktop).',
+  `# Written by the Suquo Systems ${PARAMETRIA_PRODUCT_NAME} harness (dsh-plugin-desktop).`,
   '#',
   '# Run evidence is disposable output, never source. This directory ignores',
   '# itself so a run cannot dirty whichever repository it is working in — the',
@@ -196,8 +202,9 @@ export const Config: z<Config> = z.object({
  * declaration surface.
  */
 const VARIABLE_DESCRIPTION =
-  'Absolute, run-scoped directory for this Parametria run\'s artifacts — screenshots, spec JSON, '
-  + 'and any script the run writes. Already created. Write every artifact under it and nothing beside it.'
+  `Absolute, run-scoped directory for this ${PARAMETRIA_PRODUCT_NAME} run's artifacts — screenshots, `
+  + 'spec JSON, and any script the run writes. Already created. Write every artifact under it and '
+  + 'nothing beside it.'
 
 /**
  * Register the evidence-directory contributor.
