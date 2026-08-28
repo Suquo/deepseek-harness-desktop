@@ -40,3 +40,31 @@
 # succeed". A saved user selection outranks this row anyway, so pinning it
 # would change nothing for the operator and would cost the profile its
 # demonstration. Revisit only if issue #1 closes on different evidence.
+
+# ── optional product subagent providers (Codex, Claude Code) ────────────────
+#
+# Mounted once on the HOST plane, exactly as the desktop profile mounts them.
+# TWO reasons, and the first is load-bearing for the validator:
+#
+# 1. The preset's `subagent_validator` row denies `subagent_codex` and
+#    `subagent_claude_code` by name, and `tools.restrict()` THROWS on a name
+#    that never registered — so in a profile without these providers the
+#    delegation tools never appear, the deny list hits unknown names, and
+#    EVERY validator spawn dies with a config error (the 2026-08-28 run lost
+#    its entire finalization validation to exactly this). Upstream is explicit
+#    that a preset cannot provide this host dependency ("install the matching
+#    Bundle in the Profile and restart"): the PROFILE must mount what the
+#    preset's deny list names.
+# 2. They are the product subagents the preset's `tool-subagent-codex` /
+#    `tool-subagent-claude-code` rows expose — vision-capable delegate CLIs
+#    available to the agent as ordinary tools.
+#
+# The packages are declared in this profile's `package.json` (pinned to the
+# same 0.1.0-rc.7 the desktop profile runs); each registers a dormant provider
+# at mount and spawns its pinned package-local CLI only when called.
+- insert:
+    - id: subagent-codex
+      name: '@deepseek-ai/dsh-subagent-codex'
+
+    - id: subagent-claude-code
+      name: '@deepseek-ai/dsh-subagent-claude-code'

@@ -48,8 +48,18 @@ describe('the profile manifest', () => {
     assert.ok(!manifest.dsh.profile.bundles.includes('dsh-plugin-desktop'))
   })
 
-  it('brings no out-of-tree plugin dependencies of its own', () => {
-    assert.deepEqual(manifest.dependencies, {})
+  it('carries exactly the two optional subagent provider bundles', () => {
+    // The preset's `subagent_validator` row denies `subagent_codex` and
+    // `subagent_claude_code` by NAME, and `tools.restrict()` throws on a name
+    // that never registered — so a profile that does not mount these providers
+    // loses every validator spawn to a config error (the 2026-08-28 run).
+    // Upstream is explicit that a preset cannot provide this host dependency:
+    // the PROFILE installs the bundles (this manifest) and mounts them (the
+    // insert fence below). Pinned to the same rc the desktop profile runs.
+    assert.deepEqual(manifest.dependencies, {
+      '@deepseek-ai/dsh-subagent-claude-code': '0.1.0-rc.7',
+      '@deepseek-ai/dsh-subagent-codex': '0.1.0-rc.7',
+    })
   })
 })
 
@@ -85,12 +95,25 @@ describe('the patch layer', () => {
     }
   })
 
-  it('inserts nothing: every capability this profile needs is already composed', () => {
-    // Notably `dsh-session-stats`, which the harness research listed as absent
-    // from the default composition: the `dsh-web-app` bundle mounts it, and
-    // this profile builds on that bundle, so per-step timing is available
-    // without an insert. The assertion is what keeps that claim true.
-    assert.deepEqual(patchEntries.filter(entry => entry?.insert !== undefined), [])
+  it('inserts exactly the two subagent provider rows and nothing else', () => {
+    // The provider bundles the manifest installs still need HOST-plane rows to
+    // mount — a dependency alone composes nothing. This is the profile-side
+    // half of the validator fix (see the manifest fence above): with these
+    // rows mounted, the preset's `tool-subagent-codex` / `tool-subagent-
+    // claude-code` rows register their tools and the validator's deny list
+    // resolves every name it states. Exhaustive in both directions: a third
+    // insert appearing here fails, and so does losing either provider row.
+    //
+    // Everything ELSE the profile needs stays already-composed — notably
+    // `dsh-session-stats`, which the `dsh-web-app` bundle mounts; the
+    // session-stats assertion is what keeps that claim true.
+    assert.deepEqual(
+      patchEntries.filter(entry => entry?.insert !== undefined).flatMap(entry => entry.insert),
+      [
+        { id: 'subagent-codex', name: '@deepseek-ai/dsh-subagent-codex' },
+        { id: 'subagent-claude-code', name: '@deepseek-ai/dsh-subagent-claude-code' },
+      ],
+    )
     assert.ok(bundles.has('session-stats'), 'dsh-web-app no longer mounts session-stats; per-step timing would be lost')
   })
 })

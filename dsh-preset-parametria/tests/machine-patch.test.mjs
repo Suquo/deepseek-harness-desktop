@@ -78,8 +78,16 @@ describe('which plane declares the route', () => {
     )
   })
 
-  it('keeps the profile layer to the row it still owns', () => {
-    assert.deepEqual(profileRows.map(entry => entry.id), ['agent-presets'])
+  it('keeps the profile layer to the rows it still owns', () => {
+    // One id-targeted row (the preset default) plus one id-less insert entry
+    // (the two subagent provider mounts — pinned exhaustively by
+    // profile-patch.test.mjs; this fence only keeps the SHAPE of the layer
+    // from growing unnoticed).
+    assert.deepEqual(profileRows.map(entry => entry.id), ['agent-presets', undefined])
+    assert.deepEqual(
+      profileRows.filter(entry => entry.id === undefined).map(entry => Object.keys(entry)),
+      [['insert']],
+    )
   })
 })
 
