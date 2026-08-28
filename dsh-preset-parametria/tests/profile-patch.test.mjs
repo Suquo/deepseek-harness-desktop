@@ -56,7 +56,12 @@ describe('the profile manifest', () => {
     // Upstream is explicit that a preset cannot provide this host dependency:
     // the PROFILE installs the bundles (this manifest) and mounts them (the
     // insert fence below). Pinned to the same rc the desktop profile runs.
+    // `dsh-sdk-protocol` rides along because the subagent bundles import it as
+    // a PEER — without the explicit pin the profile boots to
+    // ERR_MODULE_NOT_FOUND on the first provider import (hit live 2026-08-28).
+    // The desktop profile carries the same three pins for the same reason.
     assert.deepEqual(manifest.dependencies, {
+      '@deepseek-ai/dsh-sdk-protocol': '0.1.0-rc.7',
       '@deepseek-ai/dsh-subagent-claude-code': '0.1.0-rc.7',
       '@deepseek-ai/dsh-subagent-codex': '0.1.0-rc.7',
     })
