@@ -37,6 +37,16 @@ flowchart LR
 - **Web Client**：官方 Web UI 和第三方浏览器界面。它通过 loopback carrier 工作，不直接调用 Electron。
 - **Native runtime**：Electron BrowserWindow、系统托盘、文件/网络/安装器适配。`desktopRuntime` 只供 Desktop 自有 row 使用。
 
+在当前固定的 0.1.1-rc.2 release 中，`dsh-client-modules` 通过 Host 的
+structured `webserver/index-inject` 表，以
+`{ kind: "global", name: "__DSH_BOOT__", value: graph }` row 发布 client
+boot graph。`dsh-host-webserver` 负责把该 row 渲染成 served HTML 中的
+`globalThis["__DSH_BOOT__"]` assignment（同一 row table 也支持其他
+deployment renderer）；raw `tapIndex` transform 只在 row rendering 之后运行。
+因此 Desktop profile smoke 会直接验证 structured row 和 graph，只为这个
+renderer 保留一个不解析内容的 served-page sentinel，而不从 markup 中抓取
+graph data。
+
 兼容模式的 Client face 校验环境后直接返回，不注册 Desktop layout、root、sidebar 或 conversation override。高级模式才安装 Desktop-owned layout、frame 和原生材质，同时尊重上游和第三方 slot 组合。
 
 ### 原生 Shell generation 与平台 adapter

@@ -242,11 +242,6 @@ try {
   if (profileMenu?.submenu?.()[0]?.label() !== 'desktop') {
     throw new Error('assembled desktop profile is missing the active profile tray submenu')
   }
-  const response = await fetch(expectedUrl)
-  await response.text()
-  if (response.status !== 200) {
-    throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
-  }
   // Since 0.1.1, dsh-client-modules contributes the boot graph as structured
   // data and dsh-host-webserver owns its rendered markup. Assert the producer
   // contract directly: scraping that markup would couple this smoke to one of
@@ -287,6 +282,17 @@ try {
     '@deepseek-ai/dsh-client-ui-directory-picker-native',
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
+  }
+  const response = await fetch(expectedUrl)
+  const html = await response.text()
+  if (response.status !== 200) {
+    throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
+  }
+  if (!html.includes('globalThis["__DSH_BOOT__"] = ')) {
+    throw new Error(
+      'assembled Web root is missing the rendered '
+      + '`globalThis["__DSH_BOOT__"] = ` boot assignment',
+    )
   }
 } finally {
   await ctx?.fiber.dispose()

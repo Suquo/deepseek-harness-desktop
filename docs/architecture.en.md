@@ -43,8 +43,9 @@ graph through the Host's structured `webserver/index-inject` table as
 `dsh-host-webserver` owns rendering that row as a `globalThis["__DSH_BOOT__"]`
 assignment for served HTML (and the same row table supports other deployment
 renderers); raw `tapIndex` transforms run only after row rendering. Desktop's
-profile smoke therefore validates the structured row and graph rather than
-scraping this renderer-specific markup.
+profile smoke therefore validates the structured row and graph directly and
+keeps only a non-parsing served-page sentinel for this renderer rather than
+scraping graph data from markup.
 
 Compatibility mode validates its environment and returns without installing a Desktop layout, root, sidebar, or conversation override. Advanced mode installs the Desktop-owned layout, frame, and native materials while respecting upstream and third-party slot composition.
 
