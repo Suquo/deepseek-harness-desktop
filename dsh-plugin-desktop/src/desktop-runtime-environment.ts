@@ -99,6 +99,15 @@ function quoteBatchWord(value: string): string {
   return `"${value.replaceAll('%', '%%')}"`
 }
 
+/**
+ * Escape a value so a batch `echo` prints it literally.
+ * Windows filenames cannot contain `"<>|`, but `&` and `^` are legal and would otherwise be
+ * parsed as command syntax after `%`-expansion, so every metacharacter is carted out.
+ */
+function escapeBatchEcho(value: string): string {
+  return value.replaceAll('%', '%%').replaceAll(/[&<>^|]/gu, match => `^${match}`)
+}
+
 /** Escape a value inside the quoted right-hand side of a batch `set` command. */
 function escapeBatchSetValue(value: string): string {
   if (/["\r\n]/u.test(value)) {
@@ -210,6 +219,62 @@ function clearEnvironmentModule(): string {
   ].join('\n')
 }
 
+/**
+ * A generated command records ABSOLUTE paths into a machine-global user-data directory, so it
+ * outlives the tree that authored it: deleting or moving that tree leaves a command whose targets
+ * are gone. Every generation rewrites these files, so the release for that durable claim is a
+ * restart — but without a guard the stale command fails with a bare interpreter path error that
+ * names neither the missing target nor the recovery. These guards make it self-describing.
+ */
+const STALE_COMMAND_HEADLINE = 'dsh-plugin-desktop: this generated command is stale and was not run.'
+const STALE_COMMAND_REMEDY = 'Restart DSH Desktop to regenerate it.'
+/**
+ * Exit status of a rejected stale command. It must fit an 8-bit POSIX status (9009 truncates to 49
+ * on Linux — measured on the Linux gate) and must differ from the interpreters' own not-found
+ * codes (cmd 9009, sh 127) so a caller can tell "the shim spoke" from the bare path error it
+ * replaces. 78 is sysexits.h EX_CONFIG: the configuration (the recorded targets) is unusable.
+ */
+const STALE_COMMAND_EXIT_CODE = 78
+
+/** Labelled targets a generated command must still be able to reach. */
+type RecordedTarget = readonly [label: string, path: string]
+
+/** Build the POSIX preflight rejecting a generated command whose recorded targets vanished. */
+function posixStaleTargetGuard(targets: readonly RecordedTarget[]): string[] {
+  return targets.flatMap(([label, target]) => [
+    `if [ ! -e ${quoteSh(target)} ]; then`,
+    `  printf '%s\\n' ${quoteSh(STALE_COMMAND_HEADLINE)} >&2`,
+    `  printf '%s\\n' ${quoteSh(`missing ${label}: ${target}`)} >&2`,
+    `  printf '%s\\n' ${quoteSh(STALE_COMMAND_REMEDY)} >&2`,
+    `  exit ${STALE_COMMAND_EXIT_CODE}`,
+    'fi',
+  ])
+}
+
+/**
+ * Build the Windows preflight rejecting a generated command whose recorded targets vanished.
+ * @returns the `if not exist` checks to place before the exec line, and the diagnostic blocks
+ * they jump to, which must be placed after it.
+ */
+function windowsStaleTargetGuard(
+  targets: readonly RecordedTarget[],
+): { checks: string[], blocks: string[] } {
+  const checks: string[] = []
+  const blocks: string[] = []
+  targets.forEach(([label, target], index) => {
+    const marker = `dsh_stale_target_${index}`
+    checks.push(`if not exist ${quoteBatchWord(target)} goto :${marker}`)
+    blocks.push(
+      `:${marker}`,
+      `>&2 echo ${escapeBatchEcho(STALE_COMMAND_HEADLINE)}`,
+      `>&2 echo ${escapeBatchEcho(`missing ${label}: ${target}`)}`,
+      `>&2 echo ${escapeBatchEcho(STALE_COMMAND_REMEDY)}`,
+      `exit /b ${STALE_COMMAND_EXIT_CODE}`,
+    )
+  })
+  return { checks, blocks }
+}
+
 /** Build the private POSIX Node command used only by pnpm lifecycle scripts. */
 function posixNodeShim(appExecutable: string, clearEnvironmentUrl: string): string {
   return [
@@ -228,6 +293,10 @@ function posixPnpmShim(
 ): string {
   return [
     '#!/bin/sh',
+    ...posixStaleTargetGuard([
+      ['application executable', options.appExecutable],
+      ['pnpm entry', options.pnpmBinPath],
+    ]),
     [
       `PATH=${quoteSh(nodeBinDir)}:"\${PATH:-}"`,
       `NODE=${quoteSh(nodeShimPath)}`,
@@ -260,9 +329,14 @@ function windowsPnpmShim(
   nodeShimPath: string,
   clearEnvironmentUrl: string,
 ): string {
+  const guard = windowsStaleTargetGuard([
+    ['application executable', options.appExecutable],
+    ['pnpm entry', options.pnpmBinPath],
+  ])
   return [
     '@echo off',
     'setlocal DisableDelayedExpansion',
+    ...guard.checks,
     `set "PATH=${escapeBatchSetValue(nodeBinDir)};%PATH%"`,
     `set "NODE=${escapeBatchSetValue(nodeShimPath)}"`,
     `set "${RUN_AS_NODE}=1"`,
@@ -271,21 +345,28 @@ function windowsPnpmShim(
     `set "npm_config_disturl=${ELECTRON_HEADERS_URL}"`,
     `${quoteBatchWord(options.appExecutable)} --import ${quoteBatchWord(clearEnvironmentUrl)} ${quoteBatchWord(options.pnpmBinPath)} %*`,
     'exit /b %errorlevel%',
+    ...guard.blocks,
     '',
   ].join('\r\n')
 }
 
 /** Build the public Windows DSH command scoped to one active profile. */
 function windowsDshShim(options: DesktopDshRuntimeOptions): string {
+  const guard = windowsStaleTargetGuard([
+    ['application executable', options.appExecutable],
+    ['DSH bootstrap', options.dshBootstrapPath],
+  ])
   return [
     '@echo off',
     'setlocal DisableDelayedExpansion',
+    ...guard.checks,
     `set "${RUN_AS_NODE}=1"`,
     `set "${DEFAULT_PROFILE}=${escapeBatchSetValue(options.profileName)}"`,
     `set "${DSH_HOME}=${escapeBatchSetValue(options.homeDir)}"`,
     `set "${DESKTOP_INSTALL_RECOVERY_STATE_ENV}=${escapeBatchSetValue(options.installRecoveryStatePath)}"`,
     `${quoteBatchWord(options.appExecutable)} --expose-internals ${quoteBatchWord(options.dshBootstrapPath)} %*`,
     'exit /b %errorlevel%',
+    ...guard.blocks,
     '',
   ].join('\r\n')
 }

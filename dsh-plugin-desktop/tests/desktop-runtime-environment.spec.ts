@@ -5,13 +5,14 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter as pathDelimiter, join } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   installDesktopDshRuntime,
@@ -44,6 +45,26 @@ function options(
     stateDir,
     environment,
   }
+}
+
+/** The single line of a generated command that execs the Electron entry, excluding its preflight. */
+function execLine(shim: string): string {
+  const line = shim.split(/\r?\n/u).find(candidate => candidate.includes('--import'))
+  if (line === undefined) throw new Error(`generated command has no exec line:\n${shim}`)
+  return line
+}
+
+/**
+ * Every environment assignment a generated command makes, in file order, scanning EVERY line of the
+ * shim (not only the exec line): a standalone `NAME=` / `export NAME=` line on POSIX, a `set NAME=` /
+ * `set "NAME=` line on Windows, and the inline `NAME=… exec …` assignments all count. Exhaustive by
+ * construction so that a new assignment anywhere in the file must be declared to pass.
+ */
+function shimAssignments(shim: string, platform: NodeJS.Platform): string[] {
+  const pattern = platform === 'win32'
+    ? /^\s*set\s+"?([A-Za-z_][A-Za-z0-9_]*)=/gimu
+    : /(?:^|\s)(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/gmu
+  return [...shim.matchAll(pattern)].map(match => match[1] ?? '')
 }
 
 afterEach(() => {
@@ -85,7 +106,11 @@ describe('desktop Host pnpm runtime', () => {
     expect(pnpm).toContain("npm_config_target='43.4.0'")
     expect(pnpm).toContain("npm_config_disturl='https://electronjs.org/headers'")
     expect(pnpm).toContain(`--import '${clearEnvironmentUrl}'`)
-    expect(pnpm.indexOf(`--import '${clearEnvironmentUrl}'`)).toBeLessThan(pnpm.indexOf('pnpm/bin/pnpm.mjs'))
+    // Scoped to the exec line: the stale-target preflight also names the pnpm entry, earlier in
+    // the file, so a whole-file indexOf would compare against the guard instead of the exec.
+    const posixExec = execLine(pnpm)
+    expect(posixExec.indexOf(`--import '${clearEnvironmentUrl}'`))
+      .toBeLessThan(posixExec.indexOf('pnpm/bin/pnpm.mjs'))
     const node = readFileSync(installation.nodeShimPath, 'utf8')
     expect(node).toContain(`ELECTRON_RUN_AS_NODE=1 exec`)
     expect(node).toContain(`--import '${clearEnvironmentUrl}' "$@"`)
@@ -222,7 +247,10 @@ describe('desktop Host pnpm runtime', () => {
     expect(pnpm).toContain('set "npm_config_runtime=electron"')
     expect(pnpm).toContain('set "npm_config_target=43.4.0"')
     expect(pnpm).toContain(`--import "${escapedClearEnvironmentUrl}"`)
-    expect(pnpm.indexOf(`--import "${escapedClearEnvironmentUrl}"`)).toBeLessThan(pnpm.indexOf('pnpm\\bin\\pnpm.mjs'))
+    // Scoped to the exec line for the same reason as the POSIX case above.
+    const windowsExec = execLine(pnpm)
+    expect(windowsExec.indexOf(`--import "${escapedClearEnvironmentUrl}"`))
+      .toBeLessThan(windowsExec.indexOf('pnpm\\bin\\pnpm.mjs'))
     const node = readFileSync(installation.nodeShimPath, 'utf8')
     expect(node).toContain('set "ELECTRON_RUN_AS_NODE=1"')
     expect(node).toContain(`--import "${escapedClearEnvironmentUrl}" %*`)
@@ -366,6 +394,224 @@ describe('desktop Host pnpm runtime', () => {
     installation.dispose()
   })
 
+  // --- issue #55: packageManager transparency -------------------------------------------------
+  //
+  // Measured at the current pin (.engineering/research/pnpm-shim-transparency.mjs): a shipped pnpm
+  // resolves the TARGET repository's `packageManager` pin by its own self-management, straight
+  // through this shim, cold and warm. That transparency is what lets an agent run `pnpm` inside a
+  // repo pinning a different pnpm with no PATH surgery — and nothing fenced it. These tests make
+  // it a defended invariant: the shim must not change the working directory pnpm resolves from,
+  // must forward argv verbatim, and must not assign anything that could steer that resolution.
+
+  it.each(['win32', 'linux'] as const)(
+    'assigns only Electron ABI settings on %s, never anything that steers pnpm',
+    (platform) => {
+      const stateDir = join(temporaryDirectory(), 'runtime')
+      const installation = installDesktopPnpmRuntime(
+        options(stateDir, platform, { PATH: platform === 'win32' ? 'C:\\Windows' : '/usr/bin' }),
+      )
+      const shim = readFileSync(installation.pnpmShimPath, 'utf8')
+
+      // Exhaustive over every line and order-sensitive: a new assignment anywhere in the shim fails
+      // here until it is declared, which is what stops a future
+      // `npm_config_manage_package_manager_versions=false` from landing quietly.
+      expect(shimAssignments(shim, platform)).toEqual([
+        'PATH',
+        'NODE',
+        'ELECTRON_RUN_AS_NODE',
+        'npm_config_runtime',
+        'npm_config_target',
+        'npm_config_disturl',
+      ])
+      installation.dispose()
+    },
+  )
+
+  it('runs pnpm in the target repository with its packageManager inputs untouched', () => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const targetRepo = join(root, 'target repo')
+    const captureEntry = join(root, 'capture.mjs')
+    const captureOutput = join(root, 'capture.json')
+    mkdirSync(targetRepo)
+    writeFileSync(join(targetRepo, 'package.json'), JSON.stringify({
+      name: 'target-repo',
+      packageManager: 'pnpm@11.17.0',
+    }))
+    writeFileSync(captureEntry, [
+      "import { readFileSync, writeFileSync } from 'node:fs'",
+      "import { join } from 'node:path'",
+      'writeFileSync(process.argv[2], JSON.stringify({',
+      '  cwd: process.cwd(),',
+      '  args: process.argv.slice(3),',
+      "  resolvedPin: JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8')).packageManager,",
+      '  corepackStrict: process.env.COREPACK_ENABLE_STRICT,',
+      '  corepackHome: process.env.COREPACK_HOME,',
+      '  pnpmHome: process.env.PNPM_HOME,',
+      '  manageVersions: process.env.npm_config_manage_package_manager_versions,',
+      '  registry: process.env.npm_config_registry,',
+      '}))',
+      '',
+    ].join('\n'))
+
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const environment: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH,
+      COREPACK_ENABLE_STRICT: '0',
+      COREPACK_HOME: join(root, 'corepack home'),
+      PNPM_HOME: join(root, 'pnpm home'),
+      npm_config_manage_package_manager_versions: 'true',
+      npm_config_registry: 'https://registry.example.invalid/',
+    }
+    const installation = installDesktopPnpmRuntime({
+      ...options(stateDir, platform, environment),
+      appExecutable: process.execPath,
+      pnpmBinPath: captureEntry,
+    })
+
+    const result = spawnSync(
+      process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : installation.pnpmShimPath,
+      process.platform === 'win32'
+        ? ['/d', '/s', '/c', `""${installation.pnpmShimPath}" "${captureOutput}" run dev:web"`]
+        : [captureOutput, 'run', 'dev:web'],
+      {
+        cwd: targetRepo,
+        encoding: 'utf8',
+        env: environment,
+        shell: false,
+        windowsVerbatimArguments: process.platform === 'win32',
+      },
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
+    expect(JSON.parse(readFileSync(captureOutput, 'utf8'))).toEqual({
+      // pnpm resolves `packageManager` from the working directory: the shim must not relocate it.
+      // Realpath both sides: macOS tmpdir() is /var/…, a symlink to /private/var/…, and the child's
+      // process.cwd() reports the resolved form (desktop-macos red on PR #65).
+      cwd: realpathSync(targetRepo),
+      resolvedPin: 'pnpm@11.17.0',
+      // Arguments reach pnpm verbatim, so `pnpm run dev:web` stays `pnpm run dev:web`.
+      args: ['run', 'dev:web'],
+      // Every self-management input survives the shim untouched.
+      corepackStrict: '0',
+      corepackHome: join(root, 'corepack home'),
+      pnpmHome: join(root, 'pnpm home'),
+      manageVersions: 'true',
+      registry: 'https://registry.example.invalid/',
+    })
+    installation.dispose()
+  })
+
+  it('clears the RunAsNode marker and nothing else', () => {
+    const stateDir = join(temporaryDirectory(), 'runtime')
+    const installation = installDesktopPnpmRuntime(options(stateDir, 'linux', { PATH: '/usr/bin' }))
+    const supplied: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH,
+      ELECTRON_RUN_AS_NODE: '1',
+      electron_run_as_node: 'legacy',
+      COREPACK_ENABLE_STRICT: '0',
+      COREPACK_HOME: '/corepack',
+      PNPM_HOME: '/pnpm',
+      npm_config_manage_package_manager_versions: 'true',
+      npm_config_registry: 'https://registry.example.invalid/',
+      npm_config_runtime: 'electron',
+    }
+    const result = spawnSync(process.execPath, [
+      '--import',
+      pathToFileURL(installation.clearEnvironmentPath).href,
+      '-e',
+      'process.stdout.write(JSON.stringify(process.env))',
+    ], { encoding: 'utf8', env: supplied })
+
+    expect(result.status, result.stderr).toBe(0)
+    const observed = JSON.parse(result.stdout) as NodeJS.ProcessEnv
+    // Two-direction: exactly the RunAsNode casings are gone, and every other entry is byte-identical.
+    const removed = Object.keys(supplied).filter(name => !(name in observed))
+    expect(removed.sort()).toEqual(['ELECTRON_RUN_AS_NODE', 'electron_run_as_node'])
+    for (const [name, value] of Object.entries(supplied)) {
+      if (removed.includes(name)) continue
+      expect(observed[name], `${name} must survive the preload`).toBe(value)
+    }
+    installation.dispose()
+  })
+
+  it('pins the shipped pnpm to an exact version', () => {
+    const manifest = JSON.parse(
+      readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+    ) as { dependencies?: Record<string, string> }
+    const pinned = manifest.dependencies?.pnpm
+
+    // The generated command records an absolute path into machine-global user data, so the shipped
+    // pnpm must not drift under a range: a bump is a reviewed act, not an install-time accident.
+    expect(pinned).toBeDefined()
+    expect(pinned).toMatch(/^\d+\.\d+\.\d+$/u)
+  })
+
+  // --- issue #55: stale recorded targets ------------------------------------------------------
+
+  it.each(['win32', 'linux'] as const)(
+    'guards both recorded targets before executing on %s',
+    (platform) => {
+      const stateDir = join(temporaryDirectory(), 'runtime')
+      const selected = options(stateDir, platform, {
+        PATH: platform === 'win32' ? 'C:\\Windows' : '/usr/bin',
+      })
+      const installation = installDesktopPnpmRuntime(selected)
+      const shim = readFileSync(installation.pnpmShimPath, 'utf8')
+
+      for (const target of [selected.appExecutable, selected.pnpmBinPath]) {
+        const guard = platform === 'win32'
+          ? `if not exist "${target.replaceAll('%', '%%')}" goto :dsh_stale_target_`
+          : `if [ ! -e '${target.replaceAll("'", `'"'"'`)}' ]; then`
+        expect(shim, `${platform} shim must preflight ${target}`).toContain(guard)
+        expect(shim.indexOf(guard)).toBeLessThan(shim.indexOf(execLine(shim)))
+      }
+      expect(shim).toContain('this generated command is stale and was not run.')
+      expect(shim).toContain('Restart DSH Desktop to regenerate it.')
+      installation.dispose()
+    },
+  )
+
+  it.each([
+    ['application executable', 'appExecutable'],
+    ['pnpm entry', 'pnpmBinPath'],
+  ] as const)('names the missing %s instead of failing with a bare interpreter error', (label, key) => {
+    const root = temporaryDirectory()
+    const stateDir = join(root, 'runtime')
+    const vanished = join(root, 'deleted worktree', key === 'appExecutable' ? 'electron' : 'pnpm.mjs')
+    const present = join(root, key === 'appExecutable' ? 'pnpm.mjs' : 'electron')
+    writeFileSync(present, '', { mode: 0o755 })
+    const platform = process.platform === 'win32' ? 'win32' : 'linux'
+    const environment: NodeJS.ProcessEnv = { PATH: process.env.PATH }
+    const installation = installDesktopPnpmRuntime({
+      ...options(stateDir, platform, environment),
+      appExecutable: key === 'appExecutable' ? vanished : present,
+      pnpmBinPath: key === 'pnpmBinPath' ? vanished : present,
+    })
+
+    const result = spawnSync(
+      process.platform === 'win32' ? process.env.ComSpec ?? 'cmd.exe' : installation.pnpmShimPath,
+      process.platform === 'win32'
+        ? ['/d', '/s', '/c', `""${installation.pnpmShimPath}" --version"`]
+        : ['--version'],
+      {
+        encoding: 'utf8',
+        env: environment,
+        shell: false,
+        windowsVerbatimArguments: process.platform === 'win32',
+      },
+    )
+
+    expect(result.error).toBeUndefined()
+    expect(result.status).toBe(78)
+    const diagnostic = `${result.stdout}${result.stderr}`
+    expect(diagnostic).toContain('this generated command is stale and was not run.')
+    expect(diagnostic).toContain(`missing ${label}: ${vanished}`)
+    expect(diagnostic).toContain('Restart DSH Desktop to regenerate it.')
+    installation.dispose()
+  })
+
   it('fails loud for unsupported platforms and unsafe generated values', () => {
     const root = temporaryDirectory()
     expect(() => installDesktopPnpmRuntime(options(join(root, 'runtime'), 'aix', { PATH: '/usr/bin' })))
@@ -378,6 +624,34 @@ describe('desktop Host pnpm runtime', () => {
 })
 
 describe('desktop Host dsh runtime', () => {
+  it('guards both recorded dsh targets before dsh.cmd executes on win32', () => {
+    const root = temporaryDirectory()
+    const appExecutable = join(root, 'DSH Desktop', 'DSH Desktop.exe')
+    const dshBootstrapPath = join(root, 'dsh-plugin-desktop', 'lib', 'dsh.js')
+    const installation = installDesktopDshRuntime({
+      platform: 'win32',
+      appExecutable,
+      dshBootstrapPath,
+      profileName: 'web',
+      homeDir: join(root, 'Harness home'),
+      installRecoveryStatePath: join(root, 'plugin-install-recovery', 'state.json'),
+      stateDir: join(root, 'runtime'),
+      environment: { Path: 'C:\\Windows' },
+    })
+    const shim = readFileSync(installation.dshShimPath, 'utf8')
+    const exec = shim.indexOf('--expose-internals')
+    expect(exec).toBeGreaterThan(0)
+    for (const target of [appExecutable, dshBootstrapPath]) {
+      const guard = `if not exist "${target.replaceAll('%', '%%')}" goto :dsh_stale_target_`
+      expect(shim, `dsh.cmd must preflight ${target}`).toContain(guard)
+      expect(shim.indexOf(guard)).toBeLessThan(exec)
+    }
+    expect(shim).toContain('this generated command is stale and was not run.')
+    expect(shim).toContain('Restart DSH Desktop to regenerate it.')
+    expect(shim).toContain('exit /b 78')
+    installation.dispose()
+  })
+
   it.runIf(process.platform === 'win32')('makes the active profile available to Host plugin child processes', () => {
     const root = temporaryDirectory()
     const stateDir = join(root, 'runtime')
