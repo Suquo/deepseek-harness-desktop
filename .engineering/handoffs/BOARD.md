@@ -26,14 +26,14 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
-- **Lane A (general, `claude/*`)**: FREE — gen-11 (Claude) delivered #55 (PR #65) and is retired. Next: gen-12 as CODEX on #64 (electron/dist non-extraction), worktree `~/.dsh-resolver-worktrees/issue-64` being prepared by the RM. Queue after: #67 → #70 → #46 → #30.
-- **Lane B (parametria-harness, `pm/*`)**: FREE — gen-14 (Claude) delivered #23 (PR #66) and is retired. Next: gen-15 as CODEX on #52 (route preflight banner), worktree `~/.dsh-resolver-worktrees/issue-52` being prepared by the RM.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 PR #72 open** (rc.8 → `dsh-v0.1.1-rc.2`; GUI-smoked in `~/.dsh-lane-c`); folding #71 (3 profile pins + pinSurface fence) per RM ruling; rebases after #65/#66 merge.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-12 (CODEX `dsh-lane-a`, w4:p2) on #64** (worktree install integrity; Linux repro confirmed by the RM). Queue after: #67 → #70 → #46 → #30.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-15 (CODEX `dsh-lane-b`, w4:p3) on #52** (boot-time route preflight banner). Queue after: #54 → #58 → #62.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 PR #72 in fix cycle 1** (REQUEST CHANGES: notices must be the win32+linux union; #71 fold; rebase over #65/#66).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: rc.2 pin bump (Lane C gen-5, PR #72 + #71 fold).** Lane B next: #52.
+- **In flight: #64 (Lane A gen-12) · #52 (Lane B gen-15) · rc.2 pin bump PR #72 + #71 fold (Lane C gen-5).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
