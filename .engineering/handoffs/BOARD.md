@@ -26,14 +26,14 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
-- **Lane A (general, `claude/*`)**: gen-13 (Codex) delivered #67 (PR #76). **Next: gen-14 (Codex) on #70** (stale i18n blob record + single-pair fence), worktree `~/.dsh-resolver-worktrees/issue-70` ready. Queue after: #73 → #46 → #30.
+- **Lane A (general, `claude/*`)**: gen-13 (Codex) delivered #67 (PR #76). **BUSY — gen-14 (CODEX `dsh-lane-a`, w4:p2) on #70** (stale i18n blob record + generalised note-pair fence). Queue after: #73 → #46 → #30.
 - **Lane B (parametria-harness, `pm/*`)**: gen-15 (Codex) delivered #52 (PR #75). **BUSY — gen-16 (CODEX `dsh-lane-b`, w4:p3) on #54** (read_image fallback; freeze-if-upstream-surgery). Queue after: #58 → #62.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-5 (last Claude gen) landed rc.2 (PR #72). Next spawn = CODEX: anywhere-labs overlay evaluation (301 commits behind).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: #54 (Lane B gen-16, grounding).**
+- **In flight: #54 (Lane B gen-16) · #70 (Lane A gen-14).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
