@@ -14,7 +14,7 @@
 
 **TWO FINISHED BRANCHES, NO PRs — the Windows generations died one step from opening them (2026-08-21):** `claude/issue-55-pnpm-shim` @ `07257aef30` (Lane A gen-10; spec 24/24, mutation proofs posted) and `pm/issue-23-evidence-surface` @ `55b2d0f68a` (Lane B gen-13; full gate green at that SHA, 9 mutation proofs). Both merge CLEAN onto current master (merge-tree). Resumption gens spawned to rebase → re-gate on Linux → open the PR.
 
-**UPSTREAM WATCH 2026-09-02: harness 7 releases behind** (pinned rc.8; `dsh-v0.1.1-rc.1/rc.2` 2026-08-21, `dsh-v0.1.2-alpha.1..5` through 2026-09-02; 1978 commits behind master). Overlay (anywhere-labs) 301 commits behind, 97 open PRs there. Lane C eval spawned: target the conservative `dsh-v0.1.1-rc.2` first (past the 24 h age gate; rc-track), report the break surface, freeze before PR if patches don't re-apply.
+**UPSTREAM 2026-09-02: RM RULED INHERIT `dsh-v0.1.1-rc.2`** (Lane C gen-5 eval green; branch `up/pin-0.1.1-rc.2`; PR pending GUI smoke). The 0.1.2-alpha line stays deferred until it reaches rc. Overlay (anywhere-labs) 301 commits behind — not yet evaluated.
 
 **28 merges lifetime.** In review: PR #65 (#55) and PR #66 (#23), both REQUEST CHANGES 2026-09-02 (fix cycles with Lane A gen-11 / Lane B gen-14). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
 
@@ -27,7 +27,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: **BUSY — gen-11 RESUMING #55** on the existing branch `claude/issue-55-pnpm-shim` (Herdr `dsh-lane-a`, w4:p2): rebase onto master, re-run the full gate on Linux, open the PR (`Closes #55`). Note: the shim work is Windows-runtime code; its spec runs headless on Linux, but the GUI-validated claims from gen-10 stay attributed to gen-10. Queue after: #64 (filed by gen-10) · #46 · #30.
 - **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-14 RESUMING #23** on `pm/issue-23-evidence-surface` (Herdr `dsh-lane-b`, w4:p3): rebase onto master (owner's profile commits touch `dsh-preset-parametria/profile/` — re-run the drift/profile-patch suites), re-gate, open the PR. Queue after: #52 → #54 → #58 → #62.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 EVAL of the rc.8 → `dsh-v0.1.1-rc.2` bump** in a worktree (background agent). Second lander vs #55 (`yarn.lock`) rebases.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 LANDING the rc.8 → `dsh-v0.1.1-rc.2` bump** (RM ruled INHERIT 2026-09-02 on a green eval: surface 181, 0 deletions, 1 split-in `dsh-authorization`, 7/7 patches accepted, one smoke regex widened). Now: GUI smoke in `~/.dsh-lane-c` → files follow-up `upstream` issues → PR. Second lander after #65/#66 (yarn.lock).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
