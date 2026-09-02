@@ -108,18 +108,33 @@ describe('published package surface', () => {
     })
   })
 
-  it('builds every subpath the manifest exports, so a dropped tsdown entry cannot leave a dangling export', () => {
-    // Standard 6, both directions on the Parametria subpaths (PR #66 R1): the
-    // manifest names `./lib/<name>.js`, so `tsdown.config.ts` must declare the
-    // `<name>` entry that produces it — and vice versa for these three.
-    const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
-    for (const subpath of [
+  it('keeps the Parametria manifest exports and tsdown entries exhaustive in both directions', () => {
+    // Standard 6, both directions (PR #66 R1): compare the sets discovered on
+    // both surfaces, then snapshot the complete expected set. This catches an
+    // entry added to either side, both sides, or with a mismatched source name.
+    const expected = [
       'parametria-capture',
       'parametria-evidence',
+      'parametria-read-image-fallback',
       'parametria-route-preflight',
-    ]) {
+    ]
+    const manifestEntries = Object.keys(manifest.exports ?? {})
+      .filter(subpath => subpath.startsWith('./parametria-'))
+      .map(subpath => subpath.slice(2))
+      .sort()
+    const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
+    const tsdownMatches = [...tsdown.matchAll(
+      /^\s*'(?<entry>parametria-[^']+)': 'src\/(?<source>parametria-[^']+)\.ts',$/gmu,
+    )]
+    const tsdownEntries = tsdownMatches.map(({ groups }) => {
+      expect(groups?.source).toBe(groups?.entry)
+      return groups?.entry
+    }).sort()
+
+    expect(manifestEntries).toEqual(expected)
+    expect(tsdownEntries).toEqual(expected)
+    for (const subpath of expected) {
       expect(manifest.exports).toHaveProperty(`./${subpath}`)
-      expect(tsdown).toMatch(new RegExp(`^\\s*'${subpath}': 'src/${subpath}\\.ts',$`, 'm'))
     }
   })
 
@@ -172,6 +187,10 @@ describe('published package surface', () => {
     expect(manifest.exports).toHaveProperty('./parametria-route-preflight', {
       types: './lib/types/parametria-route-preflight.d.ts',
       default: './lib/parametria-route-preflight.js',
+    })
+    expect(manifest.exports).toHaveProperty('./parametria-read-image-fallback', {
+      types: './lib/types/parametria-read-image-fallback.d.ts',
+      default: './lib/parametria-read-image-fallback.js',
     })
     expect(manifest.exports).not.toHaveProperty('./windows-acl-runner')
     expect(manifest.exports).not.toHaveProperty('./desktop-cli')
@@ -251,6 +270,23 @@ describe('published package surface', () => {
     ), 'utf8')
     expect(patch).toContain(marker)
     expect(installedBoot).toContain(marker)
+  })
+
+  it('patches read_image with the validated composition fallback seam', () => {
+    const patchPath = './patches/dsh-tool-fs@0.1.1-rc.2.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-tool-fs@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-tool-fs@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedToolFs = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch).toMatch(/^\+\t\tfallback = await ctx\.waterfall\("fs\/read-image-route", exec, \{$/mu)
+    expect(patch).toMatch(/^\+\t\t\tactivateFallback\?\.\(\);$/mu)
+    expect(installedToolFs).toMatch(/^\t\tfallback = await ctx\.waterfall\("fs\/read-image-route", exec, \{$/mu)
+    expect(installedToolFs).toMatch(/^\t\t\tactivateFallback\?\.\(\);$/mu)
   })
 
   it('patches the browse panel with the Windows native-picker icon bridge', () => {

@@ -16,6 +16,7 @@ export default defineConfig([
       'parametria-capture': 'src/parametria-capture.ts',
       'parametria-evidence': 'src/parametria-evidence.ts',
       'parametria-route-preflight': 'src/parametria-route-preflight.ts',
+      'parametria-read-image-fallback': 'src/parametria-read-image-fallback.ts',
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',

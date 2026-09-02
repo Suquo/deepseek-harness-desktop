@@ -1,0 +1,142 @@
+diff --git a/lib/index.js b/lib/index.js
+index e720306..2197922 100644
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -926,7 +926,7 @@ function imageMediaTypeForPath(filePath) {
+ /**
+-* Enforce the strict image-capability gate for the calling route. Resolves the
+-* session's latest routed provider/model (request header config, then agent
+-* options) and requires the exact resolved route to declare `image` input explicitly.
++* Enforce the strict image-capability gate for the calling route first. A known
++* text-only route may ask composition for a fallback, whose exact model must
++* also declare `image` input before the tool proceeds.
+ * @param ctx - the plugin context used to resolve the optional `llm` service.
+ * @param exec - the tool-execution context supplying the calling agent.
+ * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
+@@ -938,7 +938,45 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
+ 	const llm = ctx.get("llm");
+ 	if (provider === void 0 || model === void 0 || llm === void 0) throw new Error(`cannot read "${requestedPath}" as an image: the current model route could not be resolved`);
+ 	const active = await llm.resolveModelInfo(provider, model, exec.signal);
+-	if (active.inputModalities === void 0 || !active.inputModalities.includes("image")) throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
++	if (active.inputModalities?.includes("image")) return;
++	const refusal = () => new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
++	const warnFallback = (reason, error) => ctx.logger.warn(`tool-fs: read_image fallback ${reason} for "${requestedPath}"${error === void 0 ? "" : ` (${error instanceof Error ? error.message : String(error)})`}; preserving the original refusal`);
++	let fallback;
++	try {
++		fallback = await ctx.waterfall("fs/read-image-route", exec, {
++			provider,
++			model
++		}, () => Promise.resolve(void 0));
++	} catch (error) {
++		exec.signal.throwIfAborted();
++		warnFallback("selection failed", error);
++		throw refusal();
++	}
++	if (fallback === void 0) throw refusal();
++	if (typeof fallback.provider !== "string" || fallback.provider.length === 0 || typeof fallback.model !== "string" || fallback.model.length === 0 || typeof fallback.activate !== "function") {
++		warnFallback("candidate is malformed");
++		throw refusal();
++	}
++	let selected;
++	try {
++		selected = await llm.resolveModelInfo(fallback.provider, fallback.model, exec.signal);
++	} catch (error) {
++		exec.signal.throwIfAborted();
++		warnFallback(`route "${fallback.provider}/${fallback.model}" is unreachable`, error);
++		throw refusal();
++	}
++	if (selected.inputModalities === void 0 || !selected.inputModalities.includes("image")) {
++		warnFallback(`route "${fallback.provider}/${fallback.model}" does not declare image input`);
++		throw refusal();
++	}
++	return () => {
++		try {
++			fallback.activate();
++		} catch (error) {
++			warnFallback(`route "${fallback.provider}/${fallback.model}" activation failed`, error);
++			throw refusal();
++		}
++	};
+ }
+ /**
+ * Re-brand a structured image outcome into the durable attachment reference an
+@@ -1033,7 +1071,7 @@ function applyReadImageTool(ctx) {
+ 			const attachments = ctx.get("attachments");
+ 			if (attachments === void 0) throw new Error(`cannot read "${args.file_path}" as an image: no attachment service is mounted`);
+ 			if (!attachments.imageLimits.mediaTypes.includes(mediaType)) throw new Error(`cannot read "${args.file_path}": ${mediaType} images are not accepted by this deployment`);
+-			await assertImageCapableRoute(ctx, exec, args.file_path);
++			const activateFallback = await assertImageCapableRoute(ctx, exec, args.file_path);
+ 			const { target, info } = await resolveRegularReadTarget(ctx, exec, args.file_path);
+ 			const byteCap = Math.min(attachments.imageLimits.maxImageBytes, attachments.imageLimits.maxMessageImageBytes);
+ 			const data = await ctx.fs.readBytes(target, exec.signal, byteCap);
+@@ -1058,6 +1096,7 @@ function applyReadImageTool(ctx) {
+ 				kind: "present",
+ 				version: info.version
+ 			}, exec);
++			activateFallback?.();
+ 			return {
+ 				path: target.displayPath,
+ 				image: {
+diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
+index 3a24668..4cf1549 100644
+--- a/lib/types/index.d.ts
++++ b/lib/types/index.d.ts
+@@ -6,6 +6,7 @@
+  */
+ import type { Context } from '@deepseek-ai/cordis';
+ import z from '@deepseek-ai/schemastery';
++export type { ImageRouteFallback } from './read-image.js';
+ /** Cordis plugin name used by loader diagnostics. */
+ export declare const name = "tool-fs";
+ /** Services required by the filesystem tool suite. */
+diff --git a/lib/types/read-image.d.ts b/lib/types/read-image.d.ts
+index 6528a13..de670dd 100644
+--- a/lib/types/read-image.d.ts
++++ b/lib/types/read-image.d.ts
+@@ -7,8 +7,28 @@
+  * failure after filesystem and attachment work.
+  * @module @deepseek-ai/dsh-tool-fs/src/read-image
+  */
+ import type { Context } from '@deepseek-ai/cordis';
+ import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment';
+ import type { ToolExecution } from '@deepseek-ai/dsh-tools';
++/** Exact route a composition may nominate after the calling route rejects image input. */
++export interface ImageRouteFallback {
++    provider: string;
++    model: string;
++    /** Commit routing state after this route passes validation and the image is durably stored. */
++    activate(): void;
++}
++declare module '@deepseek-ai/cordis' {
++    interface Events {
++        /**
++         * Optionally nominate a route for one `read_image` call whose calling
++         * model is known text-only. The tool validates the returned exact route
++         * with the same fail-closed modality rule before invoking `activate`.
++         */
++        'fs/read-image-route'(exec: ToolExecution, current: {
++            provider: string;
++            model: string;
++        }, next: () => Promise<ImageRouteFallback | undefined>): Promise<ImageRouteFallback | undefined>;
++    }
++}
+ /** The structured outcome declared by the `read_image` output schema. */
+ export interface ImageReadValue {
+@@ -56,7 +76,7 @@ export declare function imageMediaTypeForPath(filePath: string): ImageMediaType
+ /**
+- * Enforce the strict image-capability gate for the calling route. Resolves the
+- * session's latest routed provider/model (request header config, then agent
+- * options) and requires the exact resolved route to declare `image` input explicitly.
++ * Enforce the strict image-capability gate for the calling route first. A known
++ * text-only route may ask composition for a fallback, whose exact model must
++ * also declare `image` input before the tool proceeds.
+  * @param ctx - the plugin context used to resolve the optional `llm` service.
+  * @param exec - the tool-execution context supplying the calling agent.
+  * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
+@@ -63,5 +83,5 @@ export declare function imageMediaTypeForPath(filePath: string): ImageMediaType
+  */
+-export declare function assertImageCapableRoute(ctx: Context, exec: ToolExecution, requestedPath: string): Promise<void>;
++export declare function assertImageCapableRoute(ctx: Context, exec: ToolExecution, requestedPath: string): Promise<void | (() => void)>;
+ /**
+  * Re-brand a structured image outcome into the durable attachment reference an
+  * `ImageBlock` carries.

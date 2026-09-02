@@ -158,6 +158,31 @@
 - id: parametria-route-preflight
   name: dsh-plugin-desktop/parametria-route-preflight
 
+# ── text-session image fallback (issue #54) ──
+#
+# `read_image` ordinarily refuses before filesystem I/O when the exact calling
+# route is text-only. The maintained dsh-tool-fs patch preserves that gate but
+# lets this Parametria-only row nominate a fallback; the gate itself resolves
+# the exact model metadata and accepts it only when `image` is declared. The
+# remainder of that turn runs on the vision route so the committed image block
+# reaches a model that can inspect it, then the prior route is restored. Those
+# remaining requests are billed to Gemini, lose cache reuse from the original
+# provider, and omit `reasoningEffort` because effort values are model-specific.
+# On a later restored text-only turn, rc.2 projects the historical image block
+# to its stable text-only attachment placeholder before adapter dispatch.
+#
+# The target is the same independently-owned, machine-wide route used by
+# `subagent_validator`. Cordis plugin configs are row-local and offer no config
+# reference interpolation across this top-level row and nested `agentOptions`,
+# so the exact pair stays explicit and preset drift tests enforce equality. The
+# boot preflight already makes a missing provider loud.
+# No modlens row participates — it remains the description-style alternative.
+- id: parametria-read-image-fallback
+  name: dsh-plugin-desktop/parametria-read-image-fallback
+  config:
+    provider: parametria-vision
+    model: google/gemini-3.6-flash
+
 # ── background jobs ────────────────────────────────────────────────────────
 
 # Only the model-facing controls. The task REGISTRY stays on the host plane:

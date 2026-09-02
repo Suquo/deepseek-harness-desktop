@@ -875,7 +875,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-attachment-local@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-attachment-local@npm:0.1.1-rc.2, @deepseek-ai/dsh-attachment-local@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-attachment-local@npm:0.1.1-rc.2"
   dependencies:
@@ -2007,7 +2007,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-fs-observation-policy@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-fs-observation-policy@npm:0.1.1-rc.2, @deepseek-ai/dsh-fs-observation-policy@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-fs-observation-policy@npm:0.1.1-rc.2"
   peerDependencies:
@@ -3458,7 +3458,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-tool-fs@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-tool-fs@npm:0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-tool-fs@npm:0.1.1-rc.2"
   dependencies:
@@ -3477,6 +3477,28 @@ __metadata:
     "@deepseek-ai/dsh-tools": ^0.1.1-rc.2
     "@deepseek-ai/dsh-user-approval": ^0.1.1-rc.2
   checksum: 10c0/b504f02e2ae52ba95fbe4e7c6df3c27bcbe57db2bef963f7b63e761d7a89fc0bbb3598a7c837eb6c4386a7e69cb4900db0e05883130490b6c72e10026fb33338
+  languageName: node
+  linkType: hard
+
+"@deepseek-ai/dsh-tool-fs@patch:@deepseek-ai/dsh-tool-fs@npm%3A0.1.1-rc.2#./patches/dsh-tool-fs@0.1.1-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
+  version: 0.1.1-rc.2
+  resolution: "@deepseek-ai/dsh-tool-fs@patch:@deepseek-ai/dsh-tool-fs@npm%3A0.1.1-rc.2#./patches/dsh-tool-fs@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=d5ce09&locator=deepseek-harness-desktop%40workspace%3A."
+  dependencies:
+    "@deepseek-ai/schemastery": "npm:^3.18.1"
+    diff: "npm:^9.0.0"
+  peerDependencies:
+    "@deepseek-ai/cordis": ^4.0.1
+    "@deepseek-ai/dsh-attachment": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-fs": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-invariants": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-llm": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-sandbox": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-sandbox-policy": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-session": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-system-prompt": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-tools": ^0.1.1-rc.2
+    "@deepseek-ai/dsh-user-approval": ^0.1.1-rc.2
+  checksum: 10c0/9837082d97676fdf3dcfae2737a1d888a78f06c438d2d6aa74592c880f45dff3d9feb4f47297e6dc7f7aba2c6bf8ab990e792f08f1c0b9067ccccf8ceb5123d7
   languageName: node
   linkType: hard
 
@@ -7251,6 +7273,7 @@ __metadata:
     "@deepseek-ai/dsh-app-boot": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-atomic-write": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-attachment": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-attachment-local": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-authorization": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-base": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-bash-local": "npm:0.1.1-rc.2"
@@ -7284,6 +7307,7 @@ __metadata:
     "@deepseek-ai/dsh-file-reference": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-fs": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-fs-local": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-fs-observation-policy": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-goal": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-home-paths": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-host-apiproxy": "npm:0.1.1-rc.2"
@@ -7331,6 +7355,7 @@ __metadata:
     "@deepseek-ai/dsh-terminal": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-timeout": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-token-meter": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-tool-fs": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tool-subagent": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tool-todo": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-tool-workflow": "npm:0.1.1-rc.2"

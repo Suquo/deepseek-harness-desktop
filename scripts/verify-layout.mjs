@@ -299,6 +299,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-terminal',
     '@deepseek-ai/dsh-timeout',
     '@deepseek-ai/dsh-token-meter',
+    '@deepseek-ai/dsh-tool-fs',
     '@deepseek-ai/dsh-tool-todo',
     '@deepseek-ai/dsh-tool-workflow',
     '@deepseek-ai/dsh-tools',
@@ -310,12 +311,14 @@ const pinSurface = [
     '@deepseek-ai/dsh-web-app',
     '@deepseek-ai/dsh-workflow',
   ]],
-  // Test-only pins. These three are NOT product dependencies: they exist so
-  // `tests/subagent-error-surface.spec.ts` can mount the real host services a
-  // delegating parent needs (issue #40) instead of doubling them. They still
-  // move with the pin, so they belong on the recorded surface.
+  // Test-only pins. These five are NOT product dependencies: they exist so
+  // focused integration tests can mount the real host services for delegation
+  // (issue #40) and image admission (issue #54) instead of doubling them. They
+  // still move with the pin, so they belong on the recorded surface.
   ['dsh-plugin-desktop/package.json', 'devDependencies', [
     '@deepseek-ai/dsh-agent-loop',
+    '@deepseek-ai/dsh-attachment-local',
+    '@deepseek-ai/dsh-fs-observation-policy',
     '@deepseek-ai/dsh-subagent-spawn-in-process',
     '@deepseek-ai/dsh-tool-subagent',
   ]],
@@ -508,6 +511,7 @@ const patchedPackages = [
   ['@deepseek-ai/dsh-sandbox-windows-acl', ['caret', 'exact']],
   ['@deepseek-ai/dsh-subagent', ['caret', 'exact']],
   ['@deepseek-ai/dsh-subagent-in-process-driver', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-tool-fs', ['caret', 'exact']],
 ]
 const observedPatched = [...patchedShapes].sort(([left], [right]) => left.localeCompare(right))
 if (JSON.stringify(observedPatched) !== JSON.stringify(patchedPackages)) {
