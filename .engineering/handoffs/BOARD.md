@@ -24,7 +24,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
+- **Lane runtime (owner rulings 2026-09-02)**: all resolver spawns are Codex `gpt-5.6-sol` high with the 'Approve for me' preset (`-a on-request -c approvals_reviewer=auto_review`; recipe in repo-manager-charter.md) — applies to NEW spawns, in-flight lanes (A gen-14 #70, B gen-16 #54, spawned with `-a never`) finish their cycle. RM relaunches in Claude AUTO mode (`--permission-mode auto`).
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: gen-13 (Codex) delivered #67 (PR #76). **BUSY — gen-14 (CODEX `dsh-lane-a`, w4:p2) on #70** (stale i18n blob record + generalised note-pair fence). Queue after: #73 → #46 → #30.
 - **Lane B (parametria-harness, `pm/*`)**: gen-15 (Codex) delivered #52 (PR #75). **BUSY — gen-16 (CODEX `dsh-lane-b`, w4:p3) on #54** (read_image fallback; freeze-if-upstream-surgery). Queue after: #58 → #62.
