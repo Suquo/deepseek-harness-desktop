@@ -3482,7 +3482,7 @@ __metadata:
 
 "@deepseek-ai/dsh-tool-fs@patch:@deepseek-ai/dsh-tool-fs@npm%3A0.1.1-rc.2#./patches/dsh-tool-fs@0.1.1-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.1-rc.2
-  resolution: "@deepseek-ai/dsh-tool-fs@patch:@deepseek-ai/dsh-tool-fs@npm%3A0.1.1-rc.2#./patches/dsh-tool-fs@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=7a85db&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-tool-fs@patch:@deepseek-ai/dsh-tool-fs@npm%3A0.1.1-rc.2#./patches/dsh-tool-fs@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=d5ce09&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     "@deepseek-ai/schemastery": "npm:^3.18.1"
     diff: "npm:^9.0.0"
@@ -3498,7 +3498,7 @@ __metadata:
     "@deepseek-ai/dsh-system-prompt": ^0.1.1-rc.2
     "@deepseek-ai/dsh-tools": ^0.1.1-rc.2
     "@deepseek-ai/dsh-user-approval": ^0.1.1-rc.2
-  checksum: 10c0/62d305c4153563494dc036099775fdae32e5626a0f012fa8372ca046f251c18e5c4ce7ab40c1cf8f1ff019c046e840ac091eec4674e6c4f7b8021e94deaaffe3
+  checksum: 10c0/9837082d97676fdf3dcfae2737a1d888a78f06c438d2d6aa74592c880f45dff3d9feb4f47297e6dc7f7aba2c6bf8ab990e792f08f1c0b9067ccccf8ceb5123d7
   languageName: node
   linkType: hard
 

@@ -272,6 +272,23 @@ describe('published package surface', () => {
     expect(installedBoot).toContain(marker)
   })
 
+  it('patches read_image with the validated composition fallback seam', () => {
+    const patchPath = './patches/dsh-tool-fs@0.1.1-rc.2.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh-tool-fs@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-tool-fs@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
+    })
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedToolFs = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh-tool-fs/lib/index.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch).toMatch(/^\+\t\tfallback = await ctx\.waterfall\("fs\/read-image-route", exec, \{$/mu)
+    expect(patch).toMatch(/^\+\t\t\tactivateFallback\?\.\(\);$/mu)
+    expect(installedToolFs).toMatch(/^\t\tfallback = await ctx\.waterfall\("fs\/read-image-route", exec, \{$/mu)
+    expect(installedToolFs).toMatch(/^\t\t\tactivateFallback\?\.\(\);$/mu)
+  })
+
   it('patches the browse panel with the Windows native-picker icon bridge', () => {
     const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.1-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({

@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index dbaf6a4..1e61ba9 100644
+index e720306..2197922 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -926,7 +926,7 @@ function imageMediaTypeForPath(filePath) {
@@ -13,44 +13,72 @@ index dbaf6a4..1e61ba9 100644
  * @param ctx - the plugin context used to resolve the optional `llm` service.
  * @param exec - the tool-execution context supplying the calling agent.
  * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
-@@ -940 +940,29 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
+@@ -938,7 +938,45 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
+ 	const llm = ctx.get("llm");
+ 	if (provider === void 0 || model === void 0 || llm === void 0) throw new Error(`cannot read "${requestedPath}" as an image: the current model route could not be resolved`);
+ 	const active = await llm.resolveModelInfo(provider, model, exec.signal);
 -	if (active.inputModalities === void 0 || !active.inputModalities.includes("image")) throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
 +	if (active.inputModalities?.includes("image")) return;
 +	const refusal = () => new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
++	const warnFallback = (reason, error) => ctx.logger.warn(`tool-fs: read_image fallback ${reason} for "${requestedPath}"${error === void 0 ? "" : ` (${error instanceof Error ? error.message : String(error)})`}; preserving the original refusal`);
 +	let fallback;
 +	try {
 +		fallback = await ctx.waterfall("fs/read-image-route", exec, {
 +			provider,
 +			model
 +		}, () => Promise.resolve(void 0));
-+	} catch {
++	} catch (error) {
 +		exec.signal.throwIfAborted();
++		warnFallback("selection failed", error);
 +		throw refusal();
 +	}
 +	if (fallback === void 0) throw refusal();
-+	if (typeof fallback.provider !== "string" || fallback.provider.length === 0 || typeof fallback.model !== "string" || fallback.model.length === 0 || typeof fallback.activate !== "function") throw refusal();
++	if (typeof fallback.provider !== "string" || fallback.provider.length === 0 || typeof fallback.model !== "string" || fallback.model.length === 0 || typeof fallback.activate !== "function") {
++		warnFallback("candidate is malformed");
++		throw refusal();
++	}
 +	let selected;
 +	try {
 +		selected = await llm.resolveModelInfo(fallback.provider, fallback.model, exec.signal);
-+	} catch {
++	} catch (error) {
 +		exec.signal.throwIfAborted();
++		warnFallback(`route "${fallback.provider}/${fallback.model}" is unreachable`, error);
 +		throw refusal();
 +	}
-+	if (selected.inputModalities === void 0 || !selected.inputModalities.includes("image")) throw refusal();
++	if (selected.inputModalities === void 0 || !selected.inputModalities.includes("image")) {
++		warnFallback(`route "${fallback.provider}/${fallback.model}" does not declare image input`);
++		throw refusal();
++	}
 +	return () => {
 +		try {
 +			fallback.activate();
-+		} catch {
++		} catch (error) {
++			warnFallback(`route "${fallback.provider}/${fallback.model}" activation failed`, error);
 +			throw refusal();
 +		}
 +	};
-@@ -1036 +1064 @@ function applyReadImageTool(ctx) {
+ }
+ /**
+ * Re-brand a structured image outcome into the durable attachment reference an
+@@ -1033,7 +1071,7 @@ function applyReadImageTool(ctx) {
+ 			const attachments = ctx.get("attachments");
+ 			if (attachments === void 0) throw new Error(`cannot read "${args.file_path}" as an image: no attachment service is mounted`);
+ 			if (!attachments.imageLimits.mediaTypes.includes(mediaType)) throw new Error(`cannot read "${args.file_path}": ${mediaType} images are not accepted by this deployment`);
 -			await assertImageCapableRoute(ctx, exec, args.file_path);
 +			const activateFallback = await assertImageCapableRoute(ctx, exec, args.file_path);
-@@ -1060,0 +1089 @@ function applyReadImageTool(ctx) {
+ 			const { target, info } = await resolveRegularReadTarget(ctx, exec, args.file_path);
+ 			const byteCap = Math.min(attachments.imageLimits.maxImageBytes, attachments.imageLimits.maxMessageImageBytes);
+ 			const data = await ctx.fs.readBytes(target, exec.signal, byteCap);
+@@ -1058,6 +1096,7 @@ function applyReadImageTool(ctx) {
+ 				kind: "present",
+ 				version: info.version
+ 			}, exec);
 +			activateFallback?.();
+ 			return {
+ 				path: target.displayPath,
+ 				image: {
 diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
-index b4f19db..86d0f04 100644
+index 3a24668..4cf1549 100644
 --- a/lib/types/index.d.ts
 +++ b/lib/types/index.d.ts
 @@ -6,6 +6,7 @@
@@ -62,7 +90,7 @@ index b4f19db..86d0f04 100644
  export declare const name = "tool-fs";
  /** Services required by the filesystem tool suite. */
 diff --git a/lib/types/read-image.d.ts b/lib/types/read-image.d.ts
-index e77a240..670af34 100644
+index 6528a13..de670dd 100644
 --- a/lib/types/read-image.d.ts
 +++ b/lib/types/read-image.d.ts
 @@ -7,8 +7,28 @@

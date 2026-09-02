@@ -109,17 +109,17 @@ decision is "inherit" or "adapt".
 3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
    **This paragraph is the authoritative statement of what that surface holds; the
    rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
-   restating the arithmetic.** At `0.1.1-rc.2` it is **184** entries:
+   restating the arithmetic.** At `0.1.1-rc.2` it is **189** entries:
 
    | Where | Entries | Enforced by |
    |---|---|---|
-   | `dsh-plugin-desktop/package.json` `dependencies` | 99 | `pinSurface` |
-   | `dsh-plugin-desktop/package.json` `devDependencies` | 3 | `pinSurface` |
+   | `dsh-plugin-desktop/package.json` `dependencies` | 100 | `pinSurface` |
+   | `dsh-plugin-desktop/package.json` `devDependencies` | 5 | `pinSurface` |
    | `dsh-community-market/package.json` `devDependencies` | 38 | `pinSurface` |
    | `dsh-community-market/package.json` `peerDependencies` | 28 | `pinSurface` |
    | `dsh-preset-parametria/profile/package.json` `dependencies` | 3 | `pinSurface` |
-   | root `package.json` `resolutions` selectors | 13 | `patchedPackages` |
-   | **total** | **184** | |
+   | root `package.json` `resolutions` selectors | 15 | `patchedPackages` |
+   | **total** | **189** | |
 
    **The fifth row is not a workspace manifest**, and that is why it went
    unguarded until 0.1.1-rc.2. It is the profile TEMPLATE
@@ -276,6 +276,7 @@ Per-patch specifics as of `0.1.1-rc.2`:
 | `dsh-client-ui-directory-picker-browse` | `lib/client.js` + 2 `.d.ts` | directory browse UI | 14 hunks — by far the largest; expect the most conflict here. **The only patch rc.8 actually broke**: its bundler now emits `DirectoryBrowser_module_css_default` alphabetically sorted, which moved a pure-insertion point. Re-cut with the added key in its alphabetical slot so the context survives the next sort. That re-cut held: all 14 hunks applied unchanged at 0.1.1-rc.2. |
 | `dsh-client-ui-workspace` | `lib/client.js` | workspace client UI | — |
 | `dsh-llm-deepseek` | `lib/index.js` (response translation) | **provider wire** | Charter rule: a change to what reaches the provider's wire is not resolved by a green gate. Keep the issue open pending a live provider datum. Relocated 134 lines at rc.8 and a further ~742 lines at 0.1.1-rc.2 (patched region moved from line 321 to 1063), content unchanged — the surrounding `translate` streaming `tool_calls` loop is identical. |
+| `dsh-tool-fs` | `lib/index.js` + `lib/types/index.d.ts` + `lib/types/read-image.d.ts` | `read_image` exact-modality fallback seam and activation after durable image admission | Re-validate the `fs/read-image-route` event contract, exact fallback model lookup, fail-closed refusal/logging, and post-admission activation. Re-check the upstream-owned `fs/` namespace for a future event-name collision. |
 | `dsh-subagent` | `lib/index.js` (export list) + `lib/types/out-of-process.d.ts` | the exported `limitSubagentDiagnostic` seam — the 4096-byte UTF-8-safe diagnostic budget the in-process driver borrows | Two zero-context hunks over a single-line barrel export list: any release that adds or removes ONE export in that list moves the whole line and the hunk fails by content. Applied clean at 0.1.1-rc.2. Its pair is `dsh-subagent-in-process-driver` — the two must move together or the driver's import resolves to nothing. |
 | `dsh-subagent-in-process-driver` | `lib/index.js` | in-process subagent failure diagnostics: the child's terminal turn failure surfaces as the run's `diagnostic` instead of a bare stop reason | 4 hunks, one of which is the same barrel-import single-line hazard as `dsh-subagent` above. Applied clean at 0.1.1-rc.2. |
 | `dsh-sandbox-windows-acl` | `lib/types-CNjZgO4h.js` | Windows ACL sandbox spawn | **Hash-named target.** The bundler's content hash can change across releases, and then this patch fails by *path*, not by content — the target must be re-identified before the hunks can be judged. It did **not** fire at rc.8 or at 0.1.1-rc.2: the filename `lib/types-CNjZgO4h.js` has now held across three releases. Treat it as a hazard to check, not one that fires every time. |
@@ -346,7 +347,7 @@ this document lie about the tree it describes:
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.
 
-**The 184-entry bump surface is not the whole version-shaped surface, and this document
+**The 189-entry bump surface is not the whole version-shaped surface, and this document
 used to read as though it were.** `check:layout` fences the manifests; roughly 220
 further literals live outside them and are covered by other gates or by nothing at all.
 At rc.8 they were: `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` (regenerate with
@@ -361,4 +362,3 @@ note is committed), the `bug_report.yml` version example, and the preset profile
 comment naming the pin its observation was derived at. `.engineering/research/` is
 deliberately **not** on this list: those files are stamped with the version they were
 derived at and re-stamping them without re-deriving them would be a false claim.
-

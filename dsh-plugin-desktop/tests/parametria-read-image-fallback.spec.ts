@@ -9,6 +9,7 @@ import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import {
   CallId,
+  createUserMessage,
   LlmAdapter,
   LlmRuntime,
   type GenerateOptions,
@@ -33,6 +34,8 @@ const PNG_1X1 = Buffer.from(
 const signal = new AbortController().signal
 
 class ModalityAdapter extends LlmAdapter {
+  readonly requests: GenerateOptions[] = []
+
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({
       provider,
@@ -42,7 +45,8 @@ class ModalityAdapter extends LlmAdapter {
     })
   }
 
-  override async *stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
+  override async *stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
+    this.requests.push(options)
     await Promise.resolve()
   }
 }
@@ -83,15 +87,16 @@ async function setup(config = {
   await ctx.plugin(FsPolicy)
   await ctx.plugin(LocalAttachmentStore, { dshHome: attachmentHome })
   await ctx.plugin(LlmRuntime)
-  ctx.llm.registerAdapter(['session-text', 'parametria-vision'], new ModalityAdapter())
+  const adapter = new ModalityAdapter()
+  ctx.llm.registerAdapter(['session-text', 'parametria-vision'], adapter)
   if (install) installReadImageFallback(ctx, config)
   await ctx.plugin(ToolFs)
-  return ctx
+  return { ctx, adapter }
 }
 
-async function readImage(ctx: Context, agent: Agent) {
+async function readImage(ctx: Context, agent: Agent, executionSignal = signal) {
   return ctx.tools.execute({
-    signal,
+    signal: executionSignal,
     callId: CallId(`fallback-image-${++nextCall}`),
     name: 'read_image',
     arguments: { file_path: 'red.png' },
@@ -105,19 +110,20 @@ function resolveRequestRoute(
   config: LlmCallConfig,
   turn = 1,
   step = 2,
+  requestSignal = signal,
 ) {
   return ctx.waterfall('agent/request', {
     agent,
     turn,
     step,
-    signal,
+    signal: requestSignal,
   }, () => Promise.resolve(config))
 }
 
 describe('patched read_image modality gate', () => {
   it('commits the image for a text session and routes the rest of that turn through vision', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup()
+    const { ctx } = await setup()
     const original = {
       provider: 'session-text',
       model: 'text-model',
@@ -140,7 +146,7 @@ describe('patched read_image modality gate', () => {
 
   it('restores the complete prior config after the fallback turn', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup()
+    const { ctx } = await setup()
     const original = {
       provider: 'session-text',
       model: 'text-model',
@@ -165,9 +171,52 @@ describe('patched read_image modality gate', () => {
     expect(await resolveRequestRoute(ctx, agent, restored, 2, 2)).toEqual(restored)
   })
 
+  it('projects the historical tool-result image to stable text on the restored text route', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const { ctx, adapter } = await setup()
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
+    const result = await readImage(ctx, agent)
+    expect(result.isError).toBe(false)
+    await resolveRequestRoute(ctx, agent, original, 1, 2)
+    const restored = await resolveRequestRoute(ctx, agent, {
+      provider: 'parametria-vision',
+      model: 'vision-model',
+    }, 2, 1)
+
+    const history = createUserMessage({
+      content: [{
+        type: 'tool-result',
+        toolCallId: CallId('historical-read-image'),
+        content: result.content,
+      }],
+      source: { kind: 'plugin', plugin: 'parametria-read-image-fallback-test' },
+    })
+    for await (const _chunk of ctx.llm.stream({ ...restored, messages: [history], signal })) {
+      // The adapter intentionally yields no response; only its request boundary matters.
+    }
+
+    const dispatched = adapter.requests.at(-1)
+    expect(dispatched).toMatchObject(original)
+    const projected = dispatched?.messages[0]?.content[0]
+    expect(projected?.type).toBe('tool-result')
+    if (projected?.type !== 'tool-result') throw new Error('missing projected tool result')
+    expect(projected.content).toEqual([
+      result.content[0],
+      {
+        type: 'text',
+        text: expect.stringMatching(
+          /^\[image omitted because this model accepts text only; attachment sha256:[0-9a-f]{8}\]$/u,
+        ),
+      },
+    ])
+    expect(result.content[1]?.type).toBe('image')
+  })
+
   it('keeps the fallback active when turn-stopping steering continues the same turn', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup()
+    const { ctx } = await setup()
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
     await resolveRequestRoute(ctx, agent, original, 1, 1)
@@ -182,9 +231,38 @@ describe('patched read_image modality gate', () => {
     })
   })
 
+  it('clears an active fallback when the agent is disposed mid-turn', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const { ctx } = await setup()
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
+    await readImage(ctx, agent)
+
+    ctx.emit('agent/disposed', { agent })
+
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
+  })
+
+  it('restores on the next turn after cancellation without a turn-stopping event', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const { ctx } = await setup()
+    const original = { provider: 'session-text', model: 'text-model' }
+    const fallback = { provider: 'parametria-vision', model: 'vision-model' }
+    const agent = fakeAgent(original)
+    const activeTurn = new AbortController()
+    await resolveRequestRoute(ctx, agent, original, 1, 1, activeTurn.signal)
+    await readImage(ctx, agent, activeTurn.signal)
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2, activeTurn.signal)).toEqual(fallback)
+
+    activeTurn.abort(new Error('turn cancelled'))
+
+    expect(await resolveRequestRoute(ctx, agent, fallback, 2, 1)).toEqual(original)
+  })
+
   it('preserves a model selection changed before restoration', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup()
+    const { ctx } = await setup()
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
     await resolveRequestRoute(ctx, agent, original, 1, 1)
@@ -196,7 +274,8 @@ describe('patched read_image modality gate', () => {
 
   it('does not activate an image-ineligible fallback', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup({ provider: 'session-text', model: 'text-model' })
+    const { ctx } = await setup({ provider: 'session-text', model: 'text-model' })
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
     await resolveRequestRoute(ctx, agent, original, 1, 1)
@@ -210,12 +289,16 @@ describe('patched read_image modality gate', () => {
         text: expect.stringContaining('does not declare image input'),
       }),
     ])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining(
+      'route "session-text/text-model" does not declare image input',
+    ))
     expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
   })
 
   it('preserves the upstream refusal when the configured fallback route is unavailable', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup({ provider: 'missing-route', model: 'missing-model' })
+    const { ctx } = await setup({ provider: 'missing-route', model: 'missing-model' })
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
     await resolveRequestRoute(ctx, agent, original, 1, 1)
@@ -229,11 +312,14 @@ describe('patched read_image modality gate', () => {
         text: expect.stringContaining('model "text-model" does not declare image input'),
       }),
     ])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining(
+      'route "missing-route/missing-model" is unreachable',
+    ))
     expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
   })
 
   it('does not activate the route when image admission fails after modality validation', async () => {
-    const ctx = await setup()
+    const { ctx } = await setup()
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
     await resolveRequestRoute(ctx, agent, original, 1, 1)
@@ -252,7 +338,7 @@ describe('patched read_image modality gate', () => {
 
   it('leaves an already image-capable session on its own route', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup()
+    const { ctx } = await setup()
     const ownRoute = { provider: 'parametria-vision', model: 'vision-model' }
     const agent = fakeAgent(ownRoute)
     await resolveRequestRoute(ctx, agent, ownRoute, 1, 1)
@@ -263,7 +349,8 @@ describe('patched read_image modality gate', () => {
 
   it('keeps the original refusal when the Parametria plugin is not composed', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
-    const ctx = await setup(undefined, false)
+    const { ctx } = await setup(undefined, false)
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
 
@@ -276,6 +363,7 @@ describe('patched read_image modality gate', () => {
         text: expect.stringContaining('model "text-model" does not declare image input'),
       }),
     ])
+    expect(warning).not.toHaveBeenCalled()
   })
 })
 

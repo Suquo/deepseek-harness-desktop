@@ -165,11 +165,17 @@
 # lets this Parametria-only row nominate a fallback; the gate itself resolves
 # the exact model metadata and accepts it only when `image` is declared. The
 # remainder of that turn runs on the vision route so the committed image block
-# reaches a model that can inspect it, then the prior route is restored.
+# reaches a model that can inspect it, then the prior route is restored. Those
+# remaining requests are billed to Gemini, lose cache reuse from the original
+# provider, and omit `reasoningEffort` because effort values are model-specific.
+# On a later restored text-only turn, rc.2 projects the historical image block
+# to its stable text-only attachment placeholder before adapter dispatch.
 #
 # The target is the same independently-owned, machine-wide route used by
-# `subagent_validator`. Keep the two declarations equal: preset drift tests
-# compare them, and the boot preflight already makes a missing provider loud.
+# `subagent_validator`. Cordis plugin configs are row-local and offer no config
+# reference interpolation across this top-level row and nested `agentOptions`,
+# so the exact pair stays explicit and preset drift tests enforce equality. The
+# boot preflight already makes a missing provider loud.
 # No modlens row participates — it remains the description-style alternative.
 - id: parametria-read-image-fallback
   name: dsh-plugin-desktop/parametria-read-image-fallback
