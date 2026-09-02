@@ -60,6 +60,10 @@ const DECLARED_DELTA = {
       + 'sharing one derivation with the capture tool. It rides the preset for the same reason the '
       + 'capture row does: a host-plane contributor would publish the variable into every '
       + 'profile\'s shell calls, including sessions that never open Parametria',
+    'parametria-route-preflight':
+      'issue #52: discover every provider pinned by a dsh-tool-subagent row from this mounted '
+      + 'preset and resolve it against the live llm registry at session start. The row is '
+      + 'Parametria-only because compatibility and other profiles do not own its validator route',
   },
   /** Rows this preset drops. Empty on purpose: parity with `standard` is the point. */
   removed: {},
@@ -405,6 +409,26 @@ describe('the vision-pinned validator row', () => {
         `row ${id} pins a model; only the validator may, or a plain delegate would stop inheriting the session model`,
       )
     }
+  })
+})
+
+describe('the pinned-route preflight row', () => {
+  const row = ours.get('parametria-route-preflight')
+
+  it('is a top-level Parametria-only namespace plugin', () => {
+    assert.equal(row.name, 'dsh-plugin-desktop/parametria-route-preflight')
+  })
+
+  it('carries no provider list because pins come from rows and availability comes from the live registry', () => {
+    assert.equal(row.config, undefined)
+  })
+
+  it('has at least one pinned subagent row to preflight', () => {
+    const pinned = [...ours.values()].filter(other => (
+      other.name === '@deepseek-ai/dsh-tool-subagent'
+      && typeof other.config?.agentOptions?.provider === 'string'
+    ))
+    assert.ok(pinned.length > 0)
   })
 })
 

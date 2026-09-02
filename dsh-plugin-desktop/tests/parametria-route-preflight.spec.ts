@@ -1,0 +1,308 @@
+/** Fences for Parametria's boot-time pinned-route preflight (issue #52). */
+
+import { readFileSync } from 'node:fs'
+import { Context } from '@deepseek-ai/cordis'
+import type { Agent, SessionStartSource } from '@deepseek-ai/dsh-agent'
+import {
+  LlmAdapter,
+  LlmRuntime,
+  type GenerateOptions,
+  type StreamChunk,
+} from '@deepseek-ai/dsh-llm'
+import {
+  SessionId,
+  SessionStore,
+  type Session,
+  type SessionEvent,
+} from '@deepseek-ai/dsh-session'
+import { describe, expect, it, vi } from 'vitest'
+import { parse } from 'yaml'
+import * as RoutePreflight from '../src/parametria-route-preflight.ts'
+import {
+  ROUTE_REMEDY,
+  SUBAGENT_PLUGIN,
+  apply,
+  installRoutePreflight,
+  pinnedSubagentProviders,
+  unresolvedRouteBanner,
+  type RouteEntry,
+} from '../src/parametria-route-preflight.ts'
+
+/** Adapter used only to mutate the real registry; no request is made. */
+class SilentAdapter extends LlmAdapter {
+  async *stream(_options: GenerateOptions): AsyncIterable<StreamChunk> {
+    await Promise.resolve()
+  }
+}
+
+function row(
+  provider?: string,
+  options: { disabled?: boolean; name?: string } = {},
+): RouteEntry {
+  return {
+    ...(options.disabled === undefined ? {} : { disabled: options.disabled }),
+    options: {
+      name: options.name ?? SUBAGENT_PLUGIN,
+      config: provider === undefined ? {} : { agentOptions: { provider } },
+    },
+  }
+}
+
+let nextSession = 0
+
+type EntrySource = readonly RouteEntry[] | (() => Iterable<RouteEntry>)
+
+async function mounted(entries: EntrySource) {
+  const ctx = new Context()
+  await ctx.plugin(LlmRuntime)
+  await ctx.plugin(SessionStore)
+  const session = ctx.sessions.create(SessionId(`route-preflight-${++nextSession}`))
+  const published: SessionEvent[] = []
+  ctx.on('session/event', (observed, event) => {
+    if (observed === session) published.push(event)
+  })
+  const agent = { session } as Agent
+  installRoutePreflight(ctx, typeof entries === 'function' ? entries : () => entries)
+
+  const start = (source: SessionStartSource = 'startup') => {
+    ctx.emit('agent/session-start', { agent, source })
+  }
+  return { ctx, published, session, start }
+}
+
+interface CompositionRow {
+  name?: string
+  group?: boolean
+  config?: unknown
+}
+
+const JS_TAG = {
+  tag: 'tag:yaml.org,2002:js',
+  resolve: (source: string) => source,
+}
+
+function compositionEntries(rows: readonly CompositionRow[]): RouteEntry[] {
+  const entries: RouteEntry[] = []
+  for (const candidate of rows) {
+    if (typeof candidate.name === 'string') {
+      entries.push({ options: { name: candidate.name, config: candidate.config } })
+    }
+    if (candidate.group === true && Array.isArray(candidate.config)) {
+      entries.push(...compositionEntries(candidate.config as CompositionRow[]))
+    }
+  }
+  return entries
+}
+
+function noticeText(session: Session): string[] {
+  return session.events.flatMap(event => {
+    if (event.type !== 'user/message' || event.data.source.kind !== 'plugin') return []
+    return event.data.content.flatMap(block => block.type === 'text' ? [block.text] : [])
+  })
+}
+
+const SESSION_START_SOURCES: Readonly<Record<SessionStartSource, true>> = {
+  startup: true,
+  resume: true,
+  clear: true,
+  compact: true,
+}
+
+describe('provider pins are derived from the mounted rows', () => {
+  it('finds every active subagent pin, de-duplicates it, and ignores unrelated rows', () => {
+    expect(pinnedSubagentProviders([
+      row('future-vision-route'),
+      row('future-vision-route'),
+      row('not-a-subagent', { name: 'another-plugin' }),
+      row(),
+      row('disabled-route', { disabled: true }),
+      row('second-route'),
+    ])).toEqual(['future-vision-route', 'second-route'])
+  })
+})
+
+describe('session-start preflight against the live LLM registry', () => {
+  it.each(Object.keys(SESSION_START_SOURCES) as SessionStartSource[])(
+    'checks the registry on the %s lifecycle edge',
+    async (source) => {
+      const { session, start } = await mounted([row(`${source}-route`)])
+
+      start(source)
+
+      expect(noticeText(session)).toEqual([
+        expect.stringContaining(`${source}-route`),
+      ])
+    },
+  )
+
+  it('publishes one durable notice while absent and rechecks registry disposal for another session', async () => {
+    const route = 'future-vision-route'
+    const { ctx, published, session, start } = await mounted([row(route)])
+
+    start()
+    expect(published).toHaveLength(1)
+    expect(session.events).toHaveLength(1)
+    expect(session.surface.nodes).toEqual([0])
+    expect(session.events[0]?.type).toBe('user/message')
+    const message = session.events[0]?.type === 'user/message'
+      ? session.events[0].data
+      : undefined
+    expect(message?.source).toMatchObject({
+      kind: 'plugin',
+      plugin: 'parametria-route-preflight',
+      form: 'notice',
+      summary: expect.stringContaining(ROUTE_REMEDY),
+    })
+    const summary = (message?.source as { summary?: string } | undefined)?.summary
+    expect(summary?.startsWith(`Run ${ROUTE_REMEDY}:`)).toBe(true)
+    expect(summary).toContain(route)
+    expect(message?.content).toEqual([{
+      type: 'text',
+      text: unresolvedRouteBanner([route]),
+    }])
+    expect(unresolvedRouteBanner([route])).toContain(route)
+    expect(unresolvedRouteBanner([route])).toContain(ROUTE_REMEDY)
+    expect(session.deriveMessages()).toEqual([message])
+
+    const registration = ctx.llm.registerAdapter([route], new SilentAdapter())
+    start()
+    expect(session.events).toHaveLength(1)
+
+    registration()
+    start()
+    expect(session.events).toHaveLength(1)
+
+    const next = ctx.sessions.create(SessionId(`route-preflight-${++nextSession}`))
+    ctx.emit('agent/session-start', { agent: { session: next } as Agent, source: 'startup' })
+    expect(noticeText(next)).toEqual([expect.stringContaining(route)])
+  })
+
+  it('announces each unresolved set only once per session across lifecycle edges and row order', async () => {
+    const entries = [row('route-one'), row('route-two')]
+    const { session, start } = await mounted(entries)
+
+    start('startup')
+    start('resume')
+    entries.reverse()
+    start('compact')
+    expect(session.events).toHaveLength(1)
+
+    entries.pop()
+    start('clear')
+    start('resume')
+    expect(session.events).toHaveLength(2)
+  })
+
+  it('fails open when the live registry throws during synchronous session publication', async () => {
+    const { ctx, session, start } = await mounted([row('route-one')])
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    vi.spyOn(ctx.llm, 'listProviders').mockImplementation(() => {
+      throw new Error('registry unavailable')
+    })
+
+    expect(() => start()).not.toThrow()
+    expect(session.events).toEqual([])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'))
+  })
+
+  it('fails open when walking the mounted entry source throws', async () => {
+    const { ctx, session, start } = await mounted(() => {
+      throw new Error('loader tree unavailable')
+    })
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+
+    expect(() => start()).not.toThrow()
+    expect(session.events).toEqual([])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('loader tree unavailable'))
+  })
+
+  it('stays silent when every pinned route is registered', async () => {
+    const { ctx, session, start } = await mounted([row('route-one'), row('route-two')])
+    ctx.llm.registerAdapter(['route-one', 'route-two'], new SilentAdapter())
+
+    start()
+
+    expect(session.events).toEqual([])
+  })
+
+  it('re-reads the mounted rows at session start', async () => {
+    const entries: RouteEntry[] = []
+    const { session, start } = await mounted(entries)
+    start()
+    expect(session.events).toEqual([])
+
+    entries.push(row('added-after-mount'))
+    start()
+    expect(noticeText(session)).toEqual([
+      expect.stringContaining('added-after-mount'),
+    ])
+  })
+
+  it('binds apply() to the loader tree that owns its preset row', async () => {
+    const entries = [row('tree-owned-route')]
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(SessionStore)
+    Object.assign(ctx.fiber, {
+      entry: {
+        parent: {
+          tree: {
+            *entries() {
+              yield* entries
+            },
+          },
+        },
+      },
+    })
+    const session = ctx.sessions.create(SessionId(`route-preflight-${++nextSession}`))
+    const agent = { session } as Agent
+
+    apply(ctx, {})
+    ctx.emit('agent/session-start', { agent, source: 'startup' })
+
+    expect(noticeText(session)).toEqual([
+      expect.stringContaining('tree-owned-route'),
+    ])
+  })
+
+  it('exercises the shipped preset with and without every route declared by its machine patch', async () => {
+    const preset = parse(readFileSync(
+      new URL('../../dsh-preset-parametria/preset/agent.cordis.yml', import.meta.url),
+      'utf8',
+    ), { customTags: [JS_TAG] }) as CompositionRow[]
+    const machine = parse(readFileSync(
+      new URL('../../dsh-preset-parametria/machine/cordis.patch.yml', import.meta.url),
+      'utf8',
+    ), { customTags: [JS_TAG] }) as Array<{
+      id?: string
+      config?: { providers?: Record<string, unknown> }
+    }>
+    const routeRow = machine.find(candidate => candidate.id === 'llm-pi-ai')
+    const declaredRoutes = Object.keys(routeRow?.config?.providers ?? {})
+    const entries = compositionEntries(preset)
+    const pins = pinnedSubagentProviders(entries)
+    expect(pins.length).toBeGreaterThan(0)
+    expect(declaredRoutes).toEqual(expect.arrayContaining(pins))
+
+    const missing = await mounted(entries)
+    missing.start()
+    expect(noticeText(missing.session)).toEqual([
+      expect.stringContaining(pins[0] as string),
+    ])
+    expect(noticeText(missing.session)[0]).toContain(ROUTE_REMEDY)
+
+    const installed = await mounted(entries)
+    installed.ctx.llm.registerAdapter(declaredRoutes, new SilentAdapter())
+    installed.start()
+    expect(installed.session.events).toEqual([])
+  })
+})
+
+describe('Cordis namespace module shape', () => {
+  it('exports name, inject, and apply as siblings with no default export', () => {
+    expect(RoutePreflight.name).toBe('parametria-route-preflight')
+    expect(RoutePreflight.inject).toEqual(['llm'])
+    expect(RoutePreflight.apply).toBe(apply)
+    expect(RoutePreflight).not.toHaveProperty('default')
+  })
+})

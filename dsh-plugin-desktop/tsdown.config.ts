@@ -15,6 +15,7 @@ export default defineConfig([
       pnpm: 'src/pnpm.ts',
       'parametria-capture': 'src/parametria-capture.ts',
       'parametria-evidence': 'src/parametria-evidence.ts',
+      'parametria-route-preflight': 'src/parametria-route-preflight.ts',
       profiles: 'src/profiles.ts',
       diagnostics: 'src/diagnostics.ts',
       notifications: 'src/notifications.ts',
