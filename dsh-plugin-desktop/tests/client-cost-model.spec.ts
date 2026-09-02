@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { ModelRates, TokenBuckets } from '../src/client/cost-model.ts'
 import {
   NO_TOKENS, addTokens, formatCost, formatDuration,
-  priceTokens, ratesFor, ratesInForce, readTokenBuckets,
+  priceTokens, ratesFor, ratesInForce, readTokenBuckets, withBilledCost,
 } from '../src/client/cost-model.ts'
 
 /** `google/gemini-3.6-flash` in USD per million tokens, from the live catalogue on 2026-08-20. */
@@ -158,6 +158,15 @@ describe('display', () => {
     expect(formatCost({ status: 'free', usd: 0 })).toBe('free')
     expect(formatCost({ status: 'unpriced', reason: 'x' })).toBe('unpriced')
     expect(formatCost({ status: 'untokenized', reason: 'x' })).toBe('no usage')
+  })
+
+  it('labels a billed zero and retains the list-rate estimate it replaced', () => {
+    const estimate = { status: 'priced', usd: 0.0166 } as const
+    const billed = withBilledCost(estimate, 0)
+    expect(billed).toEqual({ status: 'billed', usd: 0, estimate })
+    expect(formatCost(billed)).toBe('$0.0000 billed')
+    expect(() => withBilledCost(estimate, -1)).toThrow(/finite nonnegative/)
+    expect(() => withBilledCost(estimate, Number.NaN)).toThrow(/finite nonnegative/)
   })
 
   it('renders an unknown duration as a dash rather than as zero', () => {

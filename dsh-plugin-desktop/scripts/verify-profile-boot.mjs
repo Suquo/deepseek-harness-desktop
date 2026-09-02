@@ -15,6 +15,7 @@ import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
 import { prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
+import { OPENROUTER_GENERATION_ENDPOINT } from '../lib/openrouter-billing.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
 const HOST_SERVICE_PLUGIN_NAME = 'dsh-desktop-host-services-smoke-plugin'
@@ -26,8 +27,18 @@ let pnpmRuntime
 let mountedSpec
 let nativeThemeSource = 'system'
 const trayItems = []
+let billingOutboundCalls = 0
+const systemFetch = globalThis.fetch
 
 try {
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.startsWith(OPENROUTER_GENERATION_ENDPOINT)) {
+      billingOutboundCalls += 1
+      return Promise.reject(new Error('profile smoke must not perform OpenRouter billing requests'))
+    }
+    return systemFetch(input, init)
+  }
   writeFileSync(join(home, 'settings.yaml'), [
     'dsh-desktop:',
     '  mode: advanced',
@@ -294,7 +305,11 @@ try {
       + '`globalThis["__DSH_BOOT__"] = ` boot assignment',
     )
   }
+  if (billingOutboundCalls !== 0) {
+    throw new Error(`profile smoke performed ${String(billingOutboundCalls)} OpenRouter billing requests`)
+  }
 } finally {
+  globalThis.fetch = systemFetch
   await ctx?.fiber.dispose()
   releasePackageResolver?.()
   pnpmRuntime?.dispose()

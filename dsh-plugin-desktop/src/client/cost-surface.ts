@@ -48,6 +48,7 @@
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { RateSource } from './cost-rates.ts'
+import { BilledCostSource } from './billed-costs.ts'
 import { TurnCostBadge } from './TurnCostBadge.tsx'
 
 /** List-slot entry id; one contribution per turn action row. */
@@ -96,6 +97,10 @@ const COST_STYLES = `
 .dshDesktopCostTotals dt { color: var(--dsw-alias-label-tertiary); }
 .dshDesktopCostTotals dd { margin: 0; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
 .dshDesktopCostProvenance { margin: 8px 0 0; color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.dshDesktopCostReconcile { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dshDesktopCostReconcileControl { border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; background: var(--dsw-alias-background-base); color: var(--dsw-alias-label-primary); padding: 3px 8px; font: inherit; cursor: pointer; }
+.dshDesktopCostReconcileControl:disabled { color: var(--dsw-alias-label-tertiary); cursor: default; }
+.dshDesktopCostReconcileStatus { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
 `
 
 /**
@@ -122,6 +127,7 @@ export function installCostStyles(): () => void {
  */
 export function installCostSurface(ctx: ClientContext): () => void {
   const rateSource = new RateSource()
+  const billedCostSource = new BilledCostSource()
   const removeStyles = installCostStyles()
   const removeRegistration = ctx.slots.inject(
     'conversation.chat.assistant-actions',
@@ -130,12 +136,13 @@ export function installCostSurface(ctx: ClientContext): () => void {
       id: COST_BADGE_ENTRY_ID,
       order: COST_BADGE_ORDER,
       registrant: 'dsh-plugin-desktop: turn cost',
-      inject: () => ({ rateSource }),
+      inject: () => ({ rateSource, billedCostSource }),
     }, TurnCostBadge),
   )
   return () => {
     removeRegistration()
     removeStyles()
     rateSource.dispose()
+    billedCostSource.dispose()
   }
 }

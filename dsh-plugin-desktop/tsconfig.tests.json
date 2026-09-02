@@ -14,6 +14,7 @@
   "exclude": [
     "tests/client-boot-health.spec.ts",
     "tests/client-brand.spec.ts",
+    "tests/client-billed-costs.spec.ts",
     "tests/client-cost-model.spec.ts",
     "tests/client-cost-parity.spec.ts",
     "tests/client-cost-rates.spec.ts",

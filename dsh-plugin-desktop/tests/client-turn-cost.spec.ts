@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { AssistantMessageNode, ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { RateTable } from '../src/client/cost-model.ts'
-import { costHeadline, foldGeneration, foldTurnCost, rateProvenance, turnOfMessage } from '../src/client/turn-cost.ts'
+import { costHeadline, costProvenance, foldGeneration, foldTurnCost, rateProvenance, turnOfMessage } from '../src/client/turn-cost.ts'
 
 const TABLE: RateTable = {
   openrouter: { 'google/gemini-3.6-flash': { input: 0.75, output: 3.75, cacheRead: 0.075 } },
@@ -91,6 +91,16 @@ describe('folding one generation', () => {
     expect(line.tokens).toBeUndefined()
     expect(line.cost.status).toBe('untokenized')
   })
+
+  it('overlays a provider charge while retaining the original estimate', () => {
+    const line = foldGeneration(
+      assistant({ turn: 1, step: 1, inputTokens: 100, outputTokens: 10, completed: 2000 }),
+      TABLE,
+      0,
+    )
+    expect(line.cost.status).toBe('billed')
+    expect(line.cost).toMatchObject({ status: 'billed', usd: 0, estimate: { status: 'priced' } })
+  })
 })
 
 describe('folding a turn', () => {
@@ -101,6 +111,11 @@ describe('folding a turn', () => {
     expect(cost.llmMs).toBe(3000)
     expect(cost.covered).toBe(true)
     expect(cost.usd).toBeCloseTo((0.75 * 120 + 3.75 * 15 + 0.075 * 90) / 1e6, 12)
+    expect(cost.billedUsd).toBe(0)
+    expect(cost.estimatedUsd).toBe(cost.usd)
+    expect(cost.billedGenerations).toBe(0)
+    expect(cost.estimatedGenerations).toBe(2)
+    expect(cost.fullyBilled).toBe(false)
     expect(cost.models).toEqual(['openrouter/google/gemini-3.6-flash'])
   })
 
@@ -170,6 +185,31 @@ describe('the headline a reader sees', () => {
     expect(costHeadline(foldTurnCost([], 1, TABLE))).toBe('no generations')
   })
 
+  it('keeps provider-backed and estimated money visibly separate', () => {
+    const mixed = foldTurnCost(twoStepTurn(), 1, TABLE, TIMINGS, new Map([[1, 0.125]]))
+    expect(mixed.billedUsd).toBe(0.125)
+    expect(mixed.billedGenerations).toBe(1)
+    expect(mixed.estimatedGenerations).toBe(1)
+    expect(mixed.covered).toBe(true)
+    expect(costHeadline(mixed)).toMatch(/^\$0\.1250 billed \+ ~\$0\.\d{4} est\.$/)
+
+    const billed = foldTurnCost(twoStepTurn(), 1, TABLE, TIMINGS, new Map([[1, 0.125], [2, 0]]))
+    expect(billed.fullyBilled).toBe(true)
+    expect(billed.estimatedUsd).toBe(0)
+    expect(costHeadline(billed)).toBe('$0.1250 billed')
+  })
+
+  it('lets a billed observation cover an estimate whose list rate was unknown', () => {
+    const unknown = [assistant({ turn: 1, step: 1, inputTokens: 40, model: 'x-ai/grok-4.5', completed: 1 })]
+    const cost = foldTurnCost(unknown, 1, TABLE, TIMINGS, new Map([[1, 0.5]]))
+    expect(cost.covered).toBe(true)
+    expect(cost.unpriced).toEqual([])
+    expect(costHeadline(cost)).toBe('$0.5000 billed')
+    expect(cost.generations[0]?.cost).toMatchObject({
+      status: 'billed', estimate: { status: 'unpriced' },
+    })
+  })
+
   it('always states where the rates came from, including when they did not arrive', () => {
     expect(rateProvenance(undefined, 0, undefined)).toMatch(/Reading live OpenRouter rates/)
     expect(rateProvenance(undefined, 0, 'Failed to fetch')).toMatch(/unavailable \(Failed to fetch\).*tokens and timings are exact/)
@@ -177,5 +217,12 @@ describe('the headline a reader sees', () => {
     expect(stamped).toMatch(/276 live OpenRouter list rates read at /)
     // The estimate must never present itself as the invoice.
     expect(stamped).toMatch(/List price, not the invoice/)
+  })
+
+  it('states billed coverage without hiding estimate provenance', () => {
+    const cost = foldTurnCost(twoStepTurn(), 1, TABLE, TIMINGS, new Map([[1, 0.1]]))
+    const provenance = costProvenance(cost, Date.parse('2026-08-20T09:15:00Z'), 276, undefined)
+    expect(provenance).toMatch(/^1 of 2 generations reconciled to OpenRouter billing\./)
+    expect(provenance).toMatch(/Estimated from 276 live OpenRouter list rates/)
   })
 })

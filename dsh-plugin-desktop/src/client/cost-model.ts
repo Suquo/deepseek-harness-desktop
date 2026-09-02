@@ -3,7 +3,7 @@
  *
  * Pure, DOM-free, and deliberately ignorant of where rates come from: the
  * caller supplies a {@link RateTable} and this module turns token buckets into
- * a {@link CostLine}. `cost-rates.ts` owns the source (live OpenRouter rates);
+ * an {@link EstimatedCostLine}. `cost-rates.ts` owns the source (live OpenRouter rates);
  * `turn-cost.ts` owns the fold; this owns only the multiply.
  *
  * THE ONE RULE: a rate nobody knows never renders as zero. `unpriced` and
@@ -69,11 +69,23 @@ export interface TokenBuckets {
  * A union rather than an optional number, so that no caller can read `usd`
  * without having established that one exists.
  */
-export type CostLine =
+export type EstimatedCostLine =
   | { readonly status: 'priced'; readonly usd: number }
   | { readonly status: 'free'; readonly usd: 0 }
   | { readonly status: 'unpriced'; readonly reason: string }
   | { readonly status: 'untokenized'; readonly reason: string }
+
+/**
+ * The displayed state of one generation after optional invoice reconciliation.
+ *
+ * A billed line keeps the estimate it replaced so the UI can explain both the
+ * immediate list-rate value and the later provider-backed value.
+ */
+export type CostLine = EstimatedCostLine | {
+  readonly status: 'billed'
+  readonly usd: number
+  readonly estimate: EstimatedCostLine
+}
 
 /** Applying this to a non-`never` type is a compile error — the assertion behind {@link COST_STATUSES}. */
 type AssertNever<T extends never> = T
@@ -87,7 +99,7 @@ type AssertNever<T extends never> = T
  * compile time: `satisfies` rejects a member the union does not have, and
  * {@link UnlistedCostStatus} rejects a union arm this list omits.
  */
-export const COST_STATUSES = ['priced', 'free', 'unpriced', 'untokenized'] as const satisfies readonly CostLine['status'][]
+export const COST_STATUSES = ['priced', 'free', 'unpriced', 'untokenized', 'billed'] as const satisfies readonly CostLine['status'][]
 
 /**
  * Compile-time proof that {@link COST_STATUSES} omits no arm of {@link CostLine}.
@@ -98,6 +110,12 @@ export const COST_STATUSES = ['priced', 'free', 'unpriced', 'untokenized'] as co
  * happens to enumerate the old four and passes.
  */
 export type UnlistedCostStatus = AssertNever<Exclude<CostLine['status'], (typeof COST_STATUSES)[number]>>
+
+/** Overlay a validated provider charge without discarding the original estimate. */
+export function withBilledCost(estimate: EstimatedCostLine, usd: number): CostLine {
+  if (!Number.isFinite(usd) || usd < 0) throw new TypeError('billed cost must be a finite nonnegative number')
+  return { status: 'billed', usd, estimate }
+}
 
 /** Bucket field names paired with the rate field that prices them. */
 const BUCKET_RATES = [
@@ -195,7 +213,7 @@ export function priceTokens(
   tokens: TokenBuckets | undefined,
   rates: ModelRates | undefined,
   label: string,
-): CostLine {
+): EstimatedCostLine {
   if (tokens === undefined) return { status: 'untokenized', reason: 'no usage was recorded for this generation' }
   if (rates === undefined) return { status: 'unpriced', reason: `no live rate for ${label}` }
   const inForce = ratesInForce(rates, tokens)
@@ -225,11 +243,16 @@ export function priceTokens(
  */
 export function formatCost(line: CostLine): string {
   switch (line.status) {
+    case 'billed': return `${formatUsd(line.usd)} billed`
     case 'free': return 'free'
-    case 'priced': return line.usd >= 1 ? `$${line.usd.toFixed(2)}` : `$${line.usd.toFixed(4)}`
+    case 'priced': return formatUsd(line.usd)
     case 'unpriced': return 'unpriced'
     case 'untokenized': return 'no usage'
   }
+}
+
+function formatUsd(usd: number): string {
+  return usd >= 1 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`
 }
 
 /**

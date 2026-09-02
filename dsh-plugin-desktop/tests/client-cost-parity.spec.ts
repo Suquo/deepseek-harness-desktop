@@ -20,18 +20,24 @@
 import { describe, expect, it } from 'vitest'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error - plain-JS sibling package, deliberately untyped and not a dependency of this one
-import { STATUSES as OFFLINE_STATUSES, priceStep } from '../../dsh-preset-parametria/scripts/session-cost.mjs'
+import {
+  STATUSES as OFFLINE_STATUSES,
+  priceStep,
+  withBilledCost as withOfflineBilledCost,
+} from '../../dsh-preset-parametria/scripts/session-cost.mjs'
 import type { CostLine, ModelRates, TokenBuckets } from '../src/client/cost-model.ts'
-import { COST_STATUSES, NO_TOKENS, priceTokens } from '../src/client/cost-model.ts'
+import { COST_STATUSES, NO_TOKENS, priceTokens, withBilledCost } from '../src/client/cost-model.ts'
 
 interface OfflineCostLine {
   status: string
   usd?: number
   reason?: string
+  estimate?: OfflineCostLine
 }
 
 /** The offline module is plain JS; this is the only place its shape is asserted. */
 const priceOffline = priceStep as (row: unknown, table: unknown) => OfflineCostLine
+const billOffline = withOfflineBilledCost as (estimate: OfflineCostLine, usd: number) => OfflineCostLine
 
 const PROVIDER = 'openrouter'
 const MODEL = 'google/gemini-3.6-flash'
@@ -128,9 +134,25 @@ describe('the in-UI and offline pricing implementations agree', () => {
         rates === undefined ? { [PROVIDER]: {} } : { [PROVIDER]: { [MODEL]: rates } },
       ).status)
     }
+    const estimate = priceTokens({ ...NO_TOKENS, inputTokens: 1 }, RATE_SHAPES.full, 'x/y')
+    const offlineEstimate = priceOffline(
+      { provider: PROVIDER, model: MODEL, usage: { inputTokens: 1 } },
+      { [PROVIDER]: { [MODEL]: RATE_SHAPES.full } },
+    )
+    inUi.add(withBilledCost(estimate, 0).status)
+    offline.add(billOffline(offlineEstimate, 0).status)
     const declared = [...COST_STATUSES].sort()
     expect([...inUi].sort()).toEqual(declared)
     expect([...offline].sort()).toEqual(declared)
+  })
+
+  it('constructs the same billed overlay without losing the estimate', () => {
+    const inUiEstimate = priceTokens({ ...NO_TOKENS, inputTokens: 10 }, RATE_SHAPES.full, 'x/y')
+    const offlineEstimate = priceOffline(
+      { provider: PROVIDER, model: MODEL, usage: { inputTokens: 10 } },
+      { [PROVIDER]: { [MODEL]: RATE_SHAPES.full } },
+    )
+    expect(withBilledCost(inUiEstimate, 0.0123)).toEqual(billOffline(offlineEstimate, 0.0123))
   })
 
   it('states its own divergence: only the reason wording differs', () => {

@@ -2,13 +2,17 @@ import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { RateSource } from './cost-rates.ts'
+import type { BilledCostSource } from './billed-costs.ts'
+import { billedTurnState } from './billed-costs.ts'
 import { formatCost, formatDuration } from './cost-model.ts'
-import { costHeadline, foldTurnCost, rateProvenance, selectCostNodes, turnOfMessage } from './turn-cost.ts'
+import { costHeadline, costProvenance, foldTurnCost, selectCostNodes, turnOfMessage } from './turn-cost.ts'
 
 /** Values the cost-surface registration hands every badge. */
 export interface TurnCostBadgeInjected {
   /** The generation-owned, once-per-client live rate read. */
   readonly rateSource: RateSource
+  /** The generation-owned, explicit-demand provider billing source. */
+  readonly billedCostSource: BilledCostSource
 }
 
 /** Full props of one badge in the assistant action row. */
@@ -24,17 +28,25 @@ export type TurnCostBadgeProps = PropsRuntime<'conversation.chat.assistant-actio
  * @param props - the slot's owner share plus the injected rate source.
  * @returns the badge.
  */
-export function TurnCostBadge({ messageId, useSession, rateSource }: TurnCostBadgeProps) {
+export function TurnCostBadge({ messageId, useSession, rateSource, billedCostSource }: TurnCostBadgeProps) {
   const subscribe = useCallback((listener: () => void) => rateSource.subscribe(listener), [rateSource])
   const getSnapshot = useCallback(() => rateSource.getSnapshot(), [rateSource])
   const rates = useSyncExternalStore(subscribe, getSnapshot)
+  const subscribeBilled = useCallback((listener: () => void) => billedCostSource.subscribe(listener), [billedCostSource])
+  const getBilledSnapshot = useCallback(() => billedCostSource.getSnapshot(), [billedCostSource])
+  const billedSnapshot = useSyncExternalStore(subscribeBilled, getBilledSnapshot)
 
   const nodes = useSession(selectCostNodes)
+  const sessionId = useSession(state => state.sessionId)
   const turnTimings = useSession(state => state.chat.legacy.turnTimings)
   const turn = useMemo(() => turnOfMessage(nodes, messageId), [nodes, messageId])
+  const billed = useMemo(
+    () => turn === undefined ? undefined : billedTurnState(billedSnapshot, sessionId, turn),
+    [billedSnapshot, sessionId, turn],
+  )
   const cost = useMemo(
-    () => turn === undefined ? undefined : foldTurnCost(nodes, turn, rates.table, turnTimings),
-    [nodes, turn, rates.table, turnTimings],
+    () => turn === undefined ? undefined : foldTurnCost(nodes, turn, rates.table, turnTimings, billed?.costs),
+    [nodes, turn, rates.table, turnTimings, billed],
   )
 
   // A message whose turn left the loaded window has nothing truthful to report,
@@ -77,8 +89,10 @@ export function TurnCostBadge({ messageId, useSession, rateSource }: TurnCostBad
                 <td>{(line.tokens?.cacheReadTokens ?? 0).toLocaleString()}</td>
                 <td>{(line.tokens?.outputTokens ?? 0).toLocaleString()}</td>
                 <td
-                  className={line.cost.status === 'priced' || line.cost.status === 'free' ? undefined : 'dshDesktopCostUnknown'}
-                  title={line.cost.status === 'priced' || line.cost.status === 'free' ? undefined : line.cost.reason}
+                  className={line.cost.status === 'unpriced' || line.cost.status === 'untokenized' ? 'dshDesktopCostUnknown' : undefined}
+                  title={line.cost.status === 'billed'
+                    ? `OpenRouter billed value; list-rate estimate: ${formatCost(line.cost.estimate)}`
+                    : line.cost.status === 'priced' || line.cost.status === 'free' ? undefined : line.cost.reason}
                 >
                   {formatCost(line.cost)}
                 </td>
@@ -105,9 +119,32 @@ export function TurnCostBadge({ messageId, useSession, rateSource }: TurnCostBad
           </dd>
         </dl>
         <p className="dshDesktopCostProvenance">
-          {rateProvenance(rates.fetchedAt, rates.modelCount, rates.error)}
+          {costProvenance(cost, rates.fetchedAt, rates.modelCount, rates.error)}
         </p>
+        <div className="dshDesktopCostReconcile">
+          <button
+            type="button"
+            className="dshDesktopCostReconcileControl"
+            disabled={billed?.status === 'loading' || billed?.status === 'complete'}
+            onClick={() => { void billedCostSource.reconcile(sessionId, cost.turn) }}
+          >
+            {billed?.status === 'loading' ? 'Reconciling…' : 'Reconcile billed cost'}
+          </button>
+          <span className="dshDesktopCostReconcileStatus" aria-live="polite">
+            {billingStatus(billed?.status, billed?.message)}
+          </span>
+        </div>
       </div>
     </details>
   )
+}
+
+function billingStatus(status: string | undefined, message: string | undefined): string {
+  switch (status) {
+    case 'complete': return 'All visible generations billed.'
+    case 'partial': return 'Some generations are still estimated; retry later.'
+    case 'unavailable': return 'Billing is not available yet; retry later.'
+    case 'error': return message ?? 'Billed cost unavailable — retry reconciliation.'
+    default: return ''
+  }
 }

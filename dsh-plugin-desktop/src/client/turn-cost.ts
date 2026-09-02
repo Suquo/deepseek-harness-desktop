@@ -22,7 +22,7 @@
 
 import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type { CostLine, RateTable, TokenBuckets } from './cost-model.ts'
-import { NO_TOKENS, addTokens, formatCost, priceTokens, ratesFor, readTokenBuckets } from './cost-model.ts'
+import { NO_TOKENS, addTokens, formatCost, priceTokens, ratesFor, readTokenBuckets, withBilledCost } from './cost-model.ts'
 
 /** One model call inside a turn. */
 export interface GenerationLine {
@@ -63,6 +63,16 @@ export interface TurnCost {
   readonly nonModelMs?: number
   /** Sum of the generations that could be priced. */
   readonly usd: number
+  /** Provider-backed money, never mixed with estimates in display copy. */
+  readonly billedUsd: number
+  /** List-rate money for generations that have not reconciled yet. */
+  readonly estimatedUsd: number
+  /** Generations carrying provider-backed cost. */
+  readonly billedGenerations: number
+  /** Unreconciled generations whose list-rate estimate is numeric. */
+  readonly estimatedGenerations: number
+  /** True only when every visible generation has a provider-backed cost. */
+  readonly fullyBilled: boolean
   /** True when EVERY generation was priced; false makes `usd` a floor, not a total. */
   readonly covered: boolean
   /** How many generations could not be priced, and why (first reason wins). */
@@ -87,9 +97,17 @@ export interface TurnCost {
  */
 export function costHeadline(cost: TurnCost): string {
   if (cost.generations.length === 0) return 'no generations'
-  if (cost.unpriced.length === cost.generations.length) return 'unpriced'
-  const money = formatCost({ status: 'priced', usd: cost.usd })
-  return cost.covered ? money : `≥${money}`
+  if (cost.billedGenerations === 0) {
+    if (cost.unpriced.length === cost.generations.length) return 'unpriced'
+    const money = formatCost({ status: 'priced', usd: cost.estimatedUsd })
+    return cost.covered ? money : `≥${money}`
+  }
+  const billed = `${formatCost({ status: 'priced', usd: cost.billedUsd })} billed`
+  if (cost.fullyBilled) return billed
+  const estimated = cost.estimatedGenerations === 0
+    ? ''
+    : ` + ~${formatCost({ status: 'priced', usd: cost.estimatedUsd })} est.`
+  return `${cost.covered ? '' : '≥'}${billed}${estimated}`
 }
 
 /**
@@ -111,6 +129,19 @@ export function rateProvenance(fetchedAt: number | undefined, modelCount: number
   }
   const when = new Date(fetchedAt).toLocaleTimeString()
   return `Estimated from ${String(modelCount)} live OpenRouter list rates read at ${when}. List price, not the invoice.`
+}
+
+/** Combine invoice coverage with the existing estimate provenance. */
+export function costProvenance(
+  cost: TurnCost,
+  fetchedAt: number | undefined,
+  modelCount: number,
+  error: string | undefined,
+): string {
+  const rates = rateProvenance(fetchedAt, modelCount, error)
+  return cost.billedGenerations === 0
+    ? rates
+    : `${String(cost.billedGenerations)} of ${String(cost.generations.length)} generations reconciled to OpenRouter billing. ${rates}`
 }
 
 function isAssistant(node: ConversationNode): node is AssistantMessageNode {
@@ -196,7 +227,7 @@ export function turnOfMessage(nodes: readonly ConversationNode[], messageId: str
  * @param table - the live rate table.
  * @returns the row.
  */
-export function foldGeneration(node: AssistantMessageNode, table: RateTable): GenerationLine {
+export function foldGeneration(node: AssistantMessageNode, table: RateTable, billedUsd?: number): GenerationLine {
   const tokens = readTokenBuckets(node.usage)
   const provider = node.provenance?.provider ?? node.requestConfig?.provider
   const model = node.provenance?.model ?? node.requestConfig?.model
@@ -212,7 +243,9 @@ export function foldGeneration(node: AssistantMessageNode, table: RateTable): Ge
     ...tokens === undefined ? {} : { tokens },
     ...start === null || completed === undefined ? {} : { llmMs: Math.max(0, completed - start) },
     ...start === null || firstToken === null ? {} : { ttftMs: Math.max(0, firstToken - start) },
-    cost: priceTokens(tokens, ratesFor(table, provider, model), label),
+    cost: billedUsd === undefined
+      ? priceTokens(tokens, ratesFor(table, provider, model), label)
+      : withBilledCost(priceTokens(tokens, ratesFor(table, provider, model), label), billedUsd),
   }
 }
 
@@ -229,25 +262,37 @@ export function foldTurnCost(
   turn: number,
   table: RateTable,
   turnTimings?: ReadonlyMap<number, { readonly startTime: number; readonly endTime?: number }>,
+  billedCosts: ReadonlyMap<number, number> = new Map(),
 ): TurnCost {
   const generations = nodes
     .filter(isAssistant)
     .filter(node => node.turn === turn)
     .sort((a, b) => a.step - b.step)
-    .map(node => foldGeneration(node, table))
+    .map(node => foldGeneration(node, table, billedCosts.get(node.step)))
 
   let tokens = NO_TOKENS
   let llmMs = 0
   let usd = 0
   let priced = 0
+  let billedUsd = 0
+  let estimatedUsd = 0
+  let billedGenerations = 0
+  let estimatedGenerations = 0
   const unpriced: { step: number; reason: string }[] = []
   const models = new Set<string>()
   for (const line of generations) {
     if (line.tokens !== undefined) tokens = addTokens(tokens, line.tokens)
     llmMs += line.llmMs ?? 0
     if (line.model !== undefined) models.add(`${line.provider ?? '?'}/${line.model}`)
-    if (line.cost.status === 'priced' || line.cost.status === 'free') {
+    if (line.cost.status === 'billed') {
+      billedUsd += line.cost.usd
       usd += line.cost.usd
+      billedGenerations += 1
+      priced += 1
+    } else if (line.cost.status === 'priced' || line.cost.status === 'free') {
+      estimatedUsd += line.cost.usd
+      usd += line.cost.usd
+      estimatedGenerations += 1
       priced += 1
     } else {
       unpriced.push({ step: line.step, reason: line.cost.reason })
@@ -266,6 +311,11 @@ export function foldTurnCost(
     llmMs,
     ...wallMs === undefined ? {} : { nonModelMs: Math.max(0, wallMs - llmMs) },
     usd,
+    billedUsd,
+    estimatedUsd,
+    billedGenerations,
+    estimatedGenerations,
+    fullyBilled: generations.length > 0 && billedGenerations === generations.length,
     covered: generations.length > 0 && priced === generations.length,
     unpriced,
     models: [...models],

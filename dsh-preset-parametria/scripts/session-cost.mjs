@@ -43,6 +43,8 @@ export const FREE = 'free'
 export const PRICED = 'priced'
 /** The step assembled no usage report at all (cancelled or interrupted before the provider answered). */
 export const UNTOKENIZED = 'untokenized'
+/** Reconciled against the provider's generation record; the list-rate estimate remains nested. */
+export const BILLED = 'billed'
 
 /**
  * Every status {@link priceStep} can report, as one list.
@@ -55,7 +57,19 @@ export const UNTOKENIZED = 'untokenized'
  * not the other fails there — which the first version of that sweep could not
  * catch, because it enumerated only the desktop side.
  */
-export const STATUSES = [PRICED, FREE, UNPRICED, UNTOKENIZED]
+export const STATUSES = [PRICED, FREE, UNPRICED, UNTOKENIZED, BILLED]
+
+/**
+ * Overlay a validated provider charge without discarding the original estimate.
+ * This helper is pure: the offline CLI never performs provider reconciliation.
+ * @param {object} estimate - one result from {@link priceStep}.
+ * @param {number} usd - provider-backed billed USD.
+ * @returns {object} the billed line.
+ */
+export function withBilledCost(estimate, usd) {
+  if (!Number.isFinite(usd) || usd < 0) throw new TypeError('billed cost must be a finite nonnegative number')
+  return { status: BILLED, usd, estimate }
+}
 
 /** The four disjoint buckets upstream records, in the order a report reads them. */
 export const BUCKETS = /** @type {const} */ ([

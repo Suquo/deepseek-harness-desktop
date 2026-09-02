@@ -5,6 +5,8 @@
       name: dsh-plugin-desktop
       config:
         mode: compatibility
+    - id: desktop-openrouter-billing
+      name: dsh-plugin-desktop/openrouter-billing
     - id: community-market
       name: dsh-community-market
     - id: desktop-terminal

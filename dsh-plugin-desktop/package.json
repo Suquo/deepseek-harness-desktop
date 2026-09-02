@@ -31,6 +31,10 @@
       "types": "./lib/types/client/index.d.ts",
       "default": "./lib/client.js"
     },
+    "./openrouter-billing": {
+      "types": "./lib/types/openrouter-billing.d.ts",
+      "default": "./lib/openrouter-billing.js"
+    },
     "./windows-pwsh-sandbox": {
       "types": "./lib/types/windows-pwsh-sandbox.d.ts",
       "default": "./lib/windows-pwsh-sandbox.js"

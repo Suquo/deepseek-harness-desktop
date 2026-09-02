@@ -13,6 +13,7 @@ import {
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
 import { prepareDesktopProfile } from '../lib/profile.js'
+import { OPENROUTER_GENERATION_ENDPOINT } from '../lib/openrouter-billing.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-loader-smoke'
 const THIRD_PARTY_NAME = 'dsh-desktop-loader-smoke-plugin'
@@ -29,10 +30,20 @@ let mounted
 let mountedSpec
 let releasePackageResolver
 let pnpmRuntime
+let billingOutboundCalls = 0
+const systemFetch = globalThis.fetch
 const runnerEnvironment = Object.entries(process.env)
   .filter(([key]) => RUNNER_ENVIRONMENT_NAMES.has(key.toUpperCase()))
 
 try {
+  globalThis.fetch = (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.startsWith(OPENROUTER_GENERATION_ENDPOINT)) {
+      billingOutboundCalls += 1
+      return Promise.reject(new Error('loader smoke must not perform OpenRouter billing requests'))
+    }
+    return systemFetch(input, init)
+  }
   for (const [key] of runnerEnvironment) delete process.env[key]
   const launchEnvironment = createLaunchEnvironmentSnapshot([{
     source: 'process',
@@ -119,6 +130,7 @@ try {
     prepared.rootConfig,
     [{ insert: [
       { id: 'desktop-shell', name: 'dsh-plugin-desktop' },
+      { id: 'desktop-openrouter-billing', name: 'dsh-plugin-desktop/openrouter-billing' },
       { id: 'community-market', name: 'dsh-community-market' },
       { id: 'third-party-smoke', name: THIRD_PARTY_NAME },
     ] }],
@@ -147,6 +159,8 @@ try {
           }
         },
       })
+      host.provide('credentials', { resolve: async () => undefined })
+      host.provide('sessionQuery', { readSurface: async () => { throw new Error('not exercised') } })
     },
     prepared.bareModuleBaseUrl,
   )
@@ -164,6 +178,13 @@ try {
   if (marketEntry?.options.name !== 'dsh-community-market') {
     throw new Error('community market Host plugin did not activate through its bare package name')
   }
+  const billingEntry = ctx.loader.resolve('include:desktop-openrouter-billing')
+  if (billingEntry?.options.name !== 'dsh-plugin-desktop/openrouter-billing') {
+    throw new Error('desktop billed-cost plugin did not activate through its package subpath')
+  }
+  if (billingOutboundCalls !== 0) {
+    throw new Error(`loader smoke performed ${String(billingOutboundCalls)} OpenRouter billing requests`)
+  }
   if (mountedSpec?.mode !== 'compatibility') {
     throw new Error(`desktop plugin produced an unexpected shell mode: ${String(mountedSpec?.mode)}`)
   }
@@ -171,6 +192,7 @@ try {
     throw new Error(`desktop plugin produced an unexpected renderer URL: ${String(mountedSpec?.url)}`)
   }
 } finally {
+  globalThis.fetch = systemFetch
   try {
     await ctx?.fiber.dispose()
   } finally {

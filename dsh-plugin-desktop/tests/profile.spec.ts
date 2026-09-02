@@ -260,6 +260,10 @@ describe('desktop profile composition', {
     expect(rows.find(row => row.id === 'desktop-updates')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/updates',
     }))
+    expect(rows.find(row => row.id === 'desktop-openrouter-billing')).toEqual({
+      id: 'desktop-openrouter-billing',
+      name: 'dsh-plugin-desktop/openrouter-billing',
+    })
     expect(rows.find(row => row.id === 'desktop-notifications')).toEqual(expect.objectContaining({
       name: 'dsh-plugin-desktop/notifications',
     }))
@@ -300,6 +304,10 @@ describe('desktop profile composition', {
       name: 'dsh-plugin-desktop',
       config: expect.objectContaining({ mode: 'compatibility' }),
     }))
+    expect(rows.find(row => row.id === 'desktop-openrouter-billing')).toEqual({
+      id: 'desktop-openrouter-billing',
+      name: 'dsh-plugin-desktop/openrouter-billing',
+    })
   })
 
   it('projects YAML startup settings into the Host, Web server, and client Loader rows', () => {

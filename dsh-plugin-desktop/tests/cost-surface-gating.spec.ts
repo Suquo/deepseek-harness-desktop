@@ -20,8 +20,8 @@ import { describe, expect, it } from 'vitest'
  *     ahead of the one advanced-mode branch, so no mode test stands between
  *     `apply` and the install.
  *  2. ADDITIVE ONLY — a list-slot contribution that declares no slot, provides
- *     no service, writes nothing to upstream's DOM, attaches no handler, and
- *     whose stylesheet cannot select an upstream element.
+ *     no service, writes nothing to upstream's DOM, and attaches only the one
+ *     desktop-owned reconciliation handler whose stylesheet cannot select an upstream element.
  *  3. THE OLD GATE STILL HOLDS EVERYTHING ELSE — relaxing it for this one
  *     surface must not have let the window frame, the theme presenter, the
  *     layout service or the brand sheet through with it, and the boundary is
@@ -61,7 +61,7 @@ const INSTALL = 'installCostSurface'
 const ADVANCED_BRANCH = "if (environment.mode === 'advanced') applyAdvancedShell(ctx, environment)"
 
 /** The cost surface's own modules — the additive-only fences sweep all of them. */
-const COST_MODULES = ['cost-surface.ts', 'TurnCostBadge.tsx', 'turn-cost.ts', 'cost-model.ts', 'cost-rates.ts']
+const COST_MODULES = ['billed-costs.ts', 'cost-surface.ts', 'TurnCostBadge.tsx', 'turn-cost.ts', 'cost-model.ts', 'cost-rates.ts']
 
 const STYLES_OPENER = 'const COST_STYLES = `'
 
@@ -235,12 +235,21 @@ describe('the cost surface stays additive in compatibility mode', () => {
     expect(code(clientSource('cost-surface.ts'))).toContain('document.head.appendChild(style)')
   })
 
-  it('renders read-only: the badge attaches no event handler', () => {
-    // A reporting surface reports. The disclosure toggle is `<details>`'s own
-    // behaviour and needs no handler; anything that acted on the turn would be
-    // altering the upstream client rather than adding to it.
+  it('permits exactly the declared desktop billed-cost control handler', () => {
+    // RM ruling #30: this exact desktop-owned control is the sole handler the
+    // additive surface may carry. Anchor it to the rendered button declaration,
+    // its class, and its whole-turn Host request. Any second handler — including
+    // a render-side reconcile call moved elsewhere — fails the exhaustive sweep.
     const badge = code(clientSource('TurnCostBadge.tsx'))
-    expect(badge).not.toMatch(/\son[A-Z]\w*=/)
+    const controls = [...badge.matchAll(/<button[\s\S]*?<\/button>/g)].map(match => match[0])
+    expect(controls).toHaveLength(1)
+    expect(controls[0]).toContain('className="dshDesktopCostReconcileControl"')
+    expect(controls[0]).toContain("onClick={() => { void billedCostSource.reconcile(sessionId, cost.turn) }}")
+    const handlers = COST_MODULES.flatMap(name => (
+      [...code(clientSource(name)).matchAll(/\s(on[A-Z]\w*)=/g)].map(match => ({ name, handler: match[1] }))
+    ))
+    expect(handlers).toEqual([{ name: 'TurnCostBadge.tsx', handler: 'onClick' }])
+    expect(badge.match(/billedCostSource\.reconcile\(/g)).toHaveLength(1)
     expect(badge).not.toContain('dispatch')
   })
 

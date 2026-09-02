@@ -18,7 +18,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   FREE, PRICED, SessionCostError, UNPRICED, UNTOKENIZED,
-  foldRunTelemetry, parseSessionEvents, priceRun, priceStep, responseIdOf,
+  BILLED, STATUSES, foldRunTelemetry, parseSessionEvents, priceRun, priceStep, responseIdOf,
+  withBilledCost,
 } from '../scripts/session-cost.mjs'
 
 /** The fixture run's real totals, harvested from the operator's session export (issue #6). */
@@ -180,6 +181,17 @@ test('a rated-zero model is free, which is a different state from unpriced', () 
   assert.equal(unknown.usd, undefined)
   // Both would render "$0.0000" under a naive report. They must not compare equal.
   assert.notEqual(free.status, unknown.status)
+})
+
+test('the offline seam mirrors billed without performing reconciliation', () => {
+  const estimate = priceStep(
+    { usage: { inputTokens: 100 }, provider: 'openrouter', model: 'google/gemini-3.6-flash' },
+    FLASH_TABLE,
+  )
+  const billed = withBilledCost(estimate, 0)
+  assert.deepEqual(billed, { status: BILLED, usd: 0, estimate })
+  assert.deepEqual(STATUSES, [PRICED, FREE, UNPRICED, UNTOKENIZED, BILLED])
+  assert.throws(() => withBilledCost(estimate, -1), /finite nonnegative/)
 })
 
 test('a table that rates only some of the buckets the run used prices none of them', () => {

@@ -140,6 +140,10 @@ describe('published package surface', () => {
 
   it('exposes the Host plugin and desktop-owned client face', () => {
     expect(manifest.exports).toHaveProperty('./client')
+    expect(manifest.exports).toHaveProperty('./openrouter-billing', {
+      types: './lib/types/openrouter-billing.d.ts',
+      default: './lib/openrouter-billing.js',
+    })
     expect(manifest.exports).toHaveProperty('./windows-pwsh-sandbox', {
       types: './lib/types/windows-pwsh-sandbox.d.ts',
       default: './lib/windows-pwsh-sandbox.js',
@@ -215,6 +219,7 @@ describe('published package surface', () => {
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/diagnostics')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/notifications')
     expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/updates')
+    expect(readFileSync(new URL('cordis.patch.yml', packageRoot), 'utf8')).toContain('name: dsh-plugin-desktop/openrouter-billing')
   })
 
   it('restates every field the pinned web-runtime row sets, browser handoff off', () => {
