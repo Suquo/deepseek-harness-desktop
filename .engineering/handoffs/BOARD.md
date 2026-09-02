@@ -16,7 +16,7 @@
 
 **UPSTREAM 2026-09-02: `dsh-v0.1.1-rc.2` LANDED (PR #72).** Open fallout: #67 (boot-global docs), #68 (image pipeline — OWNER real-platform datum needed), #69 (deepseek wire pending-live), #70, #73 (notices generator). Next: `dsh-v0.1.2` line deferred until it reaches rc; overlay (anywhere-labs, 301 behind) still unevaluated — Lane C's next scope. Overlay (anywhere-labs) 301 commits behind — not yet evaluated.
 
-**32 merges lifetime** (PR #74 → #64 CLOSED: `check:electron` self-heals the Electron binary in fresh worktrees and CI) (PR #72 2026-09-02: PIN = `dsh-v0.1.1-rc.2` / submodule `b150a551b8`, surface 184 incl. the parametria profile template now fenced; #71 CLOSED) (PR #65 → #55 CLOSED 2026-09-02: shim transparency fenced, stale-target guard exits 78 with a named diagnostic, pnpm 11.17.0) (PR #66 → #23 CLOSED 2026-09-02: evidence surface is structural — `DSH_PARAMETRIA_EVIDENCE_DIR` published per shell call; live datum pending). In review: PR #72 (rc.2 pin bump, Lane C) under RM review, folding the #71 pin moves, second lander. New issues #67-#71 triaged (upstream fallout; #68 owner-visible; #69 pending-live). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
+**33 merges lifetime** (PR #75 → #52 CLOSED: boot-time route preflight banner in the parametria profile; lands on the operator's next `install:profile`) (PR #74 → #64 CLOSED: `check:electron` self-heals the Electron binary in fresh worktrees and CI) (PR #72 2026-09-02: PIN = `dsh-v0.1.1-rc.2` / submodule `b150a551b8`, surface 184 incl. the parametria profile template now fenced; #71 CLOSED) (PR #65 → #55 CLOSED 2026-09-02: shim transparency fenced, stale-target guard exits 78 with a named diagnostic, pnpm 11.17.0) (PR #66 → #23 CLOSED 2026-09-02: evidence surface is structural — `DSH_PARAMETRIA_EVIDENCE_DIR` published per shell call; live datum pending). In review: PR #72 (rc.2 pin bump, Lane C) under RM review, folding the #71 pin moves, second lander. New issues #67-#71 triaged (upstream fallout; #68 owner-visible; #69 pending-live). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -27,13 +27,13 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: gen-12 (Codex) delivered #64 (PR #74). **Next: gen-13 (Codex) on #67** (boot-global injection docs/verifier follow-up), worktree `~/.dsh-resolver-worktrees/issue-67` being prepared. Queue after: #70 → #73 → #46 → #30.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-15 (CODEX `dsh-lane-b`, w4:p3) on #52** (boot-time route preflight banner). Queue after: #54 → #58 → #62.
+- **Lane B (parametria-harness, `pm/*`)**: gen-15 (Codex) delivered #52 (PR #75). **Next: gen-16 (Codex) on #54** (read_image fallback), worktree `~/.dsh-resolver-worktrees/issue-54` being prepared. Queue after: #58 → #62.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-5 (last Claude gen) landed rc.2 (PR #72). Next spawn = CODEX: anywhere-labs overlay evaluation (301 commits behind).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: #52 (Lane B gen-15, PR #75 APPROVE-PENDING-CI, chain armed).**
+- **In flight: #67 (Lane A gen-13, PR #76 fix cycle 1: served-page sentinel).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
