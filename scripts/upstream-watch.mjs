@@ -352,7 +352,20 @@ const revalidation = patches.filter(patch => patch.tracksHarnessPin)
 // turns "bump the pin" into a countable worklist instead of a search.
 
 const version = upstreamJson.runtimePackageVersion
-const manifests = ['package.json', ...(workspace.workspaces ?? []).map(name => `${name}/package.json`)]
+// The workspaces plus the non-workspace manifests that also pin the family. The
+// second list must stay in step with `manifests` in `scripts/verify-layout.mjs`:
+// that script FENCES the surface and this one enumerates it as a forward
+// worklist, and a bump surface one of them cannot see is a surface the other
+// silently disagrees about. `dsh-preset-parametria/profile/package.json` is the
+// profile TEMPLATE installed into `$DSH_HOME/profiles/parametria/`; it is not a
+// workspace, so `workspaces` never reached it, and its three pins sat a release
+// line behind the harness until the 0.1.1-rc.2 bump found them.
+const extraPinnedManifests = ['dsh-preset-parametria/profile/package.json']
+const manifests = [
+  'package.json',
+  ...(workspace.workspaces ?? []).map(name => `${name}/package.json`),
+  ...extraPinnedManifests,
+]
 
 const bumpSurface = manifests.map(path => {
   const manifest = readJson(path)

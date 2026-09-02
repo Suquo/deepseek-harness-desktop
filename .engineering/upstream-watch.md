@@ -109,7 +109,7 @@ decision is "inherit" or "adapt".
 3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
    **This paragraph is the authoritative statement of what that surface holds; the
    rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
-   restating the arithmetic.** At `0.1.1-rc.2` it is **181** entries:
+   restating the arithmetic.** At `0.1.1-rc.2` it is **184** entries:
 
    | Where | Entries | Enforced by |
    |---|---|---|
@@ -117,8 +117,20 @@ decision is "inherit" or "adapt".
    | `dsh-plugin-desktop/package.json` `devDependencies` | 3 | `pinSurface` |
    | `dsh-community-market/package.json` `devDependencies` | 38 | `pinSurface` |
    | `dsh-community-market/package.json` `peerDependencies` | 28 | `pinSurface` |
+   | `dsh-preset-parametria/profile/package.json` `dependencies` | 3 | `pinSurface` |
    | root `package.json` `resolutions` selectors | 13 | `patchedPackages` |
-   | **total** | **181** | |
+   | **total** | **184** | |
+
+   **The fifth row is not a workspace manifest**, and that is why it went
+   unguarded until 0.1.1-rc.2. It is the profile TEMPLATE
+   `dsh-preset-parametria` installs into `$DSH_HOME/profiles/parametria/`, whose
+   three pins (`dsh-sdk-protocol`, `dsh-subagent-claude-code`,
+   `dsh-subagent-codex`) mount the subagent providers the preset's
+   `subagent_validator` deny list names. They sat at `0.1.0-rc.7` — whose peer
+   ranges (`^0.1.0-rc.7`) admit `0.1.0-rc.8` but **not** `0.1.1-rc.2`, by the
+   semver prerelease-tuple rule — with nothing in the tree to notice. **A pinned
+   manifest that is not a workspace is the shape this surface hides in**; look
+   for others before assuming the fifth row is the last one.
 
    **This table was itself stale before the 0.1.1-rc.2 bump** — it still read 173 with
    9 resolutions selectors and no desktop `devDependencies` row, while the tree had
@@ -334,7 +346,7 @@ this document lie about the tree it describes:
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.
 
-**The 181-entry bump surface is not the whole version-shaped surface, and this document
+**The 184-entry bump surface is not the whole version-shaped surface, and this document
 used to read as though it were.** `check:layout` fences the manifests; roughly 220
 further literals live outside them and are covered by other gates or by nothing at all.
 At rc.8 they were: `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` (regenerate with
