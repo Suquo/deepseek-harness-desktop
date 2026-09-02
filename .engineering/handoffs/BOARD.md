@@ -16,7 +16,7 @@
 
 **UPSTREAM WATCH 2026-09-02: harness 7 releases behind** (pinned rc.8; `dsh-v0.1.1-rc.1/rc.2` 2026-08-21, `dsh-v0.1.2-alpha.1..5` through 2026-09-02; 1978 commits behind master). Overlay (anywhere-labs) 301 commits behind, 97 open PRs there. Lane C eval spawned: target the conservative `dsh-v0.1.1-rc.2` first (past the 24 h age gate; rc-track), report the break surface, freeze before PR if patches don't re-apply.
 
-**28 merges lifetime.**
+**28 merges lifetime.** In review: PR #65 (#55) and PR #66 (#23), both REQUEST CHANGES 2026-09-02 (fix cycles with Lane A gen-11 / Lane B gen-14). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
