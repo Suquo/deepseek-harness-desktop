@@ -37,6 +37,8 @@ export const ROUTE_REMEDY = 'corepack yarn install:profile'
 
 /** Loader-entry shape used by the route discovery rule. */
 export interface RouteEntry {
+  /** Effective loader state, including disabled parent groups. */
+  readonly disabled?: boolean
   readonly options: {
     readonly name: string
     readonly config?: unknown
@@ -64,6 +66,7 @@ export const Config: z<Config> = z.object({})
 export function pinnedSubagentProviders(entries: Iterable<RouteEntry>): string[] {
   const providers = new Set<string>()
   for (const entry of entries) {
+    if (entry.disabled) continue
     if (entry.options.name !== SUBAGENT_PLUGIN) continue
     const config = entry.options.config as SubagentConfig | undefined
     const provider = config?.agentOptions?.provider

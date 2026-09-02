@@ -2,7 +2,7 @@
 
 import { readFileSync } from 'node:fs'
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, SessionStartSource } from '@deepseek-ai/dsh-agent'
 import {
   LlmAdapter,
   LlmRuntime,
@@ -17,6 +17,7 @@ import {
 } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
+import * as RoutePreflight from '../src/parametria-route-preflight.ts'
 import {
   ROUTE_REMEDY,
   SUBAGENT_PLUGIN,
@@ -36,9 +37,10 @@ class SilentAdapter extends LlmAdapter {
 
 function row(
   provider?: string,
-  options: { name?: string } = {},
+  options: { disabled?: boolean; name?: string } = {},
 ): RouteEntry {
   return {
+    ...(options.disabled === undefined ? {} : { disabled: options.disabled }),
     options: {
       name: options.name ?? SUBAGENT_PLUGIN,
       config: provider === undefined ? {} : { agentOptions: { provider } },
@@ -60,7 +62,9 @@ async function mounted(entries: RouteEntry[]) {
   const agent = { session } as Agent
   installRoutePreflight(ctx, () => entries)
 
-  const start = () => ctx.emit('agent/session-start', { agent, source: 'startup' })
+  const start = (source: SessionStartSource = 'startup') => {
+    ctx.emit('agent/session-start', { agent, source })
+  }
   return { ctx, published, session, start }
 }
 
@@ -96,18 +100,34 @@ function noticeText(session: Session): string[] {
 }
 
 describe('provider pins are derived from the mounted rows', () => {
-  it('finds every subagent pin, de-duplicates it, and ignores unrelated rows', () => {
+  it('finds every active subagent pin, de-duplicates it, and ignores unrelated rows', () => {
     expect(pinnedSubagentProviders([
       row('future-vision-route'),
       row('future-vision-route'),
       row('not-a-subagent', { name: 'another-plugin' }),
       row(),
+      row('disabled-route', { disabled: true }),
       row('second-route'),
     ])).toEqual(['future-vision-route', 'second-route'])
   })
 })
 
 describe('session-start preflight against the live LLM registry', () => {
+  it.each([
+    'startup',
+    'resume',
+    'clear',
+    'compact',
+  ] satisfies SessionStartSource[])('checks the registry on the %s lifecycle edge', async (source) => {
+    const { session, start } = await mounted([row(`${source}-route`)])
+
+    start(source)
+
+    expect(noticeText(session)).toEqual([
+      expect.stringContaining(`${source}-route`),
+    ])
+  })
+
   it('is loud while an invented pinned route is absent, silent when registered, and loud after disposal', async () => {
     const route = 'future-vision-route'
     const { ctx, published, session, start } = await mounted([row(route)])
@@ -227,13 +247,9 @@ describe('session-start preflight against the live LLM registry', () => {
 
 describe('Cordis namespace module shape', () => {
   it('exports name, inject, and apply as siblings with no default export', () => {
-    const source = readFileSync(
-      new URL('../src/parametria-route-preflight.ts', import.meta.url),
-      'utf8',
-    )
-    expect(source).toMatch(/^export const name =/m)
-    expect(source).toMatch(/^export const inject =/m)
-    expect(source).toMatch(/^export function apply\(/m)
-    expect(source).not.toMatch(/export default/u)
+    expect(RoutePreflight.name).toBe('parametria-route-preflight')
+    expect(RoutePreflight.inject).toEqual(['llm'])
+    expect(RoutePreflight.apply).toBe(apply)
+    expect(RoutePreflight).not.toHaveProperty('default')
   })
 })
