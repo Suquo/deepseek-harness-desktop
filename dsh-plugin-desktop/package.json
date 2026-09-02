@@ -263,6 +263,7 @@
     "@deepseek-ai/dsh-agent-loop": "0.1.1-rc.2",
     "@deepseek-ai/dsh-attachment-local": "0.1.1-rc.2",
     "@deepseek-ai/dsh-fs-observation-policy": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.1.1-rc.2",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-subagent": "0.1.1-rc.2",
     "@electron/asar": "3.4.1",

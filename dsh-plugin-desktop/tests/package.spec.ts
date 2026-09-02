@@ -888,6 +888,10 @@ describe('published package surface', () => {
     const seamResolution = 'patch:@deepseek-ai/dsh-subagent@npm%3A0.1.1-rc.2#./patches/dsh-subagent@0.1.1-rc.2.patch'
     const driverResolution = 'patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.1-rc.2#./patches/dsh-subagent-in-process-driver@0.1.1-rc.2.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
+    const seamPatch = readFileSync(
+      new URL('patches/dsh-subagent@0.1.1-rc.2.patch', workspaceRoot),
+      'utf8',
+    )
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const seamManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent/package.json')
     const driverManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent-in-process-driver/package.json')
@@ -924,5 +928,9 @@ describe('published package surface', () => {
     const installedSeam = readFileSync(join(dirname(seamManifest), 'lib/index.js'), 'utf8')
     expect(installedDriver).toContain('function childFailureDiagnostic(reason, sessionId) {')
     expect(installedSeam).toMatch(/^export \{[^}]*\blimitSubagentDiagnostic\b/mu)
+    expect(seamPatch.match(/^@@ /gmu)).toHaveLength(9)
+    expect(seamPatch).toMatch(/^\+function epochTerminal\(events, childId\) \{$/mu)
+    expect(installedSeam).toMatch(/^function epochTerminal\(events, childId\) \{$/mu)
+    expect(installedSeam).toMatch(/^function subagentFailureDiagnostic\(failure, childId\) \{$/mu)
   })
 })

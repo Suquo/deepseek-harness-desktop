@@ -2675,7 +2675,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/dsh-session-persistence-jsonl@npm:^0.1.1-rc.2":
+"@deepseek-ai/dsh-session-persistence-jsonl@npm:0.1.1-rc.2, @deepseek-ai/dsh-session-persistence-jsonl@npm:^0.1.1-rc.2":
   version: 0.1.1-rc.2
   resolution: "@deepseek-ai/dsh-session-persistence-jsonl@npm:0.1.1-rc.2"
   dependencies:
@@ -3189,7 +3189,7 @@ __metadata:
 
 "@deepseek-ai/dsh-subagent@patch:@deepseek-ai/dsh-subagent@npm%3A0.1.1-rc.2#./patches/dsh-subagent@0.1.1-rc.2.patch::locator=deepseek-harness-desktop%40workspace%3A.":
   version: 0.1.1-rc.2
-  resolution: "@deepseek-ai/dsh-subagent@patch:@deepseek-ai/dsh-subagent@npm%3A0.1.1-rc.2#./patches/dsh-subagent@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=92ef41&locator=deepseek-harness-desktop%40workspace%3A."
+  resolution: "@deepseek-ai/dsh-subagent@patch:@deepseek-ai/dsh-subagent@npm%3A0.1.1-rc.2#./patches/dsh-subagent@0.1.1-rc.2.patch::version=0.1.1-rc.2&hash=3af03d&locator=deepseek-harness-desktop%40workspace%3A."
   dependencies:
     zod: "npm:^4.4.3"
   peerDependencies:
@@ -3226,7 +3226,7 @@ __metadata:
       optional: true
     "@deepseek-ai/dsh-user-approval":
       optional: true
-  checksum: 10c0/3e6a6f4529aa732229f231b9be86cc3fd49485898b03ba31d8fb9ca058e56d0f68e806383176d430ed433b75c4a94da31475b7f31bc7d38dd24fd060a605a952
+  checksum: 10c0/7519d05094941d1594b0cc89e1d4240844bb83b083877028144321f3c86278bd62d4170aa4dcb484ea94e628d7720c38b7e101b17e8eb366fa5a00eb15a7bd74
   languageName: node
   linkType: hard
 
@@ -7332,6 +7332,7 @@ __metadata:
     "@deepseek-ai/dsh-scope": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-session": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-session-persistence": "npm:0.1.1-rc.2"
+    "@deepseek-ai/dsh-session-persistence-jsonl": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-session-projection": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-session-query": "npm:0.1.1-rc.2"
     "@deepseek-ai/dsh-session-reference": "npm:0.1.1-rc.2"
