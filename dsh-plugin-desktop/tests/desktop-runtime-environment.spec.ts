@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -486,7 +487,9 @@ describe('desktop Host pnpm runtime', () => {
     expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0)
     expect(JSON.parse(readFileSync(captureOutput, 'utf8'))).toEqual({
       // pnpm resolves `packageManager` from the working directory: the shim must not relocate it.
-      cwd: targetRepo,
+      // Realpath both sides: macOS tmpdir() is /var/…, a symlink to /private/var/…, and the child's
+      // process.cwd() reports the resolved form (desktop-macos red on PR #65).
+      cwd: realpathSync(targetRepo),
       resolvedPin: 'pnpm@11.17.0',
       // Arguments reach pnpm verbatim, so `pnpm run dev:web` stays `pnpm run dev:web`.
       args: ['run', 'dev:web'],
