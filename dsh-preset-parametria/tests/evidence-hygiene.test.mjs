@@ -27,7 +27,7 @@ import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { PACKAGE_ROOT, REPO_ROOT, indexRows, readComposition } from './helpers.mjs'
+import { PACKAGE_ROOT, REPO_ROOT, desktopDeclaration, indexRows, readComposition } from './helpers.mjs'
 
 const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
 const persona = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml'))).get('persona').config.text
@@ -107,9 +107,12 @@ describe('persona workspace directories vs this repository\'s .gitignore', () =>
     // A derivation that silently matches nothing would make every assertion
     // below vacuously true, which is the failure mode of a derived fence.
     assert.ok(dirs.length > 0, 'the persona names no workspace directory — the extraction below has gone stale')
+    // Anchored on the desktop plugin's ONE declaration of the root (issue #23),
+    // not a restated literal: renaming the segment there turns this red.
+    const root = desktopDeclaration('parametria-evidence', 'EVIDENCE_ROOT_SEGMENT')
     assert.ok(
-      dirs.includes('.parametria-evidence'),
-      'the persona must name `.parametria-evidence/` as the run\'s artifact root (issue #9 item 1): '
+      dirs.includes(root),
+      `the persona must name \`${root}/\` as the run's artifact root (issue #9 item 1): `
       + `derived ${JSON.stringify(dirs)}`,
     )
   })

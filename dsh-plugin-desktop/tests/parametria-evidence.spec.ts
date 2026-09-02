@@ -15,7 +15,7 @@
  * That is a live datum and it is named in the PR body.
  */
 
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -94,9 +94,13 @@ describe('one derivation, shared with the capture tool', () => {
     // The dedupe claim as a checkable claim (standard 12). A future edit that
     // pastes the literal back into another module fails here rather than
     // creating a second answer that drifts quietly.
-    const sources = ['parametria-evidence', 'parametria-capture'].map(module => readFileSync(
-      fileURLToPath(new URL(`../src/${module}.ts`, import.meta.url)), 'utf8',
-    ))
+    // The WHOLE source tree is swept, not the two modules that carry the name
+    // today — a third module pasting the literal is exactly the drift this is for.
+    const srcRoot = fileURLToPath(new URL('../src', import.meta.url))
+    const sources = readdirSync(srcRoot, { withFileTypes: true, recursive: true })
+      .filter(entry => entry.isFile() && /\.tsx?$/u.test(entry.name))
+      .map(entry => readFileSync(join(entry.parentPath, entry.name), 'utf8'))
+    expect(sources.length).toBeGreaterThan(2)
     const declarations = sources.flatMap(source => [
       ...source.matchAll(/export const EVIDENCE_ROOT_SEGMENT = '/g),
     ])
@@ -233,6 +237,65 @@ describe('the contributor, against the real registry', () => {
         .toBe(join(cwd, EVIDENCE_ROOT_SEGMENT, SESSION))
     } finally {
       rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a regular file sitting where the run directory must be, rather than calling it prepared', () => {
+    // A recursive mkdir raises EEXIST (not ENOTDIR) when the FINAL path exists
+    // as a file, on every platform — and Windows says EEXIST for a blocked
+    // ancestor too. That code must not be mistaken for the benign marker race:
+    // a blocked root reported as success lets the capture tool spawn into a
+    // directory that does not exist, silently.
+    const cwd = mkdtempSync(join(tmpdir(), 'pm-evidence-'))
+    try {
+      const dir = evidenceDirFor({ cwd, sessionId: SESSION })
+      mkdirSync(join(dir, '..'), { recursive: true })
+      writeFileSync(dir, 'not a directory')
+      const failure = prepareEvidenceDir(dir)
+      expect(failure).toBeDefined()
+      expect((failure as NodeJS.ErrnoException).code).toBe('EEXIST')
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses the `.` session id, whose run directory would be the root itself', () => {
+    // `join(root, '.')` normalises to the root, so the marker's "parent" would
+    // be the user's workspace and `<cwd>/.gitignore` would become `*`.
+    expect(evidenceSiteProblem({ cwd: CWD, sessionId: '.' })).toBeDefined()
+    const { registry, cwd } = mounted()
+    try {
+      expect(registry.collect(execution({ id: '.', cwd }))).not.toHaveProperty(EVIDENCE_DIR_ENV)
+      expect(() => statSync(join(cwd, '.gitignore'))).toThrow()
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('never seeds the ignore marker outside an evidence root, even when handed such a path', () => {
+    // Belt to the site rule's braces: the marker write is refused by the
+    // directory's own shape, not only by the id that produced it.
+    const cwd = mkdtempSync(join(tmpdir(), 'pm-evidence-'))
+    try {
+      const failure = prepareEvidenceDir(join(cwd, 'run'))
+      expect(failure).toBeInstanceOf(Error)
+      expect(() => statSync(join(cwd, '.gitignore'))).toThrow()
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('promises creation in the variable description only when configured to create', () => {
+    const on = mounted()
+    const off = mounted(false)
+    try {
+      const described = (registry: typeof on.registry) =>
+        registry.list().find(info => info.key === EVIDENCE_DIR_ENV)?.description ?? ''
+      expect(described(on.registry)).toContain('creates it before your first shell command')
+      expect(described(off.registry)).not.toContain('creates it before your first shell command')
+    } finally {
+      rmSync(on.cwd, { recursive: true, force: true })
+      rmSync(off.cwd, { recursive: true, force: true })
     }
   })
 

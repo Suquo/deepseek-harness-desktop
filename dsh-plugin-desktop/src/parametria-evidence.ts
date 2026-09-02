@@ -49,7 +49,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-shell-env'
@@ -73,7 +73,8 @@ export const inject = ['shellEnv']
  * The run-artifact root, relative to the session workspace.
  *
  * THE one declaration. `parametria-capture` re-exports this rather than
- * spelling it again, the persona's copy is fenced against it, and the root
+ * spelling it again, the persona's copy is fenced against it (the preset's
+ * `evidence-hygiene` test anchors on this declaration), and the root
  * `.gitignore` entry is derived from the persona — so the string exists once and
  * every other appearance is checked against it.
  */
@@ -126,7 +127,11 @@ export function evidenceSiteProblem(site: EvidenceSite): string | undefined {
     return 'the calling session has no absolute working directory, so the run evidence directory '
       + 'cannot be resolved. This requires an agent session.'
   }
+  // `.` is rejected by name: `join(root, '.')` normalises to the ROOT, and the
+  // self-ignore marker would then be written one level up — into the user's
+  // own `<cwd>/.gitignore`, as `*` (gen-14 self-review catch).
   if (site.sessionId.trim().length === 0
+    || site.sessionId === '.'
     || /[\\/]/.test(site.sessionId)
     || site.sessionId.includes('..')) {
     return 'the calling session has no usable id for the run-scoped evidence directory.'
@@ -164,15 +169,32 @@ export function evidenceDirFor(site: EvidenceSite): string {
 export function prepareEvidenceDir(dir: string): unknown {
   try {
     mkdirSync(dir, { recursive: true })
-    // The marker belongs to the ROOT, not to one run: `join(dir, '..')` is the
-    // root by construction of `evidenceDirFor`. Written only when absent, so an
-    // operator who edits it keeps their edit.
-    const marker = join(dir, '..', '.gitignore')
+  } catch (error: unknown) {
+    // Every mkdir failure is the caller's to weigh — INCLUDING `EEXIST`, which
+    // a recursive mkdir raises when a regular file sits where a directory must
+    // be (on every platform for `dir` itself; on Windows for any ancestor too,
+    // where Linux says `ENOTDIR`). Swallowing it here would report a blocked
+    // root as success and let the capture tool spawn into a directory that
+    // does not exist (gen-14 self-review catch).
+    return error
+  }
+  // The marker belongs to the ROOT, not to one run: the run directory's parent
+  // is the root by construction of `evidenceDirFor`. Checked rather than
+  // assumed, because a `*` ignore file written anywhere else silences the
+  // user's whole repository — the site rule refuses the ids that could get
+  // here, and this is the belt to that braces.
+  const root = dirname(dir)
+  if (basename(root) !== EVIDENCE_ROOT_SEGMENT) {
+    return new Error(`refusing to seed the ignore marker: ${root} is not a ${EVIDENCE_ROOT_SEGMENT} root`)
+  }
+  try {
+    // Written only when absent, so an operator who edits it keeps their edit.
+    const marker = join(root, '.gitignore')
     if (!existsSync(marker)) writeFileSync(marker, EVIDENCE_IGNORE_MARKER, { flag: 'wx' })
     return undefined
   } catch (error: unknown) {
-    // `wx` loses a benign race with a concurrent session; anything else is the
-    // caller's to weigh.
+    // `wx` loses a benign race with a concurrent session — the ONLY `EEXIST`
+    // this function forgives; anything else is the caller's to weigh.
     if ((error as NodeJS.ErrnoException | null)?.code === 'EEXIST') return undefined
     return error
   }
@@ -203,8 +225,11 @@ export const Config: z<Config> = z.object({
  */
 const VARIABLE_DESCRIPTION =
   `Absolute, run-scoped directory for this ${PARAMETRIA_PRODUCT_NAME} run's artifacts — screenshots, `
-  + 'spec JSON, and any script the run writes. Already created. Write every artifact under it and '
-  + 'nothing beside it.'
+  + 'spec JSON, and any script the run writes. Write every artifact under it and nothing beside it.'
+
+/** Appended to the description only when the Host is configured to create the directory. */
+const CREATED_CLAUSE = ' This host creates it before your first shell command; if a write into it '
+  + 'fails anyway, create it yourself.'
 
 /**
  * Register the evidence-directory contributor.
@@ -222,7 +247,13 @@ export function apply(ctx: Context, config: Config): void {
   const prepared = new Set<string>()
   ctx.shellEnv.register({
     name,
-    variables: { [EVIDENCE_DIR_ENV]: { description: VARIABLE_DESCRIPTION } },
+    variables: {
+      [EVIDENCE_DIR_ENV]: {
+        // The description is quoted back to the model, so it promises creation
+        // only when this generation is configured to attempt it (standard 12).
+        description: VARIABLE_DESCRIPTION + ((config.createOnResolve ?? true) ? CREATED_CLAUSE : ''),
+      },
+    },
     resolve(execution) {
       const agent = execution.agent
       // A direct (non-agent) shell call has no workspace or run identity to
