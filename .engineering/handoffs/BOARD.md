@@ -33,7 +33,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: #54 (Lane B gen-16) · #70 (Lane A gen-14).**
+- **In flight: #70 (Lane A gen-14, PR #77 APPROVE-PENDING-CI) · #54 (Lane B gen-16, PR #79 REQUEST CHANGES: close keyword, patch hygiene, restored-turn grounding; issue stays pending-live).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
@@ -45,5 +45,6 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **Linux distributable:** upstream ships no Linux installer target (AppImage/deb). If the owner wants one on this machine, that is a new fork issue — say so and the RM files it.
 - **Packaged app REBUILT at rc.2 by admin (2026-09-02, master fd3bd7bd, dist/linux-unpacked)** — the owner's next launch carries the new pin. Awaiting the first-run report: image-attachment behaviour (#68 datum) and any DeepSeek run (#69 pending-live).
 - **Live-run items (carried from the Windows era, re-verify on Linux):** the installed pnpm shim execs from a stale deleted worktree — relaunch from the primary checkout regenerates runtime-commands (#55 fixes the loud-failure side); agy sign-in; claude-cli vision under SessionEnd hook cancellation; codex spawn EINVAL (was a modlens Windows bug — may be moot on Linux).
+- **Upstream report candidates (anywhere-labs / deepseek-harness):** PR #79 carries a 29-line yarn patch giving `dsh-tool-fs`'s `assertImageCapableRoute` a composition-answered fallback hook (`fs/read-image-route`) — propose upstream once live-proven; plus the appendOwned quadratic + O_TRUNC EINVAL forensics below.
 - **Rulings pending:** skill-root canonicalization (#7) · SK-1..4 landing surface · rebrand identity migrations + product NAMING ("DSH Terminal" → ?) · report the appendOwned quadratic + O_TRUNC EINVAL forensics to anywhere-labs? · modlens into the parametria profile?
 - **SECURITY: Pinecone API key** — literal REMOVED from all 4 skill-script copies by admin (2026-09-02; env / `scripts/.env` lookup now). Remaining with the owner: rotate the key (it lives in both private skill repos' history).
