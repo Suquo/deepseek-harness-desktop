@@ -32,7 +32,7 @@ const PNG_1X1 = Buffer.from(
 )
 const signal = new AbortController().signal
 
-class ModalAdapter extends LlmAdapter {
+class ModalityAdapter extends LlmAdapter {
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
     return Promise.resolve({
       provider,
@@ -75,7 +75,7 @@ function fakeAgent(config: LlmCallConfig): Agent {
 async function setup(config = {
   provider: 'parametria-vision',
   model: 'vision-model',
-}) {
+}, install = true) {
   const ctx = new Context()
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -83,8 +83,8 @@ async function setup(config = {
   await ctx.plugin(FsPolicy)
   await ctx.plugin(LocalAttachmentStore, { dshHome: attachmentHome })
   await ctx.plugin(LlmRuntime)
-  ctx.llm.registerAdapter(['session-text', 'parametria-vision'], new ModalAdapter())
-  installReadImageFallback(ctx, config)
+  ctx.llm.registerAdapter(['session-text', 'parametria-vision'], new ModalityAdapter())
+  if (install) installReadImageFallback(ctx, config)
   await ctx.plugin(ToolFs)
   return ctx
 }
@@ -99,11 +99,17 @@ async function readImage(ctx: Context, agent: Agent) {
   })
 }
 
-function proposed(ctx: Context, agent: Agent, config: LlmCallConfig) {
+function resolveRequestRoute(
+  ctx: Context,
+  agent: Agent,
+  config: LlmCallConfig,
+  turn = 1,
+  step = 2,
+) {
   return ctx.waterfall('agent/request', {
     agent,
-    turn: 1,
-    step: 2,
+    turn,
+    step,
     signal,
   }, () => Promise.resolve(config))
 }
@@ -119,12 +125,13 @@ describe('patched read_image modality gate', () => {
       temperature: 0.2,
     } as LlmCallConfig
     const agent = fakeAgent(original)
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 1)).toEqual(original)
 
     const result = await readImage(ctx, agent)
 
     expect(result.isError).toBe(false)
     expect(result.content.map(block => block.type)).toEqual(['text', 'image'])
-    expect(await proposed(ctx, agent, original)).toEqual({
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual({
       provider: 'parametria-vision',
       model: 'vision-model',
       temperature: 0.2,
@@ -143,28 +150,48 @@ describe('patched read_image modality gate', () => {
       stop: ['DONE'],
     } as LlmCallConfig
     const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
     await readImage(ctx, agent)
+    await resolveRequestRoute(ctx, agent, original, 1, 2)
     await ctx.serial('agent/turn-stopping', { agent, turn: 1, signal })
 
-    const restored = await proposed(ctx, agent, {
+    const restored = await resolveRequestRoute(ctx, agent, {
       provider: 'parametria-vision',
       model: 'vision-model',
       maxTokens: 65_536,
-    })
+    }, 2, 1)
 
     expect(restored).toEqual(original)
-    expect(await proposed(ctx, agent, restored)).toEqual(restored)
+    expect(await resolveRequestRoute(ctx, agent, restored, 2, 2)).toEqual(restored)
+  })
+
+  it('keeps the fallback active when turn-stopping steering continues the same turn', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const ctx = await setup()
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
+    await readImage(ctx, agent)
+    await resolveRequestRoute(ctx, agent, original, 1, 2)
+
+    await ctx.serial('agent/turn-stopping', { agent, turn: 1, signal })
+
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 3)).toEqual({
+      provider: 'parametria-vision',
+      model: 'vision-model',
+    })
   })
 
   it('preserves a model selection changed before restoration', async () => {
     await writeFile(join(workdir, 'red.png'), PNG_1X1)
     const ctx = await setup()
-    const agent = fakeAgent({ provider: 'session-text', model: 'text-model' })
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
     await readImage(ctx, agent)
-    await ctx.serial('agent/turn-stopping', { agent, turn: 1, signal })
     const changed = { provider: 'another-route', model: 'another-model' }
 
-    expect(await proposed(ctx, agent, changed)).toEqual(changed)
+    expect(await resolveRequestRoute(ctx, agent, changed, 2, 1)).toEqual(changed)
   })
 
   it('does not activate an image-ineligible fallback', async () => {
@@ -172,6 +199,7 @@ describe('patched read_image modality gate', () => {
     const ctx = await setup({ provider: 'session-text', model: 'text-model' })
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
 
     const result = await readImage(ctx, agent)
 
@@ -182,13 +210,33 @@ describe('patched read_image modality gate', () => {
         text: expect.stringContaining('does not declare image input'),
       }),
     ])
-    expect(await proposed(ctx, agent, original)).toEqual(original)
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
+  })
+
+  it('preserves the upstream refusal when the configured fallback route is unavailable', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const ctx = await setup({ provider: 'missing-route', model: 'missing-model' })
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
+
+    const result = await readImage(ctx, agent)
+
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('model "text-model" does not declare image input'),
+      }),
+    ])
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
   })
 
   it('does not activate the route when image admission fails after modality validation', async () => {
     const ctx = await setup()
     const original = { provider: 'session-text', model: 'text-model' }
     const agent = fakeAgent(original)
+    await resolveRequestRoute(ctx, agent, original, 1, 1)
 
     const result = await readImage(ctx, agent)
 
@@ -199,7 +247,7 @@ describe('patched read_image modality gate', () => {
         text: expect.stringContaining('not found'),
       }),
     ])
-    expect(await proposed(ctx, agent, original)).toEqual(original)
+    expect(await resolveRequestRoute(ctx, agent, original, 1, 2)).toEqual(original)
   })
 
   it('leaves an already image-capable session on its own route', async () => {
@@ -207,9 +255,27 @@ describe('patched read_image modality gate', () => {
     const ctx = await setup()
     const ownRoute = { provider: 'parametria-vision', model: 'vision-model' }
     const agent = fakeAgent(ownRoute)
+    await resolveRequestRoute(ctx, agent, ownRoute, 1, 1)
 
     expect((await readImage(ctx, agent)).isError).toBe(false)
-    expect(await proposed(ctx, agent, ownRoute)).toEqual(ownRoute)
+    expect(await resolveRequestRoute(ctx, agent, ownRoute, 1, 2)).toEqual(ownRoute)
+  })
+
+  it('keeps the original refusal when the Parametria plugin is not composed', async () => {
+    await writeFile(join(workdir, 'red.png'), PNG_1X1)
+    const ctx = await setup(undefined, false)
+    const original = { provider: 'session-text', model: 'text-model' }
+    const agent = fakeAgent(original)
+
+    const result = await readImage(ctx, agent)
+
+    expect(result.isError).toBe(true)
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('model "text-model" does not declare image input'),
+      }),
+    ])
   })
 })
 
@@ -226,6 +292,7 @@ describe('fail-open composition behavior', () => {
         },
       },
     } as unknown as Agent
+    await resolveRequestRoute(ctx, agent, { provider: 'session-text', model: 'text-model' }, 1, 1)
     const fallback = await ctx.waterfall('fs/read-image-route', {
       agent,
     } as never, { provider: 'session-text', model: 'text-model' }, () => Promise.resolve(undefined))

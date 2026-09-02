@@ -6,7 +6,7 @@
  * patch only asks composition for an optional candidate after the calling
  * route is known text-only. This plugin supplies the Parametria-owned vision
  * route, keeps the rest of that turn on it so the attached image reaches a
- * capable model, then restores the prior route on the next request.
+ * capable model, then restores the prior route on the first later-turn request.
  *
  * @module dsh-plugin-desktop/parametria-read-image-fallback
  */
@@ -41,9 +41,9 @@ interface Route {
 }
 
 interface FallbackState {
+  readonly activeTurn: number
   readonly fallback: Route
   readonly original: LlmCallConfig
-  phase: 'active' | 'restore'
 }
 
 function sameRoute(config: Route, route: Route): boolean {
@@ -74,6 +74,9 @@ function withRoute(config: LlmCallConfig, route: Route): LlmCallConfig {
  */
 export function installReadImageFallback(ctx: Context, config: Config): void {
   const states = new Map<Agent, FallbackState>()
+  // A model-requested tool execution does not carry its turn number. Remember
+  // the request that admitted it so same-turn steering cannot restore early.
+  const requestTurns = new WeakMap<Agent, number>()
 
   ctx.on('fs/read-image-route', async (exec, current, next) => {
     const downstream = await next()
@@ -81,12 +84,14 @@ export function installReadImageFallback(ctx: Context, config: Config): void {
     try {
       const agent = exec.agent
       if (agent === undefined) return undefined
+      const activeTurn = requestTurns.get(agent)
+      if (activeTurn === undefined) return undefined
       const fallback = Object.freeze({ provider: config.provider, model: config.model })
       const original = originalConfig(agent, current)
       const candidate: ImageRouteFallback = {
         ...fallback,
         activate() {
-          states.set(agent, { fallback, original, phase: 'active' })
+          states.set(agent, { activeTurn, fallback, original })
         },
       }
       return candidate
@@ -99,12 +104,13 @@ export function installReadImageFallback(ctx: Context, config: Config): void {
     }
   })
 
-  ctx.on('agent/request', async ({ agent }, next) => {
+  ctx.on('agent/request', async ({ agent, turn }, next) => {
     const proposed = await next()
     try {
+      requestTurns.set(agent, turn)
       const state = states.get(agent)
       if (state === undefined) return proposed
-      if (state.phase === 'active') return withRoute(proposed, state.fallback)
+      if (turn === state.activeTurn) return withRoute(proposed, state.fallback)
 
       states.delete(agent)
       return sameRoute(proposed, state.fallback)
@@ -120,17 +126,9 @@ export function installReadImageFallback(ctx: Context, config: Config): void {
     }
   })
 
-  const armRestore = (agent: Agent) => {
-    const state = states.get(agent)
-    if (state !== undefined) state.phase = 'restore'
-  }
-  ctx.on('agent/turn-stopping', ({ agent }) => armRestore(agent))
-  ctx.on('agent/error', ({ agent }) => armRestore(agent))
-  ctx.on('agent/status', ({ agent, status }) => {
-    if (status === 'idle') armRestore(agent)
-  })
   ctx.on('agent/disposed', ({ agent }) => {
     states.delete(agent)
+    requestTurns.delete(agent)
   })
 }
 

@@ -108,19 +108,33 @@ describe('published package surface', () => {
     })
   })
 
-  it('builds every subpath the manifest exports, so a dropped tsdown entry cannot leave a dangling export', () => {
-    // Standard 6, both directions on the Parametria subpaths (PR #66 R1): the
-    // manifest names `./lib/<name>.js`, so `tsdown.config.ts` must declare the
-    // `<name>` entry that produces it — and vice versa for these four.
-    const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
-    for (const subpath of [
+  it('keeps the Parametria manifest exports and tsdown entries exhaustive in both directions', () => {
+    // Standard 6, both directions (PR #66 R1): compare the sets discovered on
+    // both surfaces, then snapshot the complete expected set. This catches an
+    // entry added to either side, both sides, or with a mismatched source name.
+    const expected = [
       'parametria-capture',
       'parametria-evidence',
-      'parametria-route-preflight',
       'parametria-read-image-fallback',
-    ]) {
+      'parametria-route-preflight',
+    ]
+    const manifestEntries = Object.keys(manifest.exports ?? {})
+      .filter(subpath => subpath.startsWith('./parametria-'))
+      .map(subpath => subpath.slice(2))
+      .sort()
+    const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
+    const tsdownMatches = [...tsdown.matchAll(
+      /^\s*'(?<entry>parametria-[^']+)': 'src\/(?<source>parametria-[^']+)\.ts',$/gmu,
+    )]
+    const tsdownEntries = tsdownMatches.map(({ groups }) => {
+      expect(groups?.source).toBe(groups?.entry)
+      return groups?.entry
+    }).sort()
+
+    expect(manifestEntries).toEqual(expected)
+    expect(tsdownEntries).toEqual(expected)
+    for (const subpath of expected) {
       expect(manifest.exports).toHaveProperty(`./${subpath}`)
-      expect(tsdown).toMatch(new RegExp(`^\\s*'${subpath}': 'src/${subpath}\\.ts',$`, 'm'))
     }
   })
 

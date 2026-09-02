@@ -13,17 +13,29 @@ index dbaf6a4..1e61ba9 100644
  * @param ctx - the plugin context used to resolve the optional `llm` service.
  * @param exec - the tool-execution context supplying the calling agent.
  * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
-@@ -940 +940,17 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
+@@ -940 +940,29 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
 -	if (active.inputModalities === void 0 || !active.inputModalities.includes("image")) throw new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
 +	if (active.inputModalities?.includes("image")) return;
 +	const refusal = () => new Error(`cannot read "${requestedPath}" as an image: model "${model}" does not declare image input; switch to an image-capable model to read images`);
-+	const fallback = await ctx.waterfall("fs/read-image-route", exec, {
-+		provider,
-+		model
-+	}, () => Promise.resolve(void 0));
++	let fallback;
++	try {
++		fallback = await ctx.waterfall("fs/read-image-route", exec, {
++			provider,
++			model
++		}, () => Promise.resolve(void 0));
++	} catch {
++		exec.signal.throwIfAborted();
++		throw refusal();
++	}
 +	if (fallback === void 0) throw refusal();
 +	if (typeof fallback.provider !== "string" || fallback.provider.length === 0 || typeof fallback.model !== "string" || fallback.model.length === 0 || typeof fallback.activate !== "function") throw refusal();
-+	const selected = await llm.resolveModelInfo(fallback.provider, fallback.model, exec.signal);
++	let selected;
++	try {
++		selected = await llm.resolveModelInfo(fallback.provider, fallback.model, exec.signal);
++	} catch {
++		exec.signal.throwIfAborted();
++		throw refusal();
++	}
 +	if (selected.inputModalities === void 0 || !selected.inputModalities.includes("image")) throw refusal();
 +	return () => {
 +		try {
@@ -32,10 +44,10 @@ index dbaf6a4..1e61ba9 100644
 +			throw refusal();
 +		}
 +	};
-@@ -1036 +1052 @@ function applyReadImageTool(ctx) {
+@@ -1036 +1064 @@ function applyReadImageTool(ctx) {
 -			await assertImageCapableRoute(ctx, exec, args.file_path);
 +			const activateFallback = await assertImageCapableRoute(ctx, exec, args.file_path);
-@@ -1060,0 +1077 @@ function applyReadImageTool(ctx) {
+@@ -1060,0 +1089 @@ function applyReadImageTool(ctx) {
 +			activateFallback?.();
 diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
 index b4f19db..86d0f04 100644
