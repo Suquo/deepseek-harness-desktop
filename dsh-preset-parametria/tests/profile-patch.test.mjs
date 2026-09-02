@@ -157,6 +157,18 @@ describe('the `agent-presets` restatement', () => {
   })
 })
 
+describe('the continuable subagent diagnostic opt-in', () => {
+  it('targets a config-free bundle row, so the opt-in drops no upstream config', () => {
+    assert.equal(bundles.get('subagent').config, undefined)
+  })
+
+  it('enables the bounded failure detail only in the Parametria profile', () => {
+    assert.deepEqual(patched.get('subagent').config, {
+      continuableFailureDiagnostics: true,
+    })
+  })
+})
+
 describe('the `llm-pi-ai` restatement', () => {
   it('replaces a bundle row that carries no config, so nothing is dropped', () => {
     // dsh-base mounts the adapter dormant. If a future pin gives that row a

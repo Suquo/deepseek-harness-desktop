@@ -107,7 +107,10 @@ const REASONING_400_MESSAGE
   + '"message":"Reasoning is mandatory for this endpoint and cannot be disabled."}]}}'
 
 /** Mount the real host services a delegating parent needs. */
-async function setup(options: { persistence?: boolean } = {}): Promise<{ ctx: Context; parent: Agent }> {
+async function setup(options: {
+  continuableFailureDiagnostics?: boolean
+  persistence?: boolean
+} = {}): Promise<{ ctx: Context; parent: Agent }> {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -123,7 +126,10 @@ async function setup(options: { persistence?: boolean } = {}): Promise<{ ctx: Co
     })
   }
   await ctx.plugin(AgentLoop, { agents: [] })
-  await ctx.plugin(SubagentRuntime)
+  if (options.continuableFailureDiagnostics === true)
+    await ctx.plugin(SubagentRuntime, { continuableFailureDiagnostics: true })
+  else
+    await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn)
   const parent = ctx.agentLoop.create(SessionId('parent-session'), {
     provider: 'desktop-parent',
@@ -304,7 +310,7 @@ describe('subagent parent-side error surface', () => {
 
 describe('continuable subagent settlement error surface', () => {
   it("hands the settlement notice the child's error code, message, and session id", async () => {
-    const { ctx, parent } = await setup({ persistence: true })
+    const { ctx, parent } = await setup({ continuableFailureDiagnostics: true, persistence: true })
     const settled = await settleContinuable(ctx, parent, {
       provider: MISROUTED_PROVIDER,
       model: 'vision-preview',
@@ -317,7 +323,7 @@ describe('continuable subagent settlement error surface', () => {
   })
 
   it('bounds a provider failure while retaining its own code and message', async () => {
-    const { ctx, parent } = await setup({ persistence: true })
+    const { ctx, parent } = await setup({ continuableFailureDiagnostics: true, persistence: true })
     const longMessage = `${REASONING_400_MESSAGE} ${'x'.repeat(MAX_DIAGNOSTIC_BYTES * 2)}`
     ctx.llm.registerAdapter(
       ['openrouter-vision'],
@@ -337,7 +343,7 @@ describe('continuable subagent settlement error surface', () => {
   })
 
   it('renders a non-LlmError child failure as UNKNOWN instead of laundering it', async () => {
-    const { ctx, parent } = await setup({ persistence: true })
+    const { ctx, parent } = await setup({ continuableFailureDiagnostics: true, persistence: true })
     ctx.llm.registerAdapter(
       ['broken-vision'],
       new ThrowingAdapter(new Error('vision transport exploded')),
@@ -353,7 +359,7 @@ describe('continuable subagent settlement error surface', () => {
   })
 
   it('leaves a cleanly completed continuable child without a diagnostic', async () => {
-    const { ctx, parent } = await setup({ persistence: true })
+    const { ctx, parent } = await setup({ continuableFailureDiagnostics: true, persistence: true })
     ctx.llm.registerAdapter(['working-vision'], new ScriptedAdapter('the render matches'))
     const settled = await settleContinuable(ctx, parent, {
       provider: 'working-vision',
@@ -364,5 +370,17 @@ describe('continuable subagent settlement error surface', () => {
       `Background subagent ${settled.childId} finished and will do no further work unless you send it more.`,
     )
     expect(settled.notice).not.toContain('Diagnostic:')
+  })
+
+  it('keeps compatibility composition on the upstream bare failure notice', async () => {
+    const { ctx, parent } = await setup({ persistence: true })
+    const settled = await settleContinuable(ctx, parent, {
+      provider: MISROUTED_PROVIDER,
+      model: 'vision-preview',
+    })
+
+    expect(settled.notice).toBe(
+      `Background subagent ${settled.childId} failed before it finished.\nIt left no closing message.`,
+    )
   })
 })
