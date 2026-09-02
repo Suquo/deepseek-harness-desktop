@@ -16,7 +16,7 @@
 
 **UPSTREAM 2026-09-02: RM RULED INHERIT `dsh-v0.1.1-rc.2`** (Lane C gen-5 eval green; branch `up/pin-0.1.1-rc.2`; PR pending GUI smoke). The 0.1.2-alpha line stays deferred until it reaches rc. Overlay (anywhere-labs) 301 commits behind — not yet evaluated.
 
-**29 merges lifetime** (PR #66 → #23 CLOSED 2026-09-02: evidence surface is structural — `DSH_PARAMETRIA_EVIDENCE_DIR` published per shell call; live datum pending). In review: PR #65 (#55) APPROVE-PENDING-CI, chain armed; PR #72 (rc.2 pin bump, Lane C) under RM review, folding the #71 pin moves, second lander. New issues #67-#71 triaged (upstream fallout; #68 owner-visible; #69 pending-live). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
+**30 merges lifetime** (PR #65 → #55 CLOSED 2026-09-02: shim transparency fenced, stale-target guard exits 78 with a named diagnostic, pnpm 11.17.0) (PR #66 → #23 CLOSED 2026-09-02: evidence surface is structural — `DSH_PARAMETRIA_EVIDENCE_DIR` published per shell call; live datum pending). In review: PR #72 (rc.2 pin bump, Lane C) under RM review, folding the #71 pin moves, second lander. New issues #67-#71 triaged (upstream fallout; #68 owner-visible; #69 pending-live). Pending-live adds: #23 evidence variable reaching a real shell call in a Parametria run.
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -26,14 +26,14 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
-- **Lane A (general, `claude/*`)**: **BUSY — gen-11 RESUMING #55** on the existing branch `claude/issue-55-pnpm-shim` (Herdr `dsh-lane-a`, w4:p2): rebase onto master, re-run the full gate on Linux, open the PR (`Closes #55`). Note: the shim work is Windows-runtime code; its spec runs headless on Linux, but the GUI-validated claims from gen-10 stay attributed to gen-10. Queue after: #64 (filed by gen-10) · #46 · #30.
+- **Lane A (general, `claude/*`)**: FREE — gen-11 (Claude) delivered #55 (PR #65) and is retired. Next: gen-12 as CODEX on #64 (electron/dist non-extraction), worktree `~/.dsh-resolver-worktrees/issue-64` being prepared by the RM. Queue after: #67 → #70 → #46 → #30.
 - **Lane B (parametria-harness, `pm/*`)**: FREE — gen-14 (Claude) delivered #23 (PR #66) and is retired. Next: gen-15 as CODEX on #52 (route preflight banner), worktree `~/.dsh-resolver-worktrees/issue-52` being prepared by the RM.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 PR #72 open** (rc.8 → `dsh-v0.1.1-rc.2`; GUI-smoked in `~/.dsh-lane-c`); folding #71 (3 profile pins + pinSurface fence) per RM ruling; rebases after #65/#66 merge.
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: #55 (Lane A gen-11, PR #65) · rc.2 pin bump (Lane C gen-5, PR #72 + #71 fold).** Lane B next: #52.
+- **In flight: rc.2 pin bump (Lane C gen-5, PR #72 + #71 fold).** Lane B next: #52.
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
