@@ -237,13 +237,23 @@ the package names, versions, and licenses for transparency.
 | @google/genai | 1.52.0 | Apache-2.0 |
 | @hono/node-server | 2.1.0 | MIT |
 | @img/colour | 1.1.0 | MIT |
+| @img/sharp-darwin-arm64 | 0.35.3 | Apache-2.0 |
+| @img/sharp-darwin-x64 | 0.35.3 | Apache-2.0 |
+| @img/sharp-libvips-darwin-arm64 | 1.3.2 | LGPL-3.0-or-later |
+| @img/sharp-libvips-darwin-x64 | 1.3.2 | LGPL-3.0-or-later |
 | @img/sharp-libvips-linux-arm64 | 1.3.2 | LGPL-3.0-or-later |
 | @img/sharp-libvips-linux-x64 | 1.3.2 | LGPL-3.0-or-later |
+| @img/sharp-libvips-linuxmusl-arm64 | 1.3.2 | LGPL-3.0-or-later |
+| @img/sharp-libvips-linuxmusl-x64 | 1.3.2 | LGPL-3.0-or-later |
 | @img/sharp-linux-arm64 | 0.35.3 | Apache-2.0 |
 | @img/sharp-linux-x64 | 0.35.3 | Apache-2.0 |
+| @img/sharp-linuxmusl-arm64 | 0.35.3 | Apache-2.0 |
+| @img/sharp-linuxmusl-x64 | 0.35.3 | Apache-2.0 |
 | @img/sharp-win32-arm64 | 0.35.3 | Apache-2.0 AND LGPL-3.0-or-later |
 | @img/sharp-win32-x64 | 0.35.3 | Apache-2.0 AND LGPL-3.0-or-later |
 | @joplin/turndown-plugin-gfm | 1.0.67 | MIT |
+| @koromix/koffi-darwin-arm64 | 3.1.5 | MIT |
+| @koromix/koffi-darwin-x64 | 3.1.5 | MIT |
 | @koromix/koffi-linux-arm64 | 3.1.5 | MIT |
 | @koromix/koffi-linux-x64 | 3.1.5 | MIT |
 | @koromix/koffi-win32-arm64 | 3.1.5 | MIT |
@@ -301,6 +311,8 @@ the package names, versions, and licenses for transparency.
 | @types/unist | 3.0.3 | MIT |
 | @ungap/structured-clone | 1.3.3 | ISC |
 | @vscode/ripgrep | 1.18.0 | MIT |
+| @vscode/ripgrep-darwin-arm64 | 1.18.0 | MIT |
+| @vscode/ripgrep-darwin-x64 | 1.18.0 | MIT |
 | @vscode/ripgrep-linux-arm64 | 1.18.0 | MIT |
 | @vscode/ripgrep-linux-x64 | 1.18.0 | MIT |
 | @vscode/ripgrep-win32-arm64 | 1.18.0 | MIT |
@@ -468,6 +480,8 @@ the package names, versions, and licenses for transparency.
 | node-addon-api | 7.1.1 | MIT |
 | node-addon-native-custom-loader | 0.1.4 | MIT |
 | node-addon-require-builtin | 0.1.4 | MIT |
+| node-addon-require-builtin-darwin-arm64 | 0.1.4 | MIT |
+| node-addon-require-builtin-darwin-x64 | 0.1.4 | MIT |
 | node-addon-require-builtin-linux-arm64-gnu | 0.1.4 | MIT |
 | node-addon-require-builtin-linux-x64-gnu | 0.1.4 | MIT |
 | node-addon-require-builtin-win32-arm64-msvc | 0.1.4 | MIT |
@@ -491,7 +505,7 @@ the package names, versions, and licenses for transparency.
 | picocolors | 1.1.1 | ISC |
 | picomatch | 4.0.5 | MIT |
 | pkce-challenge | 5.0.1 | MIT |
-| pnpm | 11.7.0 | MIT |
+| pnpm | 11.17.0 | MIT |
 | powershell-utils | 0.2.0 | MIT |
 | property-information | 7.2.0 | MIT |
 | protobufjs | 7.6.5 | BSD-3-Clause |
