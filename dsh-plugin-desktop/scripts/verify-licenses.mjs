@@ -189,10 +189,7 @@ export function resolveReleaseMatrix(manifest) {
       return releaseMatrixError(`build.${buildKey} must be an object when present`)
     }
     if (!Object.hasOwn(section, 'target')) {
-      if (declared !== undefined) {
-        return releaseMatrixError(`build.${buildKey}.target is required for declared ${os}`)
-      }
-      continue
+      return releaseMatrixError(`build.${buildKey}.target is required when build.${buildKey} is present`)
     }
     const targets = normalizeBuildTargets(section.target, `build.${buildKey}.target`)
     if (declared === undefined) {

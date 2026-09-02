@@ -28,8 +28,8 @@ The same change replaces locale-sensitive notice ordering with codepoint compari
 | Build | ✅ | `corepack yarn build` |
 | Type check | ✅ | `corepack yarn typecheck` |
 | Lint | N/A | No lint command is configured |
-| Tests | ✅ | Desktop 876 passed / 4 skipped; market 272 passed; preset 164 passed |
-| Focused license check | ✅ | 21 specs; 558 production packages; 5 notice-required |
+| Tests | ✅ | Desktop 882 passed / 4 skipped; market 272 passed; preset 164 passed |
+| Focused license check | ✅ | 22 specs; 558 production packages; 5 notice-required |
 | Full gate | ✅ | `corepack yarn check`; exact requested-change HEAD and gate tail recorded in PR #85 |
 | GUI | N/A | Not launched: this is a headless release-accounting change with no product runtime path |
 

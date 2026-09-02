@@ -92,7 +92,17 @@ test('fails closed when a declared platform section is absent', () => {
 test('fails closed when a declared platform has no target', () => {
   assertMatrixError(
     { dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }], build: { win: {} } },
-    'build.win.target is required for declared win32',
+    'build.win.target is required when build.win is present',
+  )
+})
+
+test('fails closed when an undeclared platform section has no target', () => {
+  assertMatrixError(
+    {
+      dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }],
+      build: { win: { target: 'nsis' }, mac: {} },
+    },
+    'build.mac.target is required when build.mac is present',
   )
 })
 
