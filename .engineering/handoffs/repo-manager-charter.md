@@ -73,6 +73,15 @@ Stale merge ref → merge master INTO the branch · aggregator-check-passes-vacu
 
 Agent test launches belong in Hyprland workspaces **7-10 ONLY** (owner amendment 2026-09-02, replacing the original 6-9 range). Workspaces **1-6** are the owner's and must never receive an agent-launched window. Admin's Hyprland rules (`~/.config/hypr/windows.lua`) place them automatically and silently: WebKitGTK MiniBrowser probes → ws10, headed Chromium/Playwright → ws9, agent-partition suquo-desktop → ws8, spillover ws7; no focus stealing, activation suppressed. Nothing special is required of a lane, but: (1) **prefer HEADLESS runs** wherever the test does not need a visible window — a headless run maps no window at all; (2) when a headed run is genuinely needed, never move or focus the window yourself and never use dispatchers that follow the window; (3) if an agent window ever lands on ws1-6, report the window class/title to admin so the rule can be extended. Carry these three points into every spawn brief that permits a headed run.
 
+## CROSS-FLEET QUIET WINDOWS (admin coordination, 2026-09-02)
+
+Timing-sensitive measurement runs in ANY repo on this machine can request a short cross-fleet quiet window (`~/Documents/00-system-administration/tools/fleet-quiet.sh`, max 30 minutes, auto-expiring). Both halves are binding here:
+
+- **Honouring one.** On receiving `QUIET WINDOW (cross-fleet, until HH:MM)`, HOLD the start of any NEW heavy gate — `corepack yarn check`, full test suites, packaging/`dist:*`, browser suites, and any Codex lane spawn whose first act is an install or gate — until the release message or that time. In-flight work continues untouched and nothing is killed; light work (reviews, verdicts, BOARD/doc edits, `gh` reads, CI polling) is unaffected. Tell an affected lane to pause before its gate rather than killing it.
+- **Requesting one.** For the RM's own timing-sensitive measurement (perf/latency incident work, an append-cost or trim measurement, a frame-timing observation), `fleet-quiet.sh request dsh-rm <minutes> "<reason>"`, then `fleet-quiet.sh release dsh-rm` the moment the measurement ends — never hold the lease for the analysis that follows. `fleet-quiet.sh status` shows the current lease and machine load; `is-quiet` is the scriptable check.
+
+Rationale: a suquo frame-timing lane was competing with a core-pinned rustc compile on 2026-09-02 and neither RM could see the other. Numbers measured under contention are not evidence.
+
 ## ENVIRONMENT
 
 Outer workspace is Yarn 4 via Corepack (`corepack yarn ...`, never bare npm/pnpm at root); the pinned `deepseek-harness/` submodule keeps its own pnpm workspace, touched only via root `upstream:*` scripts and NEVER edited from desktop branches. Full headless gate: `corepack yarn check`. Graphical launch is explicit (`corepack yarn dev`) and never part of headless validation. gh backtick bodies via `--body-file`. Fresh worktrees need `corepack yarn install --immutable` (native builds: koffi, node-pty, electron — first install is slow). Electron's stdout may not flush through pipes — verify app liveness by process list + the Host's loopback port, not by log tail.
