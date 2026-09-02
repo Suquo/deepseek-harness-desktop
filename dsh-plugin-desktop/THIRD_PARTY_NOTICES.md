@@ -241,9 +241,13 @@ the package names, versions, and licenses for transparency.
 | @img/sharp-libvips-linux-x64 | 1.3.2 | LGPL-3.0-or-later |
 | @img/sharp-linux-arm64 | 0.35.3 | Apache-2.0 |
 | @img/sharp-linux-x64 | 0.35.3 | Apache-2.0 |
+| @img/sharp-win32-arm64 | 0.35.3 | Apache-2.0 AND LGPL-3.0-or-later |
+| @img/sharp-win32-x64 | 0.35.3 | Apache-2.0 AND LGPL-3.0-or-later |
 | @joplin/turndown-plugin-gfm | 1.0.67 | MIT |
 | @koromix/koffi-linux-arm64 | 3.1.5 | MIT |
 | @koromix/koffi-linux-x64 | 3.1.5 | MIT |
+| @koromix/koffi-win32-arm64 | 3.1.5 | MIT |
+| @koromix/koffi-win32-x64 | 3.1.5 | MIT |
 | @mistralai/mistralai | 2.2.6 | Apache-2.0 |
 | @mixmark-io/domino | 2.2.0 | BSD-2-Clause |
 | @modelcontextprotocol/sdk | 1.30.0 | MIT |
@@ -299,6 +303,8 @@ the package names, versions, and licenses for transparency.
 | @vscode/ripgrep | 1.18.0 | MIT |
 | @vscode/ripgrep-linux-arm64 | 1.18.0 | MIT |
 | @vscode/ripgrep-linux-x64 | 1.18.0 | MIT |
+| @vscode/ripgrep-win32-arm64 | 1.18.0 | MIT |
+| @vscode/ripgrep-win32-x64 | 1.18.0 | MIT |
 | accepts | 2.0.0 | MIT |
 | adm-zip | 0.6.0 | MIT |
 | agent-base | 7.1.4 | MIT |
@@ -464,6 +470,8 @@ the package names, versions, and licenses for transparency.
 | node-addon-require-builtin | 0.1.4 | MIT |
 | node-addon-require-builtin-linux-arm64-gnu | 0.1.4 | MIT |
 | node-addon-require-builtin-linux-x64-gnu | 0.1.4 | MIT |
+| node-addon-require-builtin-win32-arm64-msvc | 0.1.4 | MIT |
+| node-addon-require-builtin-win32-x64-msvc | 0.1.4 | MIT |
 | node-domexception | 1.0.0 | MIT |
 | node-fetch | 3.3.2 | MIT |
 | node-pty | 1.2.0-beta.15 | MIT |
@@ -548,4 +556,4 @@ the package names, versions, and licenses for transparency.
 | zod-to-json-schema | 3.25.2 | ISC |
 | zustand | 4.4.7 | MIT |
 | zwitch | 2.0.4 | MIT |
-> Notice-required licenses in use: LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
+> Notice-required licenses in use: LGPL-3.0-or-later, Apache-2.0 AND LGPL-3.0-or-later. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.
