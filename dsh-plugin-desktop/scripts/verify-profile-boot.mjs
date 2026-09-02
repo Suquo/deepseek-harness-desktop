@@ -247,9 +247,20 @@ try {
   if (response.status !== 200) {
     throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
   }
-  const bootMatch = html.match(/window\.__DSH_BOOT__ = (\{.*?\})<\/script>/u)
+  // 0.1.1 moved the boot global from a `tapIndex` string transform in
+  // dsh-client-modules (`window.__DSH_BOOT__ = …`) to a structured index
+  // injection row rendered by dsh-host-webserver (`globalThis["__DSH_BOOT__"] = …`).
+  // Both forms define the same global on the same page; accept either.
+  const bootMatch = html.match(
+    /(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u,
+  )
   if (bootMatch?.[1] === undefined) {
-    throw new Error('assembled Web root is missing window.__DSH_BOOT__')
+    throw new Error(
+      'assembled Web root defines the boot graph as neither '
+      + '`window.__DSH_BOOT__ = {…}` (<= 0.1.0-rc.8, a dsh-client-modules tapIndex '
+      + 'transform) nor `globalThis["__DSH_BOOT__"] = {…}` (>= 0.1.1, a '
+      + 'dsh-host-webserver index-injection row)',
+    )
   }
   const graph = JSON.parse(bootMatch[1])
   const ids = new Set(graph.entries.map(entry => entry.id))

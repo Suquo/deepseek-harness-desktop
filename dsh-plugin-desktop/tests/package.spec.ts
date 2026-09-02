@@ -230,10 +230,10 @@ describe('published package surface', () => {
   })
 
   it('patches app boot to accept an empty patch layer', () => {
-    const patchPath = './patches/dsh-app-boot@0.1.0-rc.8.patch'
+    const patchPath = './patches/dsh-app-boot@0.1.1-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-app-boot@npm:0.1.0-rc.8': expect.stringContaining(patchPath),
-      '@deepseek-ai/dsh-app-boot@npm:^0.1.0-rc.8': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-app-boot@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-app-boot@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
     })
     const marker = 'if (parsed === void 0 || parsed === null) return [];'
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
@@ -246,10 +246,10 @@ describe('published package surface', () => {
   })
 
   it('patches the browse panel with the Windows native-picker icon bridge', () => {
-    const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.0-rc.8.patch'
+    const patchPath = './patches/dsh-client-ui-directory-picker-browse@0.1.1-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.0-rc.8': expect.stringContaining(patchPath),
-      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.0-rc.8': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-directory-picker-browse@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
     })
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
     const installedClient = readFileSync(new URL(
@@ -273,10 +273,10 @@ describe('published package surface', () => {
   })
 
   it('marks the upstream Workspace browser as the desktop folder-drop target', () => {
-    const patchPath = './patches/dsh-client-ui-workspace@0.1.0-rc.8.patch'
+    const patchPath = './patches/dsh-client-ui-workspace@0.1.1-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-client-ui-workspace@npm:0.1.0-rc.8': expect.stringContaining(patchPath),
-      '@deepseek-ai/dsh-client-ui-workspace@npm:^0.1.0-rc.8': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-workspace@npm:0.1.1-rc.2': expect.stringContaining(patchPath),
+      '@deepseek-ai/dsh-client-ui-workspace@npm:^0.1.1-rc.2': expect.stringContaining(patchPath),
     })
     const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
     const installedClient = readFileSync(new URL(
@@ -812,9 +812,9 @@ describe('published package surface', () => {
   })
 
   it('starts restricted Windows shells with a hidden console show state', () => {
-    const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.8#./patches/dsh-sandbox-windows-acl@0.1.0-rc.8.patch'
+    const patchResolution = 'patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.1-rc.2#./patches/dsh-sandbox-windows-acl@0.1.1-rc.2.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
-    const patch = readFileSync(new URL('patches/dsh-sandbox-windows-acl@0.1.0-rc.8.patch', workspaceRoot), 'utf8')
+    const patch = readFileSync(new URL('patches/dsh-sandbox-windows-acl@0.1.1-rc.2.patch', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const sandboxManifest = workspaceRequire.resolve('@deepseek-ai/dsh-sandbox-windows-acl/package.json')
     const sandboxLocalManifest = workspaceRequire.resolve('@deepseek-ai/dsh-sandbox-local/package.json')
@@ -823,12 +823,12 @@ describe('published package surface', () => {
     const runtimeChunks = readdirSync(sandboxLib).filter(name => /^types-.*\.js$/u.test(name))
 
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-sandbox-windows-acl@npm:0.1.0-rc.8': patchResolution,
-      '@deepseek-ai/dsh-sandbox-windows-acl@npm:^0.1.0-rc.8': patchResolution,
+      '@deepseek-ai/dsh-sandbox-windows-acl@npm:0.1.1-rc.2': patchResolution,
+      '@deepseek-ai/dsh-sandbox-windows-acl@npm:^0.1.1-rc.2': patchResolution,
     })
     expect(sandboxLocalRequire.resolve('@deepseek-ai/dsh-sandbox-windows-acl/package.json'))
       .toBe(sandboxManifest)
-    expect(lockfile).toContain('@deepseek-ai/dsh-sandbox-windows-acl@patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.0-rc.8#./patches/dsh-sandbox-windows-acl@0.1.0-rc.8.patch')
+    expect(lockfile).toContain('@deepseek-ai/dsh-sandbox-windows-acl@patch:@deepseek-ai/dsh-sandbox-windows-acl@npm%3A0.1.1-rc.2#./patches/dsh-sandbox-windows-acl@0.1.1-rc.2.patch')
     expect(patch.match(/^\+\s*dwFlags: 257,\r?$/gmu)).toHaveLength(2)
     expect(patch.match(/^\+\s*wShowWindow: 0,\r?$/gmu)).toHaveLength(2)
     expect(runtimeChunks).toHaveLength(1)
@@ -841,24 +841,24 @@ describe('published package surface', () => {
   })
 
   it('patches every copy of the subagent packages that surface a child failure', () => {
-    const seamResolution = 'patch:@deepseek-ai/dsh-subagent@npm%3A0.1.0-rc.8#./patches/dsh-subagent@0.1.0-rc.8.patch'
-    const driverResolution = 'patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.0-rc.8#./patches/dsh-subagent-in-process-driver@0.1.0-rc.8.patch'
+    const seamResolution = 'patch:@deepseek-ai/dsh-subagent@npm%3A0.1.1-rc.2#./patches/dsh-subagent@0.1.1-rc.2.patch'
+    const driverResolution = 'patch:@deepseek-ai/dsh-subagent-in-process-driver@npm%3A0.1.1-rc.2#./patches/dsh-subagent-in-process-driver@0.1.1-rc.2.patch'
     const lockfile = readFileSync(new URL('yarn.lock', workspaceRoot), 'utf8')
     const workspaceRequire = createRequire(new URL('package.json', packageRoot))
     const seamManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent/package.json')
     const driverManifest = workspaceRequire.resolve('@deepseek-ai/dsh-subagent-in-process-driver/package.json')
 
     expect(workspaceManifest.resolutions).toMatchObject({
-      '@deepseek-ai/dsh-subagent@npm:0.1.0-rc.8': seamResolution,
-      '@deepseek-ai/dsh-subagent@npm:^0.1.0-rc.8': seamResolution,
-      '@deepseek-ai/dsh-subagent-in-process-driver@npm:0.1.0-rc.8': driverResolution,
-      '@deepseek-ai/dsh-subagent-in-process-driver@npm:^0.1.0-rc.8': driverResolution,
+      '@deepseek-ai/dsh-subagent@npm:0.1.1-rc.2': seamResolution,
+      '@deepseek-ai/dsh-subagent@npm:^0.1.1-rc.2': seamResolution,
+      '@deepseek-ai/dsh-subagent-in-process-driver@npm:0.1.1-rc.2': driverResolution,
+      '@deepseek-ai/dsh-subagent-in-process-driver@npm:^0.1.1-rc.2': driverResolution,
     })
     expect(lockfile).toContain(`@deepseek-ai/dsh-subagent@${seamResolution}`)
     expect(lockfile).toContain(`@deepseek-ai/dsh-subagent-in-process-driver@${driverResolution}`)
 
     // The caret resolution is the load-bearing half: other upstream packages
-    // carry a real `^0.1.0-rc.8` edge on the seam, so dropping it installs an
+    // carry a real `^0.1.1-rc.2` edge on the seam, so dropping it installs an
     // UNPATCHED nested copy that ships while every behavioural test stays
     // green (those resolve from this workspace root).
     for (const consumer of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-host-apiproxy']) {

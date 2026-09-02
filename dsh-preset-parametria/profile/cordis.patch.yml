@@ -60,7 +60,7 @@
 #    available to the agent as ordinary tools.
 #
 # The packages are declared in this profile's `package.json` (pinned to the
-# same 0.1.0-rc.7 the desktop profile runs); each registers a dormant provider
+# same 0.1.1-rc.2 the desktop profile runs); each registers a dormant provider
 # at mount and spawns its pinned package-local CLI only when called.
 - insert:
     - id: subagent-codex

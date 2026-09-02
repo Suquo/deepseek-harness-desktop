@@ -17,6 +17,7 @@ const plugin = readJson('dsh-plugin-desktop/package.json')
 const fabric = readJson('dsh-community-fabric/package.json')
 const market = readJson('dsh-community-market/package.json')
 const preset = readJson('dsh-preset-parametria/package.json')
+const presetProfile = readJson('dsh-preset-parametria/profile/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
 const noteDirectory = '.agents/notes/implemented/process'
 const noteName = '2026-08-15-pinned-upstream-and-isolated-yarn-workspace'
@@ -110,9 +111,21 @@ if (typeof upstreamPackage.packageManager !== 'string' || !upstreamPackage.packa
 // the boundary guard below and the pin surface further down — the same principle
 // as the `workspaces` list above, which is why this is derived from it rather than
 // spelled out a second time.
+// Surfaced manifests: every file that pins the `@deepseek-ai/dsh*` family and so
+// has to move with the pin. The workspaces are the obvious four; the fifth entry
+// is NOT a workspace and must not be added to `workspaces` above — it is the
+// PROFILE TEMPLATE `dsh-preset-parametria` installs into
+// `$DSH_HOME/profiles/parametria/package.json`, whose three pins bind the
+// subagent provider bundles and `dsh-sdk-protocol` that the preset's
+// `subagent_validator` deny list names. It sat outside every guard until the
+// 0.1.1-rc.2 bump, where its `0.1.0-rc.7` pins were found declaring peers the new
+// runtime does not satisfy (`^0.1.0-rc.7` admits `0.1.0-rc.8` but not
+// `0.1.1-rc.2`), with nothing in the tree to catch the drift. It is surfaced here
+// so `check:layout` holds it against `runtimePackageVersion` like any other pin.
 const manifests = [
   ['package.json', workspace],
   ...workspaces.map(([name, manifest]) => [`${name}/package.json`, manifest]),
+  ['dsh-preset-parametria/profile/package.json', presetProfile],
 ]
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']
 
@@ -198,6 +211,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-app-boot',
     '@deepseek-ai/dsh-atomic-write',
     '@deepseek-ai/dsh-attachment',
+    '@deepseek-ai/dsh-authorization',
     '@deepseek-ai/dsh-base',
     '@deepseek-ai/dsh-bash-local',
     '@deepseek-ai/dsh-brand',
@@ -365,6 +379,11 @@ const pinSurface = [
     '@deepseek-ai/dsh-settings',
     '@deepseek-ai/dsh-typert-protocol',
     '@deepseek-ai/dsh-typert-registry',
+  ]],
+  ['dsh-preset-parametria/profile/package.json', 'dependencies', [
+    '@deepseek-ai/dsh-sdk-protocol',
+    '@deepseek-ai/dsh-subagent-claude-code',
+    '@deepseek-ai/dsh-subagent-codex',
   ]],
 ]
 const observedSurface = pinned.map(({ path, field, entries }) => [path, field, entries.map(([name]) => name).sort()])

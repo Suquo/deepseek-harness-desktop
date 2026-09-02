@@ -14,6 +14,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   PACKAGE_ROOT,
+  REPO_ROOT,
   composeBundles,
   readComposition,
   sameValue,
@@ -22,6 +23,15 @@ import {
 
 const PROFILE_DIR = join(PACKAGE_ROOT, 'profile')
 const manifest = JSON.parse(readFileSync(join(PROFILE_DIR, 'package.json'), 'utf8'))
+// Read the pin rather than restate it. These three are pin surface — they move
+// with `upstream.json` on every bump, and `scripts/verify-layout.mjs` holds the
+// manifest against `runtimePackageVersion` for exactly that reason. A literal
+// here would be a SECOND statement of the same fact, and the half of the bump
+// someone forgets; the value of this assertion is the exact package SET, which
+// the deepEqual below still fences.
+const { runtimePackageVersion } = JSON.parse(
+  readFileSync(join(REPO_ROOT, 'upstream.json'), 'utf8'),
+)
 const patchEntries = readComposition(join(PROFILE_DIR, 'cordis.patch.yml'))
 const bundles = composeBundles(webProfileBundlePatches())
 const patched = new Map(patchEntries.filter(entry => typeof entry?.id === 'string').map(entry => [entry.id, entry]))
@@ -55,15 +65,16 @@ describe('the profile manifest', () => {
     // loses every validator spawn to a config error (the 2026-08-28 run).
     // Upstream is explicit that a preset cannot provide this host dependency:
     // the PROFILE installs the bundles (this manifest) and mounts them (the
-    // insert fence below). Pinned to the same rc the desktop profile runs.
+    // insert fence below). Pinned to the harness runtime version, like every
+    // other pinned manifest — see `pinSurface` in `scripts/verify-layout.mjs`.
     // `dsh-sdk-protocol` rides along because the subagent bundles import it as
     // a PEER — without the explicit pin the profile boots to
     // ERR_MODULE_NOT_FOUND on the first provider import (hit live 2026-08-28).
     // The desktop profile carries the same three pins for the same reason.
     assert.deepEqual(manifest.dependencies, {
-      '@deepseek-ai/dsh-sdk-protocol': '0.1.0-rc.7',
-      '@deepseek-ai/dsh-subagent-claude-code': '0.1.0-rc.7',
-      '@deepseek-ai/dsh-subagent-codex': '0.1.0-rc.7',
+      '@deepseek-ai/dsh-sdk-protocol': runtimePackageVersion,
+      '@deepseek-ai/dsh-subagent-claude-code': runtimePackageVersion,
+      '@deepseek-ai/dsh-subagent-codex': runtimePackageVersion,
     })
   })
 })
