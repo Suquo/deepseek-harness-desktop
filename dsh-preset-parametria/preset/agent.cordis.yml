@@ -139,6 +139,25 @@
 - id: parametria-evidence
   name: dsh-plugin-desktop/parametria-evidence
 
+# ── pinned-route preflight (issue #52) ──
+#
+# A subagent row that pins `agentOptions.provider` stops inheriting the calling
+# session's route. The pin can therefore name a route that this process never
+# registered, and without a preflight the run learns that only after it spends
+# a delegation attempt. This row discovers every such pin from THIS mounted
+# preset's loader tree and checks it against `ctx.llm.listProviders()` when a
+# session starts. A missing route becomes a model- and operator-visible banner
+# naming both the provider and `corepack yarn install:profile`; a complete
+# registry adds nothing to the session.
+#
+# There is deliberately no provider config here. The preset rows are the one
+# declaration of what they pin, and the LLM service is the one declaration of
+# what is live. Keeping this as a top-level preset row gives the plugin the
+# whole preset tree (including the nested delegation group) while keeping the
+# check out of compatibility mode and every non-Parametria profile.
+- id: parametria-route-preflight
+  name: dsh-plugin-desktop/parametria-route-preflight
+
 # ── background jobs ────────────────────────────────────────────────────────
 
 # Only the model-facing controls. The task REGISTRY stays on the host plane:
