@@ -31,6 +31,7 @@ If a decision is easy to reverse, skip it. If it's not surprising, nobody will w
 - [H-0002 Brand presentation overrides upstream client marks by class selector](H-0002-brand-override-by-upstream-class-selectors.md) (2026-08-20)
 - [H-0003 The preset installer may seed the desktop profile selection, once, only when it is absent](H-0003-installer-seeds-desktop-profile-selection.md) (2026-08-20)
 - [H-0004 Native icon sources derive from the vendored mark; the application icon stays a committed raster](H-0004-native-icons-derived-from-the-vendored-mark.md) (2026-08-20)
+- [H-0005 Fork-owned release matrix defines third-party notice coverage](H-0005-fork-owned-release-matrix-for-notices.md) (2026-09-02)
 
 ## File naming
 

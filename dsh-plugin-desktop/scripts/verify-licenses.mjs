@@ -23,8 +23,11 @@ const rootManifestPath = join(packageRoot, 'package.json')
 const rootManifest = JSON.parse(readFileSync(rootManifestPath, 'utf8'))
 const noticesPath = join(packageRoot, 'THIRD_PARTY_NOTICES.md')
 
-const TARGET_OSES = new Set(['darwin', 'linux', 'win32'])
-const TARGET_CPUS = new Set(['arm64', 'x64'])
+const BUILD_PLATFORM_OSES = [
+  ['mac', 'darwin'],
+  ['win', 'win32'],
+  ['linux', 'linux'],
+]
 const REGEN_COMMAND = 'corepack yarn workspace dsh-plugin-desktop verify:notices'
 const LICENSE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt']
 
@@ -89,12 +92,129 @@ function licenseExpression(manifest) {
   return undefined
 }
 
-/**
- * Return true when a Yarn condition can ship in the supported release matrix.
- * libc is deliberately not narrowed: glibc and musl are both variants of the
- * requested linux/x64 and linux/arm64 OS/CPU triples.
- */
-export function targetsSupportedPlatform(condition) {
+/** Named configuration failure: an unknown shape must never shrink notices cleanly. */
+export class ReleaseMatrixConfigurationError extends Error {
+  constructor(message) {
+    super(`dsh-plugin-desktop: invalid dshReleaseMatrix/build configuration: ${message}`)
+    this.name = 'ReleaseMatrixConfigurationError'
+  }
+}
+
+function releaseMatrixError(message) {
+  throw new ReleaseMatrixConfigurationError(message)
+}
+
+/** Normalize every documented Electron Builder target shape without guessing an arch. */
+function normalizeBuildTargets(value, label) {
+  const targets = Array.isArray(value) ? value : [value]
+  if (targets.length === 0) releaseMatrixError(`${label} must not be empty`)
+  return targets.map((target, index) => {
+    const targetLabel = `${label}[${String(index)}]`
+    const normalized = typeof target === 'string' ? { target } : target
+    if (typeof normalized !== 'object' || normalized === null || Array.isArray(normalized)
+      || typeof normalized.target !== 'string' || normalized.target.length === 0) {
+      return releaseMatrixError(`${targetLabel} must be a target name or target object`)
+    }
+    let name = normalized.target
+    let arch = normalized.arch
+    const suffixPosition = name.lastIndexOf(':')
+    if (suffixPosition > 0) {
+      if (arch === undefined) arch = name.slice(suffixPosition + 1)
+      name = name.slice(0, suffixPosition)
+    }
+    if (arch === undefined) return { name }
+    const architectures = Array.isArray(arch) ? arch : [arch]
+    if (architectures.length === 0
+      || architectures.some((architecture) => typeof architecture !== 'string' || architecture.length === 0)) {
+      return releaseMatrixError(`${targetLabel}.arch must be a non-empty architecture or array`)
+    }
+    return { name, architectures: [...new Set(architectures)] }
+  })
+}
+
+function sameStringSet(left, right) {
+  return left.length === right.length && left.every((value) => right.includes(value))
+}
+
+/** Resolve the fork declaration after fencing it in both directions against build targets. */
+export function resolveReleaseMatrix(manifest) {
+  const declaration = manifest?.dshReleaseMatrix
+  if (!Array.isArray(declaration) || declaration.length === 0) {
+    return releaseMatrixError('dshReleaseMatrix must be a non-empty array')
+  }
+  const build = manifest?.build
+  if (typeof build !== 'object' || build === null || Array.isArray(build)) {
+    return releaseMatrixError('build must be an object')
+  }
+
+  const buildKeyByOs = new Map(BUILD_PLATFORM_OSES.map(([buildKey, os]) => [os, buildKey]))
+  const declaredByOs = new Map()
+  for (const [index, entry] of declaration.entries()) {
+    const label = `dshReleaseMatrix[${String(index)}]`
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      return releaseMatrixError(`${label} must be an object`)
+    }
+    if (typeof entry.os !== 'string' || !buildKeyByOs.has(entry.os)) {
+      return releaseMatrixError(`${label}.os must be one of darwin, win32, linux`)
+    }
+    if (declaredByOs.has(entry.os)) {
+      return releaseMatrixError(`dshReleaseMatrix declares ${entry.os} more than once`)
+    }
+    if (!Array.isArray(entry.cpu) || entry.cpu.length === 0
+      || entry.cpu.some((cpu) => typeof cpu !== 'string' || cpu.length === 0)
+      || new Set(entry.cpu).size !== entry.cpu.length) {
+      return releaseMatrixError(`${label}.cpu must be a non-empty array of unique architectures`)
+    }
+    if (entry.os === 'linux') {
+      if (typeof entry.libc !== 'string' || entry.libc.length === 0) {
+        return releaseMatrixError(`${label}.libc must name the declared Linux libc`)
+      }
+    } else if (entry.libc !== undefined) {
+      return releaseMatrixError(`${label}.libc is only valid for Linux`)
+    }
+    declaredByOs.set(entry.os, entry)
+  }
+
+  for (const [buildKey, os] of BUILD_PLATFORM_OSES) {
+    const hasSection = Object.hasOwn(build, buildKey)
+    const section = build[buildKey]
+    const declared = declaredByOs.get(os)
+    if (!hasSection) {
+      if (declared !== undefined) {
+        return releaseMatrixError(`dshReleaseMatrix declares ${os} but build.${buildKey} is missing`)
+      }
+      continue
+    }
+    if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+      return releaseMatrixError(`build.${buildKey} must be an object when present`)
+    }
+    if (!Object.hasOwn(section, 'target')) {
+      return releaseMatrixError(`build.${buildKey}.target is required when build.${buildKey} is present`)
+    }
+    const targets = normalizeBuildTargets(section.target, `build.${buildKey}.target`)
+    if (declared === undefined) {
+      return releaseMatrixError(`build.${buildKey} has targets but dshReleaseMatrix does not declare ${os}`)
+    }
+    for (const target of targets) {
+      if (target.architectures !== undefined && !sameStringSet(target.architectures, declared.cpu)) {
+        return releaseMatrixError(
+          `dshReleaseMatrix ${os} CPUs [${declared.cpu.join(', ')}] do not match build.${buildKey} target ${JSON.stringify(target.name)} architectures [${target.architectures.join(', ')}]`,
+        )
+      }
+    }
+  }
+
+  return declaration.flatMap((entry) => entry.cpu.map((cpu) => {
+    const platform = { os: entry.os, cpu }
+    if (entry.libc !== undefined) platform.libc = entry.libc
+    return platform
+  }))
+}
+
+const supportedPlatforms = resolveReleaseMatrix(rootManifest)
+
+/** Return true when a Yarn condition can ship in the configured release matrix. */
+export function targetsSupportedPlatform(condition, platforms = supportedPlatforms) {
   if (typeof condition !== 'string') return false
   const terms = new Map(
     condition.split(' & ').map((term) => {
@@ -106,9 +226,10 @@ export function targetsSupportedPlatform(condition) {
   )
   const os = terms.get('os')
   const cpu = terms.get('cpu')
-  return os !== undefined
-    && TARGET_OSES.has(os)
-    && (cpu === undefined || TARGET_CPUS.has(cpu))
+  const libc = terms.get('libc')
+  return os !== undefined && platforms.some((platform) => platform.os === os
+    && (cpu === undefined || platform.cpu === cpu)
+    && (libc === undefined || platform.libc === libc))
 }
 
 /** Generic optionals ship everywhere; conditioned optionals must match the matrix. */
@@ -163,7 +284,7 @@ export function renderNotices(manifests) {
     '| Package | Version | License |',
     '| --- | --- | --- |',
     ...[...manifests]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
       .map((entry) => `| ${entry.name} | ${entry.version ?? ''} | ${entry.license} |`),
     '',
     noticeRequirementsInUse.entries.length === 0
@@ -203,10 +324,10 @@ function yarnCommand() {
  * otherwise fetches the lockfile-resolvable archive; it never links or builds
  * these packages into node_modules.
  */
-function readLockedPackageArchives(requests) {
+export function readLockedPackageArchives(requests, options = {}) {
   const locators = [...new Set(requests.map((request) => request.record.resolution))]
-  const { command, prefix } = yarnCommand()
-  const result = spawnSync(command, [
+  const { command, prefix } = options.yarnCommand?.() ?? yarnCommand()
+  const result = (options.spawnSync ?? spawnSync)(command, [
     ...prefix,
     'info',
     ...locators,
@@ -304,22 +425,19 @@ function walkProductionPackages() {
         for (const [name, range] of Object.entries(current.manifest[section] ?? {})) {
           if (queued.has(name) || seen.has(name)) continue
           const record = resolveLockedPackage(lockDescriptors, name, range)
-          if (section === 'optionalDependencies') {
-            if (record === undefined) {
+          let installed
+          if (record === undefined) {
+            if (section === 'dependencies') installed = installedPackage(name, current.manifestPath)
+            if (installed === undefined) {
               failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
               continue
             }
-            if (!includesLockedOptional(record)) continue
           }
-          const installed = installedPackage(name, current.manifestPath)
+          if (section === 'optionalDependencies' && !includesLockedOptional(record)) continue
+          installed ??= installedPackage(name, current.manifestPath)
           if (installed !== undefined) {
             queued.add(name)
             queue.push(installed)
-            continue
-          }
-
-          if (record === undefined) {
-            failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
             continue
           }
           const isRequiredArchiveDependency = current.fromArchive && section === 'dependencies'

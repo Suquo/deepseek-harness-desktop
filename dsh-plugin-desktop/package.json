@@ -277,6 +277,30 @@
     "typescript": "6.0.3",
     "vitest": "4.1.8"
   },
+  "dshReleaseMatrixComment": "Fork-declared distribution set: macOS universal releases, Windows configured installer arches, and Linux x64/arm64 glibc development builds.",
+  "dshReleaseMatrix": [
+    {
+      "os": "darwin",
+      "cpu": [
+        "x64",
+        "arm64"
+      ]
+    },
+    {
+      "os": "win32",
+      "cpu": [
+        "x64"
+      ]
+    },
+    {
+      "os": "linux",
+      "cpu": [
+        "x64",
+        "arm64"
+      ],
+      "libc": "glibc"
+    }
+  ],
   "build": {
     "appId": "ai.deepseek.dsh.desktop",
     "productName": "DSH Desktop",
