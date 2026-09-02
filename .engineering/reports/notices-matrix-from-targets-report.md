@@ -29,8 +29,8 @@ The same change replaces locale-sensitive notice ordering with codepoint compari
 | Type check | ✅ | `corepack yarn typecheck` |
 | Lint | N/A | No lint command is configured |
 | Tests | ✅ | Desktop 876 passed / 4 skipped; market 272 passed; preset 164 passed |
-| Focused license check | ✅ | 20 specs; 558 production packages; 5 notice-required |
-| Full gate | ⏳ | Requested-change head will be gated before push |
+| Focused license check | ✅ | 21 specs; 558 production packages; 5 notice-required |
+| Full gate | ✅ | `corepack yarn check`; exact requested-change HEAD and gate tail recorded in PR #85 |
 | GUI | N/A | Not launched: this is a headless release-accounting change with no product runtime path |
 
 ## Files Changed
@@ -46,7 +46,7 @@ The same change replaces locale-sensitive notice ordering with codepoint compari
 
 | Test File | Test Cases |
 |---|---|
-| `dsh-plugin-desktop/scripts/verify-licenses.spec.mjs` | Actual fork declaration; string, array, object, arch, and suffix target forms; absent build/section/target; undeclared build platform; invalid/empty target; explicit-arch mismatch; non-zero archive metadata fetch; codepoint notice ordering |
+| `dsh-plugin-desktop/scripts/verify-licenses.spec.mjs` | Actual fork declaration; string, array, object, arch, and suffix target forms; absent build/section/target; undeclared or malformed build platform; invalid/empty target; explicit-arch mismatch; non-zero archive metadata fetch; codepoint notice ordering |
 
 ## Integrity Proofs
 
@@ -70,7 +70,7 @@ The initial two-axis review found one Standards issue: the codepoint-order spec 
 
 ## Architectural Decisions Surfaced
 
-None. The source of truth was already the Electron Builder configuration; deriving a release-accounting matrix from it is a local, reversible drift fix that does not alter the fork/upstream boundary, runtime composition, packaging architecture, or headless-safety policy.
+[ADR H-0005](../adrs/H-0005-fork-owned-release-matrix-for-notices.md) records the fork-owned notice matrix. It passes the ADR gate: reversing the new authoritative contract requires coordinated manifest, verifier, notices, tests, and packaging-policy changes; custom package metadata is surprising without the Electron Builder host-architecture context; and the explicit declaration was chosen over changing `build` or inferring from unequal packaging mechanisms.
 
 ## System Evolution Notes
 
@@ -78,5 +78,4 @@ The initial brief contained mutually incompatible notice-diff and target-matrix 
 
 ## Next Steps
 
-1. Run the final full gate at the report-and-review head and open the closing PR.
-2. Hold for the Repo Manager's verdict; the Repo Manager owns merge.
+1. Hold for the Repo Manager's verdict on PR #85; the Repo Manager owns merge.

@@ -176,22 +176,28 @@ export function resolveReleaseMatrix(manifest) {
   }
 
   for (const [buildKey, os] of BUILD_PLATFORM_OSES) {
+    const hasSection = Object.hasOwn(build, buildKey)
     const section = build[buildKey]
     const declared = declaredByOs.get(os)
-    if (declared === undefined) {
-      if (typeof section === 'object' && section !== null && !Array.isArray(section)
-        && Object.hasOwn(section, 'target')) {
-        return releaseMatrixError(`build.${buildKey} has targets but dshReleaseMatrix does not declare ${os}`)
+    if (!hasSection) {
+      if (declared !== undefined) {
+        return releaseMatrixError(`dshReleaseMatrix declares ${os} but build.${buildKey} is missing`)
       }
       continue
     }
     if (typeof section !== 'object' || section === null || Array.isArray(section)) {
-      return releaseMatrixError(`dshReleaseMatrix declares ${os} but build.${buildKey} is missing`)
+      return releaseMatrixError(`build.${buildKey} must be an object when present`)
     }
     if (!Object.hasOwn(section, 'target')) {
-      return releaseMatrixError(`build.${buildKey}.target is required for declared ${os}`)
+      if (declared !== undefined) {
+        return releaseMatrixError(`build.${buildKey}.target is required for declared ${os}`)
+      }
+      continue
     }
     const targets = normalizeBuildTargets(section.target, `build.${buildKey}.target`)
+    if (declared === undefined) {
+      return releaseMatrixError(`build.${buildKey} has targets but dshReleaseMatrix does not declare ${os}`)
+    }
     for (const target of targets) {
       if (target.architectures !== undefined && !sameStringSet(target.architectures, declared.cpu)) {
         return releaseMatrixError(

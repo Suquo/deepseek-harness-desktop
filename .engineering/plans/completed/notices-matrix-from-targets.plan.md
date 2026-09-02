@@ -28,6 +28,7 @@ So that the legal inventory neither claims unsupported binaries nor silently dri
 
 - `AGENTS.md`: keep the gate headless and do not edit `deepseek-harness/`.
 - ADR H-0001: keep the change in the desktop-owned overlay; no upstream fork edits.
+- ADR H-0005: the fork-owned declaration is authoritative for notice coverage and is cross-fenced against Electron Builder without changing `build`.
 - The committed `THIRD_PARTY_NOTICES.md` diff must consist only of the four unsupported linuxmusl and four unsupported win32-arm64 row deletions (RM ruling on #81).
 - Electron Builder arch-less targets use the host architecture; the verifier must not infer release architectures from them.
 - The fork declaration is authoritative; every declared OS needs a build target, every build platform target needs a declaration, and every explicit target architecture must exactly match it.
@@ -109,7 +110,7 @@ This is a headless release-accounting change; launching Electron would not exerc
 
 1. Run the focused Node spec and `verify:licenses`.
 2. From a clean committed tree, change one configured target architecture.
-3. Run the named license verification and confirm the derived matrix/notices fence fails red.
+3. Run the named license verification and confirm the declared-matrix/build cross-fence and notices fence fail red.
 4. Restore the mutation and verify the tree returns clean.
 5. Run `corepack yarn check` in the worktree and record its tail beside `git rev-parse HEAD`.
 

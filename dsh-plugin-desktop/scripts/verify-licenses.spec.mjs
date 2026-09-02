@@ -106,6 +106,16 @@ test('fails closed when a build target has no declaration', () => {
   )
 })
 
+test('fails closed on a malformed undeclared platform section', () => {
+  assertMatrixError(
+    {
+      dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }],
+      build: { win: { target: 'nsis' }, mac: 'dir' },
+    },
+    'build.mac must be an object when present',
+  )
+})
+
 test('fails closed on an unrecognized target shape', () => {
   assertMatrixError(
     singlePlatformManifest(42),
