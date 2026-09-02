@@ -198,6 +198,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-app-boot',
     '@deepseek-ai/dsh-atomic-write',
     '@deepseek-ai/dsh-attachment',
+    '@deepseek-ai/dsh-authorization',
     '@deepseek-ai/dsh-base',
     '@deepseek-ai/dsh-bash-local',
     '@deepseek-ai/dsh-brand',

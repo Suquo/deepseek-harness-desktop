@@ -48,7 +48,7 @@
 # silently strip vision from the validator.
 #
 # The values below are the pinned catalog's own (`openrouter.json`, upstream
-# dsh-v0.1.0-rc.8): a hand-declared route inherits nothing, so an unstated
+# dsh-v0.1.1-rc.2): a hand-declared route inherits nothing, so an unstated
 # capacity would fall back to the route defaults (262,144 / 32,768) and quietly
 # shrink the model. `tests/vision-route.test.mjs` diffs every one of them
 # against that catalog file, so a pin bump that changes the model's real shape
