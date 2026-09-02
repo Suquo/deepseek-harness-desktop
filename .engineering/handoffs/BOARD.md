@@ -25,15 +25,16 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 ## Actors
 
 - **Lane runtime (owner rulings 2026-09-02)**: all resolver spawns are Codex `gpt-5.6-sol` high with the 'Approve for me' preset (`-a on-request -c approvals_reviewer=auto_review`; recipe in repo-manager-charter.md) — applies to NEW spawns, in-flight lanes (A gen-14 #70, B gen-16 #54, spawned with `-a never`) finish their cycle. RM relaunches in Claude AUTO mode (`--permission-mode auto`).
-- **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
-- **Lane A (general, `claude/*`)**: gen-16 (Codex) delivered #78 (PR #82). **BUSY — gen-17 (CODEX `dsh-lane-a`, w4:p2) on #81** (notices matrix derived from electron-builder targets). Queue after: #83 → #46 → #30.
-- **Lane B (parametria-harness, `pm/*`)**: gen-17 (Codex) delivered #58 (PR #84). **BUSY — gen-18 (CODEX `dsh-lane-b`, w4:p3) on #62** (deepseek/azure reasoning-disable remainder; ground-first, freeze with the per-dialect tolerance map). Queue after: #30 (if Lane A is busy) · then Lane B is out of buildable parametria issues — pending-live #24/#54/#60 need operator data.
+- **POWER LOSS 2026-09-02 ~17:44 (battery):** every session died; RM gen-AE booted from durable state. Lane A gen-17 died mid fix-cycle on #85 (2 fix commits were unpushed in the worktree — preserved); Lane B gen-18 had produced nothing on #62.
+- **RM**: gen-AE LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
+- **Lane A (general, `claude/*`)**: gen-16 (Codex) delivered #78 (PR #82). **BUSY — gen-18 (CODEX `dsh-lane-a`, w4:p2) resuming #81 / PR #85 fix cycle 1** (declared `dshReleaseMatrix`; gen-17's unpushed fix commits inherited). Queue after: #83 → #46 → #30.
+- **Lane B (parametria-harness, `pm/*`)**: gen-17 (Codex) delivered #58 (PR #84). **BUSY — gen-19 (CODEX `dsh-lane-b`, w4:p3) on #62, fresh start** (deepseek/azure reasoning-disable remainder; ground-first, freeze with the per-dialect tolerance map). Queue after: #30 (if Lane A is busy) · then Lane B is out of buildable parametria issues — pending-live #24/#54/#60 need operator data.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-5 (last Claude gen) landed rc.2 (PR #72). Next spawn = CODEX: anywhere-labs overlay evaluation (301 commits behind).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **In flight: #81 (Lane A gen-17, PR #85 fix cycle 1) · #62 (Lane B gen-18, grounding).**
+- **In flight: #81 (Lane A gen-18, PR #85 fix cycle 1) · #62 (Lane B gen-19, grounding).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#54** (text-only session + no healthy modlens → one decisive image read; profile reinstalled by admin 2026-09-02 on a374f7d4 — lands at the app's next relaunch) · **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
