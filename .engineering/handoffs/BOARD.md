@@ -36,7 +36,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **Triage advisor (owner 2026-09-02):** `.engineering/handoffs/TRIAGE.md` (daily 07:30, git-excluded) ranks open issues by user impact; the RM reads it before each lane claim and notes deviations here. First list pending.
 
-- **In flight: #81 (Lane A gen-18, PR #85 fix cycle 1) · #62 (Lane B gen-19, grounding).**
+- **In flight: #81 (Lane A gen-18, PR #85 APPROVE-PENDING-CI @8dd23538, merge chain armed on run 33653558823) · #62 (Lane B gen-19, RULED Option A default-deny allowlist with data table + census fence; implementing).**
 - Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
 - Pending-live: **#54** (text-only session + no healthy modlens → one decisive image read; profile reinstalled by admin 2026-09-02 on a374f7d4 — lands at the app's next relaunch) · **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
 - **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
