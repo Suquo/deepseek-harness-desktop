@@ -43,7 +43,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 - **#3 — the fork Actions tab enable-workflows click** (UI-only; ruleset `master-required-checks` is active with admin bypass; #3 closes on the first real PR-event rollup).
 - **Linux distributable:** upstream ships no Linux installer target (AppImage/deb). If the owner wants one on this machine, that is a new fork issue — say so and the RM files it.
-- **RELAUNCH/REBUILD the app from master at the new pin (rc.2)** so the operator's runs carry it; then a real-platform image-attachment run is the #68 datum.
+- **Packaged app REBUILT at rc.2 by admin (2026-09-02, master fd3bd7bd, dist/linux-unpacked)** — the owner's next launch carries the new pin. Awaiting the first-run report: image-attachment behaviour (#68 datum) and any DeepSeek run (#69 pending-live).
 - **Live-run items (carried from the Windows era, re-verify on Linux):** the installed pnpm shim execs from a stale deleted worktree — relaunch from the primary checkout regenerates runtime-commands (#55 fixes the loud-failure side); agy sign-in; claude-cli vision under SessionEnd hook cancellation; codex spawn EINVAL (was a modlens Windows bug — may be moot on Linux).
 - **Rulings pending:** skill-root canonicalization (#7) · SK-1..4 landing surface · rebrand identity migrations + product NAMING ("DSH Terminal" → ?) · report the appendOwned quadratic + O_TRUNC EINVAL forensics to anywhere-labs? · modlens into the parametria profile?
 - **SECURITY: Pinecone API key** — literal REMOVED from all 4 skill-script copies by admin (2026-09-02; env / `scripts/.env` lookup now). Remaining with the owner: rotate the key (it lives in both private skill repos' history).
