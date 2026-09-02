@@ -24,7 +24,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **Lane runtime (owner rulings 2026-09-02)**: all resolver spawns are Codex `gpt-5.6-sol` high with the 'Approve for me' preset (`-a on-request -c approvals_reviewer=auto_review`; recipe in repo-manager-charter.md) — applies to NEW spawns, in-flight lanes (A gen-14 #70, B gen-16 #54, spawned with `-a never`) finish their cycle. RM relaunches in Claude AUTO mode (`--permission-mode auto`).
+- **Lane runtime (owner rulings 2026-09-02)**: all resolver spawns are Codex `gpt-5.6-sol` high with the 'Approve for me' preset (`-a on-request -c approvals_reviewer=auto_review`; recipe in repo-manager-charter.md) — applies to NEW spawns, in-flight lanes (A gen-14 #70, B gen-16 #54, spawned with `-a never`) finish their cycle. RM relaunches in Claude AUTO mode (`--permission-mode auto`). **Governors (owner 2026-09-02 18:10):** lane spawns use `-m $(cat ~/.codex/resolver-model)`; RM relaunch uses `--model $(cat ~/.claude/rm-model-state)`; live `/fast` / `/model` sends from the governors are accepted, never undone.
 - **POWER LOSS 2026-09-02 ~17:44 (battery):** every session died; RM gen-AE booted from durable state. Lane A gen-17 died mid fix-cycle on #85 (2 fix commits were unpushed in the worktree — preserved); Lane B gen-18 had produced nothing on #62.
 - **RM**: gen-AE LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: gen-16 (Codex) delivered #78 (PR #82). **BUSY — gen-18 (CODEX `dsh-lane-a`, w4:p2) resuming #81 / PR #85 fix cycle 1** (declared `dshReleaseMatrix`; gen-17's unpushed fix commits inherited). Queue after: #83 → #46 → #30.
