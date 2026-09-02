@@ -45,6 +45,15 @@ const chainRuns = (chain, command) => (workspace.scripts[chain] ?? '')
   .map(segment => segment.trim())
   .includes(command)
 
+const electronCheck = 'node --test scripts/verify-electron-install.spec.mjs && node scripts/verify-electron-install.mjs'
+if (workspace.scripts['check:electron'] !== electronCheck) {
+  fail(`the root check:electron script must be exactly: ${electronCheck}`)
+}
+const rootCheckSegments = (workspace.scripts.check ?? '').split('&&').map(segment => segment.trim())
+if (rootCheckSegments.indexOf('yarn check:electron') !== rootCheckSegments.indexOf('yarn check:layout') + 1) {
+  fail('the root check script must run yarn check:electron immediately after yarn check:layout')
+}
+
 if (JSON.stringify(workspace.workspaces) !== JSON.stringify(workspaces.map(([name]) => name))) {
   fail(`the root Yarn workspace must contain exactly: ${workspaces.map(([name]) => name).join(', ')}`)
 }
