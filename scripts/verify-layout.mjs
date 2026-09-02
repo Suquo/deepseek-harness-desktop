@@ -19,11 +19,16 @@ const market = readJson('dsh-community-market/package.json')
 const preset = readJson('dsh-preset-parametria/package.json')
 const presetProfile = readJson('dsh-preset-parametria/profile/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
-const listFiles = directory => readdirSync(resolve(root, directory), { withFileTypes: true })
-  .flatMap(entry => {
-    const path = `${directory}/${entry.name}`
-    return entry.isDirectory() ? listFiles(path) : [path]
-  })
+const listFiles = (directory, excludedDirectoryNames = new Set()) => (
+  readdirSync(resolve(root, directory), { withFileTypes: true })
+    .flatMap(entry => {
+      const path = directory === '' ? entry.name : `${directory}/${entry.name}`
+      if (!entry.isDirectory()) return [path]
+      return excludedDirectoryNames.has(entry.name)
+        ? []
+        : listFiles(path, excludedDirectoryNames)
+    })
+)
 
 if (workspace.packageManager !== 'yarn@4.18.0') {
   fail('the product workspace must pin yarn@4.18.0')
@@ -565,54 +570,65 @@ for (const [selector, target] of Object.entries(workspace.resolutions ?? {})) {
   }
 }
 
-const agentNotePaths = listFiles('.agents/notes').sort()
-const noteRecordPaths = agentNotePaths
-  .filter(path => path.endsWith('.i18n.yaml'))
-if (noteRecordPaths.length === 0) {
-  fail('.agents/notes holds no bilingual consistency records')
-}
-for (const noteRecordPath of noteRecordPaths) {
-  const noteStem = noteRecordPath.slice(0, -'.i18n.yaml'.length)
-  const noteRecordLines = readFileSync(resolve(root, noteRecordPath), 'utf8').split(/\r?\n/u)
+const checkRecord = (recordPath, memberPaths) => {
+  const recordLines = readFileSync(resolve(root, recordPath), 'utf8').split(/\r?\n/u)
   const expectedRecordLines = []
-  for (const notePath of [`${noteStem}.md`, `${noteStem}.zh.md`]) {
+  for (const memberPath of memberPaths) {
     // Hash the committed blob, not the working tree: checkout line endings
     // differ per host, while HEAD:<path> is identical everywhere.
     let expected
     try {
-      expected = run('git', ['rev-parse', `HEAD:${notePath}`])
+      expected = run('git', ['rev-parse', `HEAD:${memberPath}`])
     } catch {
-      fail(`${noteRecordPath} has no committed bilingual note at ${notePath}`)
+      fail(`${recordPath} has no committed bilingual member at ${memberPath}`)
     }
-    const recordLine = `${basename(notePath)}: ${expected}`
+    const recordLine = `${basename(memberPath)}: ${expected}`
     expectedRecordLines.push(recordLine)
-    if (!noteRecordLines.includes(recordLine)) {
-      fail(`${noteRecordPath} is stale for ${notePath}`)
+    if (!recordLines.includes(recordLine)) {
+      fail(`${recordPath} is stale for ${memberPath}`)
     }
   }
-  const recordDeclarations = noteRecordLines
+  const recordDeclarations = recordLines
     .filter(line => line.trim() !== '' && !line.trimStart().startsWith('#'))
   if (recordDeclarations.length !== expectedRecordLines.length) {
-    fail(`${noteRecordPath} must declare exactly its English and Chinese committed blobs`)
+    fail(`${recordPath} must declare exactly its two committed bilingual members`)
   }
 }
 
-const noteRecordStems = new Set(noteRecordPaths
-  .map(path => path.slice(0, -'.i18n.yaml'.length)))
-const agentNotePathSet = new Set(agentNotePaths)
-for (const notePath of agentNotePaths.filter(path => path.endsWith('.md') && !path.endsWith('.zh.md'))) {
-  const noteStem = notePath.slice(0, -'.md'.length)
-  if (agentNotePathSet.has(`${noteStem}.zh.md`) && !noteRecordStems.has(noteStem)) {
-    fail(`${notePath} and ${noteStem}.zh.md have no bilingual consistency record`)
-  }
+// Record and pair discovery intentionally reads the checkout, while checkRecord
+// compares portable committed blobs. Generated dependencies and the pinned
+// upstream checkout are separate trees and are not owned by this repository.
+const repositoryPaths = listFiles('', new Set(['.git', 'deepseek-harness', 'node_modules'])).sort()
+const recordSuffix = '.i18n.yaml'
+const recordPaths = repositoryPaths.filter(path => path.endsWith(recordSuffix))
+if (recordPaths.length === 0) {
+  fail('the repository holds no bilingual consistency records')
 }
 
-const readmeRecord = readFileSync(resolve(root, 'README.i18n.yaml'), 'utf8')
-for (const readmeName of ['README.md', 'README.en.md']) {
-  const expected = run('git', ['rev-parse', `HEAD:${readmeName}`])
-  const recordLine = `${readmeName}: ${expected}`
-  if (!readmeRecord.split(/\r?\n/u).includes(recordLine)) {
-    fail(`README.i18n.yaml is stale for ${readmeName}`)
+for (const recordPath of recordPaths) {
+  const stem = recordPath.slice(0, -recordSuffix.length)
+  const memberPaths = recordPath === 'README.i18n.yaml'
+    ? ['README.md', 'README.en.md']
+    : [`${stem}.md`, `${stem}.zh.md`]
+  checkRecord(recordPath, memberPaths)
+}
+
+// The inverse direction: deleting a record must not make its check disappear.
+// Start from each primary Markdown member so a lone `.zh.md` is not mistaken
+// for a complete bilingual pair. Root README.zh.md is a compatibility redirect;
+// README.i18n.yaml deliberately records README.md + README.en.md instead.
+const recordStems = new Set(recordPaths.map(path => path.slice(0, -recordSuffix.length)))
+const repositoryPathSet = new Set(repositoryPaths)
+if (repositoryPathSet.has('README.md')
+  && repositoryPathSet.has('README.en.md')
+  && !repositoryPathSet.has('README.i18n.yaml')) {
+  fail('README.md and README.en.md have no bilingual consistency record in the working tree')
+}
+for (const memberPath of repositoryPaths.filter(path => path.endsWith('.md') && !path.endsWith('.zh.md'))) {
+  if (memberPath === 'README.md') continue
+  const stem = memberPath.slice(0, -'.md'.length)
+  if (repositoryPathSet.has(`${stem}.zh.md`) && !recordStems.has(stem)) {
+    fail(`${memberPath} and ${stem}.zh.md have no bilingual consistency record in the working tree`)
   }
 }
 
