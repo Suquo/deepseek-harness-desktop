@@ -1,0 +1,5 @@
+# Bilingual-pair consistency record: the git blob hash of each side as of the last
+# confirmed-consistent state. Both languages carry equal authority. Update both files
+# and re-record their hashes after editing either side.
+2026-09-02-read-image-route-fallback.md: 09c3ab230d5774e144a03b77f7c89fa8c43f6f2a
+2026-09-02-read-image-route-fallback.zh.md: db7a1f08e31df25e9d2538304918e9419aba5f02
