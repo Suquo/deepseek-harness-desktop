@@ -56,7 +56,7 @@ The same change replaces locale-sensitive notice ordering with codepoint compari
 
 ## Self-Review
 
-Pending the required pre-PR two-axis review against `origin/master`.
+The required two-axis review against `origin/master` found one Standards issue and no implementation defect: the codepoint-order spec compared substring positions instead of fencing the exact rendered structure. The spec now asserts the complete notice document. The Spec axis found only the then-pending delivery steps (final push and closing PR), which are completed after this report commit.
 
 ## Deviations from Plan
 
@@ -74,6 +74,5 @@ The initial brief contained mutually incompatible notice-diff and target-matrix 
 
 ## Next Steps
 
-1. Complete the two-axis self-review and resolve or disclose every finding.
-2. Commit the report/archived plan, rerun the final gate if code changes, and open the closing PR.
-3. Hold for the Repo Manager's verdict; the Repo Manager owns merge.
+1. Run the final full gate at the report-and-review head and open the closing PR.
+2. Hold for the Repo Manager's verdict; the Repo Manager owns merge.

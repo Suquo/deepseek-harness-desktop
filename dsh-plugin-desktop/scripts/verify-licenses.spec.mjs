@@ -96,7 +96,19 @@ test('sorts notice rows by codepoint rather than locale', () => {
     { name: 'a-package', version: '1.0.0', license: 'MIT' },
     { name: 'B-package', version: '1.0.0', license: 'MIT' },
   ])
-  assert.ok(notices.indexOf('| B-package |') < notices.indexOf('| a-package |'))
+  assert.equal(
+    notices,
+    [
+      '# Third-Party Notices',
+      'DSH Desktop distributes the following third-party packages inside its installers.',
+      'Each package ships with its own license text in the application files; this list records',
+      'the package names, versions, and licenses for transparency.',
+      '| Package | Version | License |',
+      '| --- | --- | --- |',
+      '| B-package | 1.0.0 | MIT |',
+      '| a-package | 1.0.0 | MIT |',
+    ].join('\n'),
+  )
 })
 
 test('retains sharp LGPL attribution in generated notices', () => {
