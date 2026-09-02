@@ -593,7 +593,7 @@ describe('desktop Host pnpm runtime', () => {
     )
 
     expect(result.error).toBeUndefined()
-    expect(result.status).toBe(9009)
+    expect(result.status).toBe(78)
     const diagnostic = `${result.stdout}${result.stderr}`
     expect(diagnostic).toContain('this generated command is stale and was not run.')
     expect(diagnostic).toContain(`missing application executable: ${vanished}`)
@@ -613,6 +613,34 @@ describe('desktop Host pnpm runtime', () => {
 })
 
 describe('desktop Host dsh runtime', () => {
+  it('guards both recorded dsh targets before dsh.cmd executes on win32', () => {
+    const root = temporaryDirectory()
+    const appExecutable = join(root, 'DSH Desktop', 'DSH Desktop.exe')
+    const dshBootstrapPath = join(root, 'dsh-plugin-desktop', 'lib', 'dsh.js')
+    const installation = installDesktopDshRuntime({
+      platform: 'win32',
+      appExecutable,
+      dshBootstrapPath,
+      profileName: 'web',
+      homeDir: join(root, 'Harness home'),
+      installRecoveryStatePath: join(root, 'plugin-install-recovery', 'state.json'),
+      stateDir: join(root, 'runtime'),
+      environment: { Path: 'C:\\Windows' },
+    })
+    const shim = readFileSync(installation.dshShimPath, 'utf8')
+    const exec = shim.indexOf('--expose-internals')
+    expect(exec).toBeGreaterThan(0)
+    for (const target of [appExecutable, dshBootstrapPath]) {
+      const guard = `if not exist "${target.replaceAll('%', '%%')}" goto :dsh_stale_target_`
+      expect(shim, `dsh.cmd must preflight ${target}`).toContain(guard)
+      expect(shim.indexOf(guard)).toBeLessThan(exec)
+    }
+    expect(shim).toContain('this generated command is stale and was not run.')
+    expect(shim).toContain('Restart DSH Desktop to regenerate it.')
+    expect(shim).toContain('exit /b 78')
+    installation.dispose()
+  })
+
   it.runIf(process.platform === 'win32')('makes the active profile available to Host plugin child processes', () => {
     const root = temporaryDirectory()
     const stateDir = join(root, 'runtime')

@@ -2,7 +2,8 @@
 /**
  * Issue #55 evidence harness — is the DSH runtime-commands pnpm shim `packageManager`-transparent?
  *
- * The issue and relief-plan Phase 4 assert that the shim (shipped pnpm 11.7.0) fails in a repo
+ * The issue and relief-plan Phase 4 assert that the shim (shipped pnpm 11.7.0 at the time of
+ * measurement, 2026-08-21; bumped to 11.17.0 by the #55 fix) fails in a repo
  * pinning a newer pnpm, and that `clear-env.mjs` wipes `npm_config_*` and so kills the bypass.
  * This harness measures each claim against a synthetic fixture repo.
  *
@@ -71,7 +72,9 @@ function electronVersion() {
 
 /**
  * Reproduce the generated Windows shim byte-for-byte in shape.
- * Mirrors windowsPnpmShim() in dsh-plugin-desktop/src/desktop-runtime-environment.ts.
+ * Replica of the PRE-FIX windowsPnpmShim() shape from dsh-plugin-desktop/src/desktop-runtime-environment.ts
+ * as measured on 2026-08-21 (no NODE= assignment, no stale-target guard — both were added by the fix).
+ * It is the shape whose transparency the issue contested; it is not kept in sync with the generator.
  */
 function writeWindowsShim(dir, { electron, pnpmEntry, nodeBinDir, clearEnvUrl, electronVer }) {
   const shim = join(dir, 'pnpm.cmd')
@@ -90,7 +93,7 @@ function writeWindowsShim(dir, { electron, pnpmEntry, nodeBinDir, clearEnvUrl, e
   return shim
 }
 
-/** Mirrors clearEnvironmentModule() in desktop-runtime-environment.ts:203-211. */
+/** Mirrors clearEnvironmentModule() in dsh-plugin-desktop/src/desktop-runtime-environment.ts (deletes exactly ELECTRON_RUN_AS_NODE). */
 function writeClearEnv(dir) {
   const file = join(dir, 'clear-env.mjs')
   writeFileSync(file, [

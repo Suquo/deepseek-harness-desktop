@@ -228,7 +228,13 @@ function clearEnvironmentModule(): string {
  */
 const STALE_COMMAND_HEADLINE = 'dsh-plugin-desktop: this generated command is stale and was not run.'
 const STALE_COMMAND_REMEDY = 'Restart DSH Desktop to regenerate it.'
-const STALE_COMMAND_EXIT_CODE = 9009
+/**
+ * Exit status of a rejected stale command. It must fit an 8-bit POSIX status (9009 truncates to 49
+ * on Linux — measured on the Linux gate) and must differ from the interpreters' own not-found
+ * codes (cmd 9009, sh 127) so a caller can tell "the shim spoke" from the bare path error it
+ * replaces. 78 is sysexits.h EX_CONFIG: the configuration (the recorded targets) is unusable.
+ */
+const STALE_COMMAND_EXIT_CODE = 78
 
 /** Labelled targets a generated command must still be able to reach. */
 type RecordedTarget = readonly [label: string, path: string]
