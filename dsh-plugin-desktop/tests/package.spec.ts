@@ -108,6 +108,17 @@ describe('published package surface', () => {
     })
   })
 
+  it('builds every subpath the manifest exports, so a dropped tsdown entry cannot leave a dangling export', () => {
+    // Standard 6, both directions on the Parametria subpaths (PR #66 R1): the
+    // manifest names `./lib/<name>.js`, so `tsdown.config.ts` must declare the
+    // `<name>` entry that produces it — and vice versa for these two.
+    const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
+    for (const subpath of ['parametria-capture', 'parametria-evidence']) {
+      expect(manifest.exports).toHaveProperty(`./${subpath}`)
+      expect(tsdown).toMatch(new RegExp(`^\\s*'${subpath}': 'src/${subpath}\\.ts',$`, 'm'))
+    }
+  })
+
   it('exposes the Host plugin and desktop-owned client face', () => {
     expect(manifest.exports).toHaveProperty('./client')
     expect(manifest.exports).toHaveProperty('./windows-pwsh-sandbox', {
@@ -145,6 +156,14 @@ describe('published package surface', () => {
     expect(manifest.exports).toHaveProperty('./notifications', {
       types: './lib/types/notifications.d.ts',
       default: './lib/notifications.js',
+    })
+    expect(manifest.exports).toHaveProperty('./parametria-capture', {
+      types: './lib/types/parametria-capture.d.ts',
+      default: './lib/parametria-capture.js',
+    })
+    expect(manifest.exports).toHaveProperty('./parametria-evidence', {
+      types: './lib/types/parametria-evidence.d.ts',
+      default: './lib/parametria-evidence.js',
     })
     expect(manifest.exports).not.toHaveProperty('./windows-acl-runner')
     expect(manifest.exports).not.toHaveProperty('./desktop-cli')

@@ -403,6 +403,15 @@ Four properties this shape is chosen for:
   `.gitignore` (`*`) at the evidence ROOT. Naming a directory that does not
   exist was most of the original problem: a script writing into a missing parent
   fails, and the model's recovery is a bare filename in the workspace root.
+  Creation is not configurable (a knob that made the persona's "creates it"
+  sentence false had no consumer and was removed on review). It is
+  **fail-open**: on a workspace the host cannot write into, the variable is
+  still published, the host logs one `could not prepare …; publishing the path
+  anyway` warning per shell call, and the run's own first write fails loudly —
+  the persona tells it to create the directory itself and carry on. Only a
+  SUCCESSFUL preparation is memoized (per generation, so a profile switch
+  re-prepares for free); a failure is retried on the next call, so a transient
+  cause recovers by itself.
 - **The orchestrator still passes absolute paths down.** A delegate is its own
   session (verified in export `dsh-session-60658537`, whose child header carries
   a different `id` with `parentSession` set), and the contributor resolves from

@@ -200,24 +200,19 @@ export function prepareEvidenceDir(dir: string): unknown {
   }
 }
 
-/** Plugin config. */
-export interface Config {
-  /**
-   * Create the run directory (and seed the root's self-ignore marker) the first
-   * time a session resolves the variable.
-   *
-   * On by default: NAMING a directory that does not exist is most of the
-   * original problem, because a script writing into a missing parent fails and
-   * the model's recovery is a bare filename in the workspace root. Turning this
-   * off keeps the variable and drops only the side effect on the user's tree.
-   */
-  createOnResolve?: boolean
-}
+/**
+ * Plugin config — deliberately empty.
+ *
+ * Creation is not a knob: NAMING a directory that does not exist is most of the
+ * original problem (a script writing into a missing parent fails, and the
+ * model's recovery is a bare filename in the workspace root), and the persona
+ * tells the run the directory exists. A switch that made that sentence false
+ * had no consumer and was removed on review (PR #66 R4).
+ */
+export interface Config {}
 
 /** Runtime configuration schema. */
-export const Config: z<Config> = z.object({
-  createOnResolve: z.boolean().default(true),
-})
+export const Config: z<Config> = z.object({})
 
 /**
  * The variable's model-visible description, published through the registry's
@@ -225,18 +220,16 @@ export const Config: z<Config> = z.object({
  */
 const VARIABLE_DESCRIPTION =
   `Absolute, run-scoped directory for this ${PARAMETRIA_PRODUCT_NAME} run's artifacts — screenshots, `
-  + 'spec JSON, and any script the run writes. Write every artifact under it and nothing beside it.'
-
-/** Appended to the description only when the Host is configured to create the directory. */
-const CREATED_CLAUSE = ' This host creates it before your first shell command; if a write into it '
-  + 'fails anyway, create it yourself.'
+  + 'spec JSON, and any script the run writes. Write every artifact under it and nothing beside it. '
+  + 'This host creates it before your first shell command; if a write into it fails anyway, create '
+  + 'it yourself.'
 
 /**
  * Register the evidence-directory contributor.
  * @param ctx - the mounting context.
  * @param config - the resolved plugin config.
  */
-export function apply(ctx: Context, config: Config): void {
+export function apply(ctx: Context, _config: Config): void {
   /**
    * Run directories this GENERATION has already prepared.
    *
@@ -247,13 +240,7 @@ export function apply(ctx: Context, config: Config): void {
   const prepared = new Set<string>()
   ctx.shellEnv.register({
     name,
-    variables: {
-      [EVIDENCE_DIR_ENV]: {
-        // The description is quoted back to the model, so it promises creation
-        // only when this generation is configured to attempt it (standard 12).
-        description: VARIABLE_DESCRIPTION + ((config.createOnResolve ?? true) ? CREATED_CLAUSE : ''),
-      },
-    },
+    variables: { [EVIDENCE_DIR_ENV]: { description: VARIABLE_DESCRIPTION } },
     resolve(execution) {
       const agent = execution.agent
       // A direct (non-agent) shell call has no workspace or run identity to
@@ -265,13 +252,16 @@ export function apply(ctx: Context, config: Config): void {
       }
       if (evidenceSiteProblem(site) !== undefined) return {}
       const dir = evidenceDirFor(site)
-      if ((config.createOnResolve ?? true) && !prepared.has(dir)) {
-        // Recorded whether or not it succeeded: a retry on every subsequent
-        // shell call of a session whose workspace is read-only would be a
-        // per-call syscall storm for a condition that will not change.
-        prepared.add(dir)
+      if (!prepared.has(dir)) {
+        // SUCCESS is memoized; a failure is retried on the session's next shell
+        // call and warned about each time. A read-only workspace costs one
+        // mkdir attempt per call, which is cheap; a memoized failure would have
+        // no release for the rest of the generation and could never recover
+        // from a transient cause (standard 9, PR #66 R2).
         const failure = prepareEvidenceDir(dir)
-        if (failure !== undefined) {
+        if (failure === undefined) {
+          prepared.add(dir)
+        } else {
           ctx.logger.warn(
             `${name}: could not prepare ${dir} `
             + `(${failure instanceof Error ? failure.message : String(failure)}); `
@@ -283,5 +273,3 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 }
-
-export default apply

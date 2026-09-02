@@ -65,13 +65,12 @@ function execution(session?: { id: string; cwd?: string }): ToolExecution {
 
 /**
  * A registry with the contributor mounted, and a scratch workspace to anchor to.
- * @param createOnResolve - whether the contributor creates the directory.
  * @returns the live registry and the temporary workspace root.
  */
-function mounted(createOnResolve = true): { registry: ShellEnvRegistry; cwd: string } {
+function mounted(): { registry: ShellEnvRegistry; cwd: string } {
   const ctx = new Context()
   const registry = new ShellEnvRegistry(ctx, { dshHome: join(tmpdir(), 'evidence-test-home') })
-  apply(ctx, { createOnResolve })
+  apply(ctx, {})
   const cwd = mkdtempSync(join(tmpdir(), 'parametria-evidence-'))
   return { registry, cwd }
 }
@@ -211,17 +210,6 @@ describe('the contributor, against the real registry', () => {
     }
   })
 
-  it('publishes the path even when creation is off, and creates nothing', () => {
-    const { registry, cwd } = mounted(false)
-    try {
-      expect(registry.collect(execution({ id: SESSION, cwd }))[EVIDENCE_DIR_ENV])
-        .toBe(join(cwd, EVIDENCE_ROOT_SEGMENT, SESSION))
-      expect(() => statSync(join(cwd, EVIDENCE_ROOT_SEGMENT))).toThrow()
-    } finally {
-      rmSync(cwd, { recursive: true, force: true })
-    }
-  })
-
   it('still publishes the path when preparation fails', () => {
     // Fail-open (standard 4): a workspace the host cannot write into must not
     // silently withdraw the variable, because the run's recovery from an absent
@@ -285,17 +273,36 @@ describe('the contributor, against the real registry', () => {
     }
   })
 
-  it('promises creation in the variable description only when configured to create', () => {
-    const on = mounted()
-    const off = mounted(false)
+  it('memoizes a SUCCESSFUL preparation only, and retries a failed one', () => {
+    // Standard 9: a memoized failure would have no release for the rest of the
+    // generation. Observable both ways: after a success, a deleted marker is
+    // NOT re-seeded (the memo held); after a failure, removing the obstacle
+    // lets the very next shell call create the directory (nothing was held).
+    const { registry, cwd } = mounted()
     try {
-      const described = (registry: typeof on.registry) =>
-        registry.list().find(info => info.key === EVIDENCE_DIR_ENV)?.description ?? ''
-      expect(described(on.registry)).toContain('creates it before your first shell command')
-      expect(described(off.registry)).not.toContain('creates it before your first shell command')
+      const root = join(cwd, EVIDENCE_ROOT_SEGMENT)
+      writeFileSync(root, 'not a directory')
+      registry.collect(execution({ id: SESSION, cwd }))
+      expect(() => statSync(join(root, SESSION))).toThrow()
+      rmSync(root)
+      registry.collect(execution({ id: SESSION, cwd }))
+      expect(statSync(join(root, SESSION)).isDirectory()).toBe(true)
+      rmSync(join(root, '.gitignore'))
+      registry.collect(execution({ id: SESSION, cwd }))
+      expect(() => statSync(join(root, '.gitignore'))).toThrow()
     } finally {
-      rmSync(on.cwd, { recursive: true, force: true })
-      rmSync(off.cwd, { recursive: true, force: true })
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it('tells the run the directory exists and what to do if a write still fails', () => {
+    const { registry, cwd } = mounted()
+    try {
+      const description = registry.list().find(info => info.key === EVIDENCE_DIR_ENV)?.description ?? ''
+      expect(description).toMatch(/creates it before your first shell command/)
+      expect(description).toMatch(/create it yourself/)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
     }
   })
 
@@ -334,5 +341,20 @@ describe('prepareEvidenceDir', () => {
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }
+  })
+})
+
+describe('the module loads as a Cordis namespace plugin', () => {
+  // Postmortem 0001 (master 44b52bd1, fenced for `parametria-capture`): an
+  // `export default apply` beside `inject` makes Loader.unwrapExports discard
+  // the sibling `inject`/`name`/`Config`, the fiber mounts with an empty inject
+  // and `ctx.shellEnv` throws — for every session on the parametria preset,
+  // since its row mounts this module. Namespace form only — no default export.
+  it('exports name, inject, and apply as siblings, and never a default apply', () => {
+    const source = readFileSync(fileURLToPath(new URL('../src/parametria-evidence.ts', import.meta.url)), 'utf8')
+    expect(source).toMatch(/^export const name = 'parametria-evidence'$/m)
+    expect(source).toMatch(/^export const inject = \['shellEnv'\]$/m)
+    expect(source).toMatch(/^export function apply\(/m)
+    expect(source).not.toMatch(/^export default\b/m)
   })
 })
