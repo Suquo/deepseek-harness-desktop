@@ -21,6 +21,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
+import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'parametria-route-preflight'
@@ -86,7 +87,7 @@ export function unresolvedRouteBanner(providers: readonly string[]): string {
     'Pinned subagent provider routes are not registered:',
     list,
     '',
-    'Validation cannot start on those routes. Install the Parametria profile, then restart DSH Desktop:',
+    `Validation cannot start on those routes. Install the ${PARAMETRIA_PRODUCT_NAME} profile, then restart DSH Desktop:`,
     ROUTE_REMEDY,
   ].join('\n')
 }
@@ -113,7 +114,9 @@ export function installRoutePreflight(ctx: Context, entries: () => Iterable<Rout
         kind: 'plugin',
         plugin: name,
         form: 'notice',
-        summary: boundContextSummary(`Parametria route preflight failed: ${unresolved.join(', ')}`),
+        summary: boundContextSummary(
+          `${PARAMETRIA_PRODUCT_NAME} route preflight failed: ${unresolved.join(', ')}`,
+        ),
       },
       content: [{ type: 'text', text: unresolvedRouteBanner(unresolved) }],
     }))
@@ -129,7 +132,9 @@ export function installRoutePreflight(ctx: Context, entries: () => Iterable<Rout
 export function apply(ctx: Context, _config: Config): void {
   const tree = ctx.fiber.entry?.parent.tree
   if (!tree) {
-    throw new Error(`${name} must be mounted as a loader entry inside the Parametria preset`)
+    throw new Error(
+      `${name} must be mounted as a loader entry inside the ${PARAMETRIA_PRODUCT_NAME} preset`,
+    )
   }
   installRoutePreflight(ctx, () => tree.entries())
 }
