@@ -27,7 +27,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 - **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: gen-12 (Codex) delivered #64 (PR #74). **Next: gen-13 (Codex) on #67** (boot-global injection docs/verifier follow-up), worktree `~/.dsh-resolver-worktrees/issue-67` being prepared. Queue after: #70 → #73 → #46 → #30.
-- **Lane B (parametria-harness, `pm/*`)**: gen-15 (Codex) delivered #52 (PR #75). **Next: gen-16 (Codex) on #54** (read_image fallback), worktree `~/.dsh-resolver-worktrees/issue-54` being prepared. Queue after: #58 → #62.
+- **Lane B (parametria-harness, `pm/*`)**: gen-15 (Codex) delivered #52 (PR #75). **BUSY — gen-16 (CODEX `dsh-lane-b`, w4:p3) on #54** (read_image fallback; freeze-if-upstream-surgery). Queue after: #58 → #62.
 - **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-5 (last Claude gen) landed rc.2 (PR #72). Next spawn = CODEX: anywhere-labs overlay evaluation (301 commits behind).
 - **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
