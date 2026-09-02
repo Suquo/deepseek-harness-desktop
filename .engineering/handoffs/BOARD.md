@@ -10,11 +10,13 @@
 
 ## Now
 
-**#1 AND #53 CLOSED (2026-08-21 ~10:00): the founding issue is DELIVERED, proven by the operator's own morning runs** — four validator children across two runs, all `parametria-vision`/`google/gemini-3.6-flash`, all `turn/end: completed`; zero NO_ADAPTER, zero reasoning-400. Delivery chain: PR #8 → #19 → #22 → #50 → #59 → #61 (+#57 observability, +#63 capture). Pending-live remainder: #24 (first child capture via `parametria_capture`) and #60 (bare-route datum; the RUNNING app needs a relaunch from post-#61 source to carry the pi-ai patch).
+**MACHINE MOVE + FLEET RESTART (2026-09-02, RM gen-AD, first Linux generation):** the fleet moved from Windows to Linux (cjjmaster, Omarchy/Arch; fresh clone, submodule at rc.8 `141eb6fe`). The RM `work-queue-progress` memory did NOT survive the migration — this generation booted from BOARD.md + live GitHub and started a fresh narrative. Charters/agent files ported to Linux paths (worktrees `~/.dsh-resolver-worktrees/issue-<n>`, `ss`/`lsof` for ports, no PowerShell). **Baseline `corepack yarn check` GREEN on Linux** (exit 0; desktop 814 passed / 4 skipped / 80 files; closure 200 nodes; licenses 543). `gh` default pinned to the fork (parent anywhere-labs was the default in the fresh clone — verify with `gh repo set-default --view`). Owner pushed 3 direct commits to master post-board (`44b52bd1` capture default-export, `e98776db`+`c5eaa322` parametria profile mounts the subagent provider bundles + pins dsh-sdk-protocol, 2026-08-28).
 
-**RELIEF-PLAN FLEET SCOPE MERGED + DEPLOYED (overnight 2026-08-20→21, AC generation, 5 merges #56/#57/#59/#61/#63):** error laundering dead on one-shot paths (#40, PR #57) · reasoning-400 fixed at route AND adapter (#53, PR #59+#61) · `parametria_capture` Host-plane tool live with env var set (#24 re-scoped by operator Option-C ruling, PR #63) · report published (PR #56). Follow-ups filed en route: #58 (continuable path) · #60 (bare-route, held open) · #62 (deepseek/azure remainder). Three RM-verified premise refutations this generation (plan §3a twice, #24-as-specced once).
+**TWO FINISHED BRANCHES, NO PRs — the Windows generations died one step from opening them (2026-08-21):** `claude/issue-55-pnpm-shim` @ `07257aef30` (Lane A gen-10; spec 24/24, mutation proofs posted) and `pm/issue-23-evidence-surface` @ `55b2d0f68a` (Lane B gen-13; full gate green at that SHA, 9 mutation proofs). Both merge CLEAN onto current master (merge-tree). Resumption gens spawned to rebase → re-gate on Linux → open the PR.
 
-**28 merges lifetime.** In flight: Lane B gen-13 (#23 evidence surface) · Lane A gen-10 (#55 pnpm shim).
+**UPSTREAM WATCH 2026-09-02: harness 7 releases behind** (pinned rc.8; `dsh-v0.1.1-rc.1/rc.2` 2026-08-21, `dsh-v0.1.2-alpha.1..5` through 2026-09-02; 1978 commits behind master). Overlay (anywhere-labs) 301 commits behind, 97 open PRs there. Lane C eval spawned: target the conservative `dsh-v0.1.1-rc.2` first (past the 24 h age gate; rc-track), report the break surface, freeze before PR if patches don't re-apply.
+
+**28 merges lifetime.**
 
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
@@ -22,21 +24,24 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
-- **RM**: AC generation LIVE (`/loop /repo-manager`, cjjmaster).
-- **Lane A (general, `claude/*`)**: **BUSY — gen-10 on #55 RE-SCOPED (a)**: measurement refuted BOTH the issue premise AND the RM option-2 ruling (shim already packageManager-transparent, 5/5 cold+warm). Build = transparency invariant fence + std-9 existence/staleness fix in installDesktopPnpmRuntime (the stale-worktree exec mechanism) + 11.17.0 hygiene bump. Close permitted on headless fence-proof. #64 filed (electron/dist non-extraction). #45 low.
-- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-13 on #23** (evidence governance as a structural surface; dedupe EVIDENCE_ROOT_SEGMENT with the capture tool; freeze-with-options if designs diverge; branch `pm/issue-23-evidence-surface`). SURFACE: preset + desktop plugin. Queue after: #52 → #54 → #58.
-- **Lane C (upstream-sync, `up/*`, RM-spawned)**: FREE — gen-4 delivered the rc.8 bump (PR #47 merged on green: pin surface 166→173 incl. upstream package deletions inherited; GUI smoke caught a green-gate brand regression; official brand slots discovered → #48). Watch doc carries the age-gate lesson. #46/#49 filed from findings.
-- **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37) incl. the owner's lockup refinements.
+- **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
+- **Lane A (general, `claude/*`)**: **BUSY — gen-11 RESUMING #55** on the existing branch `claude/issue-55-pnpm-shim` (Herdr `dsh-lane-a`, w4:p2): rebase onto master, re-run the full gate on Linux, open the PR (`Closes #55`). Note: the shim work is Windows-runtime code; its spec runs headless on Linux, but the GUI-validated claims from gen-10 stay attributed to gen-10. Queue after: #64 (filed by gen-10) · #46 · #30.
+- **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-14 RESUMING #23** on `pm/issue-23-evidence-surface` (Herdr `dsh-lane-b`, w4:p3): rebase onto master (owner's profile commits touch `dsh-preset-parametria/profile/` — re-run the drift/profile-patch suites), re-gate, open the PR. Queue after: #52 → #54 → #58 → #62.
+- **Lane C (upstream-sync, `up/*`, RM-spawned)**: **BUSY — gen-5 EVAL of the rc.8 → `dsh-v0.1.1-rc.2` bump** in a worktree (background agent). Second lander vs #55 (`yarn.lock`) rebases.
+- **Lane D (design, `dg/*`, RM-spawned)**: FREE — gens 1-3 delivered the full in-app rebrand (#28/#37). Next: #48 (brand slots).
 
 ## Queue (open GitHub issues, RM-triaged)
 
-- **#1 CLOSED + #53 CLOSED (2026-08-21 morning): THE LIVE DATUM LANDED.** Two operator runs, four validator children — ALL on parametria-vision/gemini-3.6-flash, ALL `turn/end: completed`, zero NO_ADAPTER, zero reasoning-400. The fork's founding issue is delivered. Still pending-live: **#24** (first validator-child capture through `parametria_capture` — the morning runs predate #63's deploy) and **#60** (bare-route datum — the morning bare-route session predates the patch reaching the running app; NOTE: the running app needs a rebuild/relaunch from post-#61 source to carry the pi-ai patch).
-- **In flight: #23 (Lane B gen-13) · #55 (Lane A gen-10).** Next up: #52 (route preflight banner — lower urgency now the route works) → #54 (read_image fallback) → #58 (continuable path). Claimable: #62 (deepseek/azure disable remainder) · #30 (real billed cost) · #45 (trim amortization) · #46 (version-literal drift) · #48 (brand slots, Lane D). Pending-live: #24 (child capture) · #60 (bare route). **#6** — A/B protocol, buildable (5 datums). **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
+- **In flight: #55 (Lane A gen-11 resume) · #23 (Lane B gen-14 resume) · upstream bump eval (Lane C gen-5).**
+- Next up Lane B: #52 (route preflight banner) → #54 (read_image fallback) → #58 (continuable path) → #62 (deepseek/azure remainder). Claimable Lane A: #64 (electron/dist non-extraction) · #46 (version-literal drift) · #30 (real billed cost) · #45 (trim amortization, product call). Lane D: #48 (brand slots).
+- Pending-live: **#24** (first validator-child capture through `parametria_capture`) · **#60** (bare-route datum; needs the running app relaunched from post-#61 source). **#6** — A/B protocol, buildable. **#26** — open on owner identity migrations + locale copy. **#7** — owner-gated.
+- **#3 (CI)** — fork Actions EVENT triggers still dormant; RM merges on RM-dispatched `workflow_dispatch` runs (last 5 dispatch runs green, 2026-08-20/21).
 - **[skill, outside repo] SK-1/SK-2/SK-3/SK-4** — await the owner's landing-surface ruling.
 
-## Owner items (batched, non-blocking)
+## Owner items (batched, non-blocking — relayed via the admin agent)
 
 - **#3 — the fork Actions tab enable-workflows click** (UI-only; ruleset `master-required-checks` is active with admin bypass; #3 closes on the first real PR-event rollup).
-- **Live-run items:** RELAUNCH DSH Desktop from the primary checkout — the installed pnpm shim execs from a STALE deleted worktree (.pm-resolver-worktrees/issue-2), found by gen-10; relaunch regenerates runtime-commands. Also: agy sign-in still failing (re-verify with modlens doctor); claude-cli vision fails under a SessionEnd hook cancellation; codex spawn EINVAL (modlens Windows bug — report to @liustack?).
+- **Linux distributable:** upstream ships no Linux installer target (AppImage/deb). If the owner wants one on this machine, that is a new fork issue — say so and the RM files it.
+- **Live-run items (carried from the Windows era, re-verify on Linux):** the installed pnpm shim execs from a stale deleted worktree — relaunch from the primary checkout regenerates runtime-commands (#55 fixes the loud-failure side); agy sign-in; claude-cli vision under SessionEnd hook cancellation; codex spawn EINVAL (was a modlens Windows bug — may be moot on Linux).
 - **Rulings pending:** skill-root canonicalization (#7) · SK-1..4 landing surface · rebrand identity migrations + product NAMING ("DSH Terminal" → ?) · report the appendOwned quadratic + O_TRUNC EINVAL forensics to anywhere-labs? · modlens into the parametria profile?
 - **SECURITY: hardcoded Pinecone API key** in `~/.agents/skills/suquo-systems-parametria/scripts/query-grasshopper-kb.py` — rotate + move to `scripts/.env` (outside this repo's fleet surface; flagged only).
