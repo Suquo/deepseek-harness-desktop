@@ -242,27 +242,32 @@ try {
   if (profileMenu?.submenu?.()[0]?.label() !== 'desktop') {
     throw new Error('assembled desktop profile is missing the active profile tray submenu')
   }
-  const response = await fetch(expectedUrl)
-  const html = await response.text()
-  if (response.status !== 200) {
-    throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
-  }
-  // 0.1.1 moved the boot global from a `tapIndex` string transform in
-  // dsh-client-modules (`window.__DSH_BOOT__ = …`) to a structured index
-  // injection row rendered by dsh-host-webserver (`globalThis["__DSH_BOOT__"] = …`).
-  // Both forms define the same global on the same page; accept either.
-  const bootMatch = html.match(
-    /(?:window\.__DSH_BOOT__|globalThis\["__DSH_BOOT__"\]) = (\{.*?\})<\/script>/u,
-  )
-  if (bootMatch?.[1] === undefined) {
+  // Since 0.1.1, dsh-client-modules contributes the boot graph as structured
+  // data and dsh-host-webserver owns its rendered markup. Assert the producer
+  // contract directly: scraping that markup would couple this smoke to one of
+  // the row table's renderers instead of the boot contract shared by them.
+  const injectionRows = ctx.webServer.collectIndexInjections()
+  const namedBootRows = injectionRows.filter(row => row?.name === '__DSH_BOOT__')
+  if (namedBootRows.length !== 1) {
     throw new Error(
-      'assembled Web root defines the boot graph as neither '
-      + '`window.__DSH_BOOT__ = {…}` (<= 0.1.0-rc.8, a dsh-client-modules tapIndex '
-      + 'transform) nor `globalThis["__DSH_BOOT__"] = {…}` (>= 0.1.1, a '
-      + 'dsh-host-webserver index-injection row)',
+      `assembled Web injection table contains ${String(namedBootRows.length)} `
+      + '__DSH_BOOT__ rows instead of exactly one',
     )
   }
-  const graph = JSON.parse(bootMatch[1])
+  const [bootRow] = namedBootRows
+  const bootRowKeys = Object.keys(bootRow).sort()
+  if (bootRow.kind !== 'global'
+    || JSON.stringify(bootRowKeys) !== JSON.stringify(['kind', 'name', 'value'])) {
+    throw new Error(
+      'assembled Web boot row must have exactly the pinned '
+      + '`{ kind: "global", name: "__DSH_BOOT__", value }` shape; '
+      + `received kind ${JSON.stringify(bootRow.kind)} with keys ${bootRowKeys.join(', ')}`,
+    )
+  }
+  const graph = bootRow.value
+  if (typeof graph !== 'object' || graph === null || !Array.isArray(graph.entries)) {
+    throw new Error('assembled Web boot row value is not a client entry graph')
+  }
   const ids = new Set(graph.entries.map(entry => entry.id))
   for (const id of [
     'dsh-plugin-desktop',
@@ -277,6 +282,17 @@ try {
     '@deepseek-ai/dsh-client-ui-directory-picker-native',
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
+  }
+  const response = await fetch(expectedUrl)
+  const html = await response.text()
+  if (response.status !== 200) {
+    throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)
+  }
+  if (!html.includes('globalThis["__DSH_BOOT__"] = ')) {
+    throw new Error(
+      'assembled Web root is missing the rendered '
+      + '`globalThis["__DSH_BOOT__"] = ` boot assignment',
+    )
   }
 } finally {
   await ctx?.fiber.dispose()
