@@ -5,9 +5,11 @@ import { join } from 'node:path'
 import { afterEach, test } from 'node:test'
 
 import {
+  DEPENDENCY_INSTALL_REMEDY,
   ELECTRON_INSTALL_REMEDY,
   ElectronInstallIntegrityError,
   verifyElectronInstall,
+  verifyWorkspaceElectronInstall,
 } from './verify-electron-install.mjs'
 
 const fixtures = []
@@ -75,5 +77,56 @@ test('rejects installation metadata that escapes Electron dist', () => {
     error => error instanceof ElectronInstallIntegrityError
       && error.message.includes('path.txt points outside dist')
       && error.message.includes(ELECTRON_INSTALL_REMEDY),
+  )
+})
+
+test('the workspace entry ensures the binary before verifying it', () => {
+  const electronPackage = makeFixture()
+  const packageJson = join(electronPackage, 'package.json')
+  writeFileSync(packageJson, '{}')
+  let installCalls = 0
+
+  const binary = verifyWorkspaceElectronInstall({
+    resolvePackage: () => packageJson,
+    runInstall: (installScript) => {
+      installCalls += 1
+      assert.equal(installScript, join(electronPackage, 'install.js'))
+      mkdirSync(join(electronPackage, 'dist'), { recursive: true })
+      writeFileSync(join(electronPackage, 'path.txt'), 'electron')
+      writeFileSync(join(electronPackage, 'dist', 'electron'), '')
+      return { status: 0 }
+    },
+  })
+
+  assert.equal(installCalls, 1)
+  assert.equal(binary, join(electronPackage, 'dist', 'electron'))
+})
+
+test('the workspace entry fails with the named error when ensure leaves the binary unusable', () => {
+  const electronPackage = makeFixture()
+  const packageJson = join(electronPackage, 'package.json')
+  writeFileSync(packageJson, '{}')
+
+  assert.throws(
+    () => verifyWorkspaceElectronInstall({
+      resolvePackage: () => packageJson,
+      runInstall: () => ({ status: 1 }),
+    }),
+    error => error instanceof ElectronInstallIntegrityError
+      && error.message.includes('install.js exited with status 1')
+      && error.message.includes(ELECTRON_INSTALL_REMEDY),
+  )
+})
+
+test('the workspace entry wraps an absent Electron package with the named dependency-install remedy', () => {
+  const missing = new Error('Cannot find module electron/package.json')
+  missing.code = 'MODULE_NOT_FOUND'
+
+  assert.throws(
+    () => verifyWorkspaceElectronInstall({ resolvePackage: () => { throw missing } }),
+    error => error instanceof ElectronInstallIntegrityError
+      && error.name === 'ElectronInstallIntegrityError'
+      && error.message.includes('electron/package.json cannot be resolved')
+      && error.message.includes(DEPENDENCY_INSTALL_REMEDY),
   )
 })

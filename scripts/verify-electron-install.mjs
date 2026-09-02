@@ -1,18 +1,17 @@
+import { spawnSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const ELECTRON_INSTALL_REMEDY = 'corepack yarn workspace dsh-plugin-desktop exec install-electron'
+export const DEPENDENCY_INSTALL_REMEDY = 'corepack yarn install --immutable'
 
 export class ElectronInstallIntegrityError extends Error {
-  constructor(reason) {
-    super(
-      `Electron binary installation is incomplete: ${reason}. `
-      + 'Electron 42+ no longer downloads its binary during dependency installation. '
-      + `Remedy: ${ELECTRON_INSTALL_REMEDY}`,
-    )
+  constructor(reason, remedy = ELECTRON_INSTALL_REMEDY) {
+    super(`Electron binary installation is incomplete: ${reason}. Remedy: ${remedy}`)
     this.name = 'ElectronInstallIntegrityError'
+    this.reason = reason
   }
 }
 
@@ -50,14 +49,54 @@ export function verifyElectronInstall(electronPackageDirectory) {
   return binary
 }
 
-export function resolveElectronPackageDirectory() {
+export function resolveElectronPackageDirectory(resolvePackage) {
   const root = resolve(import.meta.dirname, '..')
   const requireFromDesktop = createRequire(resolve(root, 'dsh-plugin-desktop/package.json'))
-  return dirname(requireFromDesktop.resolve('electron/package.json'))
+  try {
+    const packageJson = resolvePackage === undefined
+      ? requireFromDesktop.resolve('electron/package.json')
+      : resolvePackage()
+    return dirname(packageJson)
+  } catch {
+    throw new ElectronInstallIntegrityError(
+      'electron/package.json cannot be resolved from dsh-plugin-desktop',
+      DEPENDENCY_INSTALL_REMEDY,
+    )
+  }
 }
 
-export function verifyWorkspaceElectronInstall() {
-  return verifyElectronInstall(resolveElectronPackageDirectory())
+const runElectronInstaller = installScript => spawnSync(process.execPath, [installScript], {
+  stdio: 'inherit',
+})
+
+export function ensureElectronInstall(electronPackageDirectory, runInstall = runElectronInstaller) {
+  const installScript = resolve(electronPackageDirectory, 'install.js')
+  let installFailure
+  try {
+    const result = runInstall(installScript)
+    if (result?.error !== undefined) {
+      installFailure = `install.js could not run (${result.error.message})`
+    } else if (result?.status !== 0) {
+      installFailure = `install.js exited with status ${result?.status ?? 'unknown'}`
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    installFailure = `install.js could not run (${detail})`
+  }
+
+  try {
+    return verifyElectronInstall(electronPackageDirectory)
+  } catch (error) {
+    if (installFailure !== undefined && error instanceof ElectronInstallIntegrityError) {
+      throw new ElectronInstallIntegrityError(`${installFailure}; ${error.reason}`)
+    }
+    throw error
+  }
+}
+
+export function verifyWorkspaceElectronInstall({ resolvePackage, runInstall } = {}) {
+  const electronPackageDirectory = resolveElectronPackageDirectory(resolvePackage)
+  return ensureElectronInstall(electronPackageDirectory, runInstall)
 }
 
 const entryPoint = process.argv[1] === undefined

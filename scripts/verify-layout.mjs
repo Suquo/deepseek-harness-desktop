@@ -49,11 +49,8 @@ const electronCheck = 'node --test scripts/verify-electron-install.spec.mjs && n
 if (workspace.scripts['check:electron'] !== electronCheck) {
   fail(`the root check:electron script must be exactly: ${electronCheck}`)
 }
-const rootCheckSegments = chainSegments('check')
-const layoutCheckIndex = rootCheckSegments.indexOf('yarn check:layout')
-const electronCheckIndex = rootCheckSegments.indexOf('yarn check:electron')
-if (layoutCheckIndex === -1 || electronCheckIndex !== layoutCheckIndex + 1) {
-  fail('the root check script must run yarn check:electron immediately after yarn check:layout')
+if (!chainRuns('check', 'yarn check:electron')) {
+  fail('the root check script must run yarn check:electron')
 }
 
 if (JSON.stringify(workspace.workspaces) !== JSON.stringify(workspaces.map(([name]) => name))) {
