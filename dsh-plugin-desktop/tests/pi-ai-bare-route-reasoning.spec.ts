@@ -450,15 +450,10 @@ describe('a bare pi-ai route on the wire', {
   })
 
   it('omits DeepSeek disable for a thinking-only model and preserves it for an allowlisted toggle', async () => {
-    // RED before issue #62: Kimi's thinking-only endpoint has no `off`
-    // declaration, but the old `undefined !== null` predicate still fabricated
-    // `{ type: "disabled" }`. The grounded safe behavior is omission.
-    const denied = await wireBody(bareRoute(), undefined, DEEPSEEK_DENY_TARGET)
-    expectRealRequest(denied, DEEPSEEK_DENY_TARGET)
-    expectNoThinking(denied)
-
     // GREEN control before and after the fix: DeepSeek V4 defaults thinking on
     // and documents the fixed `disabled` spelling, so Off must remain effective.
+    // It deliberately executes before the red half below: reverting the fix
+    // proves the preservation control passed before the omission assertion fails.
     const allowed = await wireBody(bareRoute(), undefined, DEEPSEEK_ALLOW_TARGET)
     expectRealRequest(allowed, DEEPSEEK_ALLOW_TARGET)
     expect(allowed.thinking).toEqual({ type: 'disabled' })
@@ -476,24 +471,32 @@ describe('a bare pi-ai route on the wire', {
     const explicitNull = await wireBody(bareRoute(), undefined, DEEPSEEK_NULL_TARGET)
     expectRealRequest(explicitNull, DEEPSEEK_NULL_TARGET)
     expectNoThinking(explicitNull)
+
+    // RED before issue #62: Kimi's thinking-only endpoint has no `off`
+    // declaration, but the old `undefined !== null` predicate still fabricated
+    // `{ type: "disabled" }`. The grounded safe behavior is omission.
+    const denied = await wireBody(bareRoute(), undefined, DEEPSEEK_DENY_TARGET)
+    expectRealRequest(denied, DEEPSEEK_DENY_TARGET)
+    expectNoThinking(denied)
   })
 
   it('omits Azure `none` when undeclared and preserves a declared Off spelling', async () => {
-    // RED before issue #62: every pre-GPT-5.1 o-series model rejects `none`, but
-    // the Azure Responses branch manufactured it from this absent map.
-    const absent = await wireBody(bareRoute(), undefined, AZURE_UNDECLARED_TARGET)
-    expectRealRequest(absent, AZURE_UNDECLARED_TARGET)
-    expectNoReasoning(absent)
-
     // GREEN control before and after the fix: declaration, not a blessed
     // literal, is the authority. Use a conspicuous value so fallback cannot
-    // accidentally satisfy the assertion.
+    // accidentally satisfy the assertion. It runs before the red half so a
+    // reverted patch demonstrates both sides of the pair in one execution.
     const declared = await wireBody({
       ...bareRoute(),
       models: [{ id: AZURE_UNDECLARED_TARGET.model, reasoningEfforts: { off: 'declared-off', high: 'high' } }],
     }, undefined, AZURE_UNDECLARED_TARGET)
     expectRealRequest(declared, AZURE_UNDECLARED_TARGET)
     expect(declared.reasoning).toEqual({ effort: 'declared-off' })
+
+    // RED before issue #62: every pre-GPT-5.1 o-series model rejects `none`, but
+    // the Azure Responses branch manufactured it from this absent map.
+    const absent = await wireBody(bareRoute(), undefined, AZURE_UNDECLARED_TARGET)
+    expectRealRequest(absent, AZURE_UNDECLARED_TARGET)
+    expectNoReasoning(absent)
   })
 
   it('classifies every absent-Off DeepSeek catalog route at this pin', () => {
@@ -518,19 +521,18 @@ describe('a bare pi-ai route on the wire', {
 
     // The exported production table is reviewable data, not hidden control
     // flow, and every member carries the provider-doc citation the RM ruled.
-    expect(Object.keys(deepseekDisableModelSources).sort()).toEqual([
-      'deepseek-v4-flash',
-      'deepseek-v4-pro',
-      'kimi-k2.5',
-      'kimi-k2.6',
-      'mimo-v2-flash',
-      'mimo-v2-omni',
-      'mimo-v2-pro',
-      'mimo-v2.5',
-      'mimo-v2.5-pro',
-      'mimo-v2.5-pro-ultraspeed',
-    ])
-    expect(Object.values(deepseekDisableModelSources).every(source => source.includes('https://'))).toBe(true)
+    expect(deepseekDisableModelSources).toEqual({
+      'deepseek-v4-flash': 'DeepSeek API: https://api-docs.deepseek.com/api/create-chat-completion/',
+      'deepseek-v4-pro': 'DeepSeek API: https://api-docs.deepseek.com/api/create-chat-completion/',
+      'kimi-k2.5': 'Moonshot thinking guide: https://platform.kimi.com/docs/guide/use-thinking-models',
+      'kimi-k2.6': 'Moonshot thinking guide: https://platform.kimi.com/docs/guide/use-thinking-models',
+      'mimo-v2-flash': 'MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate',
+      'mimo-v2-omni': 'MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate',
+      'mimo-v2-pro': 'MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate',
+      'mimo-v2.5': 'MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api',
+      'mimo-v2.5-pro': 'MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api',
+      'mimo-v2.5-pro-ultraspeed': 'MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api',
+    })
 
     expect(allowlistedRoutes.sort()).toEqual([
       'deepseek/deepseek-v4-flash',

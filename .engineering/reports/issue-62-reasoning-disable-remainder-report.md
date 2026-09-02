@@ -27,6 +27,7 @@ The pinned pi-ai patch now prevents unsupported reasoning-disable fields in its 
 | Lint | N/A | No lint command configured |
 | Tests | ✅ | Desktop: 83 files, 884 passed/4 skipped; market: 19 files, 272 passed; preset: 164 passed |
 | E2E | ✅ | Real llm runtime + pi-ai adapter sent nine test scenarios only to a bound `127.0.0.1` endpoint |
+| Full headless gate | ✅ | `corepack yarn check`; exact tested commit and output tail recorded in the PR |
 
 ## Files Changed
 
@@ -65,6 +66,4 @@ The configured validation runner assumes the pinned submodule is initialized; th
 
 ## Next Steps
 
-1. Run `corepack yarn check` against the committed head and preserve its tail beside `git rev-parse HEAD`.
-2. Push the branch and open a PR with `Refs #62`; leave the issue open pending a live provider datum.
-
+1. Open a PR with `Refs #62`; leave the issue open pending a live provider datum.
