@@ -15,7 +15,7 @@ import {
   type Session,
   type SessionEvent,
 } from '@deepseek-ai/dsh-session'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
 import * as RoutePreflight from '../src/parametria-route-preflight.ts'
 import {
@@ -50,7 +50,9 @@ function row(
 
 let nextSession = 0
 
-async function mounted(entries: RouteEntry[]) {
+type EntrySource = readonly RouteEntry[] | (() => Iterable<RouteEntry>)
+
+async function mounted(entries: EntrySource) {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -60,7 +62,7 @@ async function mounted(entries: RouteEntry[]) {
     if (observed === session) published.push(event)
   })
   const agent = { session } as Agent
-  installRoutePreflight(ctx, () => entries)
+  installRoutePreflight(ctx, typeof entries === 'function' ? entries : () => entries)
 
   const start = (source: SessionStartSource = 'startup') => {
     ctx.emit('agent/session-start', { agent, source })
@@ -99,6 +101,13 @@ function noticeText(session: Session): string[] {
   })
 }
 
+const SESSION_START_SOURCES: Readonly<Record<SessionStartSource, true>> = {
+  startup: true,
+  resume: true,
+  clear: true,
+  compact: true,
+}
+
 describe('provider pins are derived from the mounted rows', () => {
   it('finds every active subagent pin, de-duplicates it, and ignores unrelated rows', () => {
     expect(pinnedSubagentProviders([
@@ -113,22 +122,20 @@ describe('provider pins are derived from the mounted rows', () => {
 })
 
 describe('session-start preflight against the live LLM registry', () => {
-  it.each([
-    'startup',
-    'resume',
-    'clear',
-    'compact',
-  ] satisfies SessionStartSource[])('checks the registry on the %s lifecycle edge', async (source) => {
-    const { session, start } = await mounted([row(`${source}-route`)])
+  it.each(Object.keys(SESSION_START_SOURCES) as SessionStartSource[])(
+    'checks the registry on the %s lifecycle edge',
+    async (source) => {
+      const { session, start } = await mounted([row(`${source}-route`)])
 
-    start(source)
+      start(source)
 
-    expect(noticeText(session)).toEqual([
-      expect.stringContaining(`${source}-route`),
-    ])
-  })
+      expect(noticeText(session)).toEqual([
+        expect.stringContaining(`${source}-route`),
+      ])
+    },
+  )
 
-  it('is loud while an invented pinned route is absent, silent when registered, and loud after disposal', async () => {
+  it('publishes one durable notice while absent and rechecks registry disposal for another session', async () => {
     const route = 'future-vision-route'
     const { ctx, published, session, start } = await mounted([row(route)])
 
@@ -146,13 +153,16 @@ describe('session-start preflight against the live LLM registry', () => {
       form: 'notice',
       summary: expect.stringContaining(ROUTE_REMEDY),
     })
-    expect((message?.source as { summary?: string } | undefined)?.summary).toContain(route)
+    const summary = (message?.source as { summary?: string } | undefined)?.summary
+    expect(summary?.startsWith(`Run ${ROUTE_REMEDY}:`)).toBe(true)
+    expect(summary).toContain(route)
     expect(message?.content).toEqual([{
       type: 'text',
       text: unresolvedRouteBanner([route]),
     }])
     expect(unresolvedRouteBanner([route])).toContain(route)
     expect(unresolvedRouteBanner([route])).toContain(ROUTE_REMEDY)
+    expect(session.deriveMessages()).toEqual([message])
 
     const registration = ctx.llm.registerAdapter([route], new SilentAdapter())
     start()
@@ -160,7 +170,50 @@ describe('session-start preflight against the live LLM registry', () => {
 
     registration()
     start()
+    expect(session.events).toHaveLength(1)
+
+    const next = ctx.sessions.create(SessionId(`route-preflight-${++nextSession}`))
+    ctx.emit('agent/session-start', { agent: { session: next } as Agent, source: 'startup' })
+    expect(noticeText(next)).toEqual([expect.stringContaining(route)])
+  })
+
+  it('announces each unresolved set only once per session across lifecycle edges and row order', async () => {
+    const entries = [row('route-one'), row('route-two')]
+    const { session, start } = await mounted(entries)
+
+    start('startup')
+    start('resume')
+    entries.reverse()
+    start('compact')
+    expect(session.events).toHaveLength(1)
+
+    entries.pop()
+    start('clear')
+    start('resume')
     expect(session.events).toHaveLength(2)
+  })
+
+  it('fails open when the live registry throws during synchronous session publication', async () => {
+    const { ctx, session, start } = await mounted([row('route-one')])
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    vi.spyOn(ctx.llm, 'listProviders').mockImplementation(() => {
+      throw new Error('registry unavailable')
+    })
+
+    expect(() => start()).not.toThrow()
+    expect(session.events).toEqual([])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'))
+  })
+
+  it('fails open when walking the mounted entry source throws', async () => {
+    const { ctx, session, start } = await mounted(() => {
+      throw new Error('loader tree unavailable')
+    })
+    const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+
+    expect(() => start()).not.toThrow()
+    expect(session.events).toEqual([])
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('loader tree unavailable'))
   })
 
   it('stays silent when every pinned route is registered', async () => {

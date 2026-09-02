@@ -18,7 +18,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
-import type {} from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 import { PARAMETRIA_PRODUCT_NAME } from './client/brand.ts'
@@ -105,29 +105,47 @@ export function unresolvedRouteBanner(providers: readonly string[]): string {
  * @param entries - reads the current entries in this preset generation.
  */
 export function installRoutePreflight(ctx: Context, entries: () => Iterable<RouteEntry>): void {
+  const announced = new Map<Agent['id'], Set<string>>()
   ctx.on('agent/session-start', ({ agent }) => {
-    const registered = new Set(ctx.llm.listProviders().map(provider => provider.id))
-    const unresolved = pinnedSubagentProviders(entries())
-      .filter(provider => !registered.has(provider))
-    if (unresolved.length === 0) return
+    try {
+      const registered = new Set(ctx.llm.listProviders().map(provider => provider.id))
+      const unresolved = pinnedSubagentProviders(entries())
+        .filter(provider => !registered.has(provider))
+      if (unresolved.length === 0) return
 
-    const message = createUserMessage({
-      source: {
-        kind: 'plugin',
-        plugin: name,
-        form: 'notice',
-        summary: boundContextSummary(
-          `${PARAMETRIA_PRODUCT_NAME} route missing: ${unresolved.join(', ')}; run ${ROUTE_REMEDY}`,
-        ),
-      },
-      content: [{ type: 'text', text: unresolvedRouteBanner(unresolved) }],
-    })
-    // `agent.inject()` would not reach the durable surface until the first
-    // turn claims it. This acceptance criterion is SESSION-START visibility,
-    // so append the plugin-sourced user message now; the public surface API
-    // publishes it to clients immediately and includes it in the next model
-    // history without waking the agent.
-    agent.session.append('user/message', message, { surfaceOp: 'append' })
+      const signature = [...unresolved].sort().join('\0')
+      const sessionId = agent.session.id
+      const prior = announced.get(sessionId)
+      if (prior?.has(signature)) return
+
+      const message = createUserMessage({
+        source: {
+          kind: 'plugin',
+          plugin: name,
+          form: 'notice',
+          summary: boundContextSummary(
+            `Run ${ROUTE_REMEDY}: ${PARAMETRIA_PRODUCT_NAME} route missing: ${unresolved.join(', ')}`,
+          ),
+        },
+        content: [{ type: 'text', text: unresolvedRouteBanner(unresolved) }],
+      })
+      // `agent.inject()` would not reach the durable surface until the first
+      // turn claims it. Append now so clients receive the collapsed context
+      // row immediately; `Session.deriveMessages()` includes the same durable
+      // user message in model history without waking the agent.
+      agent.session.append('user/message', message, { surfaceOp: 'append' })
+      if (prior === undefined) announced.set(sessionId, new Set([signature]))
+      else prior.add(signature)
+    } catch (error: unknown) {
+      // A diagnostic must never veto Cordis' synchronous session publication.
+      // Leave the set unannounced so a later lifecycle edge can retry after a
+      // transient registry, loader, or session-surface failure.
+      ctx.logger.warn(
+        `${name}: route preflight failed open `
+        + `(${error instanceof Error ? error.message : String(error)}); `
+        + 'continuing session start without a route banner',
+      )
+    }
   })
 }
 

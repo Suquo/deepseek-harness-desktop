@@ -112,6 +112,16 @@ reaches every profile on both surfaces; the profile-level copy is retired rather
 than kept, since the home layer would outrank it and a drifted copy could only
 ever be a lie.
 
+The preset's `parametria-route-preflight` row checks every active
+`dsh-tool-subagent` provider pin against the live LLM registry whenever a
+session starts. A missing route is appended as a durable, model-visible context
+message. In the conversation UI that message is a **collapsed context row**, so
+the visible summary starts with `corepack yarn install:profile` before naming
+the missing routes; expanding the row shows the full provider list. The same
+unresolved set is announced only once per session in a plugin generation, and a
+preflight-internal failure is logged and allowed to fail open so diagnostics can
+never prevent the session itself from starting.
+
 The installer still reports which profile the launcher will boot — it is the
 first thing anyone debugging a run wants — but it no longer refuses over it, and
 it keeps its three answers apart: a recorded selection, none recorded yet

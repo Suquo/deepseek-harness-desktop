@@ -146,9 +146,9 @@
 # registered, and without a preflight the run learns that only after it spends
 # a delegation attempt. This row discovers every such pin from THIS mounted
 # preset's loader tree and checks it against `ctx.llm.listProviders()` when a
-# session starts. A missing route becomes a model- and operator-visible banner
-# naming both the provider and `corepack yarn install:profile`; a complete
-# registry adds nothing to the session.
+# session starts. A missing route becomes a durable, model-visible context row;
+# the operator sees its REMEDY-FIRST summary in the collapsed row and can expand
+# it for the provider list. A complete registry adds nothing to the session.
 #
 # There is deliberately no provider config here. The preset rows are the one
 # declaration of what they pin, and the LLM service is the one declaration of
