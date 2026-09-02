@@ -54,14 +54,16 @@ function execLine(shim: string): string {
 }
 
 /**
- * Every environment assignment a generated command makes, in file order.
- * Exhaustive by construction so that a new assignment must be declared here to pass.
+ * Every environment assignment a generated command makes, in file order, scanning EVERY line of the
+ * shim (not only the exec line): a standalone `NAME=` / `export NAME=` line on POSIX, a `set NAME=` /
+ * `set "NAME=` line on Windows, and the inline `NAME=… exec …` assignments all count. Exhaustive by
+ * construction so that a new assignment anywhere in the file must be declared to pass.
  */
 function shimAssignments(shim: string, platform: NodeJS.Platform): string[] {
-  if (platform === 'win32') {
-    return [...shim.matchAll(/^set "([^=]+)=/gmu)].map(match => match[1] ?? '')
-  }
-  return [...execLine(shim).matchAll(/(?:^|\s)([A-Za-z_][A-Za-z0-9_]*)=/gu)].map(match => match[1] ?? '')
+  const pattern = platform === 'win32'
+    ? /^\s*set\s+"?([A-Za-z_][A-Za-z0-9_]*)=/gimu
+    : /(?:^|\s)(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/gmu
+  return [...shim.matchAll(pattern)].map(match => match[1] ?? '')
 }
 
 afterEach(() => {
@@ -409,8 +411,9 @@ describe('desktop Host pnpm runtime', () => {
       )
       const shim = readFileSync(installation.pnpmShimPath, 'utf8')
 
-      // Exhaustive and order-sensitive: a new assignment fails here until it is declared, which is
-      // what stops a future `npm_config_manage_package_manager_versions=false` from landing quietly.
+      // Exhaustive over every line and order-sensitive: a new assignment anywhere in the shim fails
+      // here until it is declared, which is what stops a future
+      // `npm_config_manage_package_manager_versions=false` from landing quietly.
       expect(shimAssignments(shim, platform)).toEqual([
         'PATH',
         'NODE',
@@ -567,16 +570,21 @@ describe('desktop Host pnpm runtime', () => {
     },
   )
 
-  it('names the missing target instead of failing with a bare interpreter error', () => {
+  it.each([
+    ['application executable', 'appExecutable'],
+    ['pnpm entry', 'pnpmBinPath'],
+  ] as const)('names the missing %s instead of failing with a bare interpreter error', (label, key) => {
     const root = temporaryDirectory()
     const stateDir = join(root, 'runtime')
-    const vanished = join(root, 'deleted worktree', 'electron')
+    const vanished = join(root, 'deleted worktree', key === 'appExecutable' ? 'electron' : 'pnpm.mjs')
+    const present = join(root, key === 'appExecutable' ? 'pnpm.mjs' : 'electron')
+    writeFileSync(present, '', { mode: 0o755 })
     const platform = process.platform === 'win32' ? 'win32' : 'linux'
     const environment: NodeJS.ProcessEnv = { PATH: process.env.PATH }
     const installation = installDesktopPnpmRuntime({
       ...options(stateDir, platform, environment),
-      appExecutable: vanished,
-      pnpmBinPath: join(root, 'entry.mjs'),
+      appExecutable: key === 'appExecutable' ? vanished : present,
+      pnpmBinPath: key === 'pnpmBinPath' ? vanished : present,
     })
 
     const result = spawnSync(
@@ -596,7 +604,7 @@ describe('desktop Host pnpm runtime', () => {
     expect(result.status).toBe(78)
     const diagnostic = `${result.stdout}${result.stderr}`
     expect(diagnostic).toContain('this generated command is stale and was not run.')
-    expect(diagnostic).toContain(`missing application executable: ${vanished}`)
+    expect(diagnostic).toContain(`missing ${label}: ${vanished}`)
     expect(diagnostic).toContain('Restart DSH Desktop to regenerate it.')
     installation.dispose()
   })

@@ -19,7 +19,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -49,8 +49,7 @@ function shippedPnpmVersion() {
 }
 
 function readTextSync(file) {
-  // eslint-disable-next-line n/no-sync -- evidence harness, sequential by design
-  return spawnSync(process.execPath, ['-e', `process.stdout.write(require('node:fs').readFileSync(${JSON.stringify(file)},'utf8'))`], { encoding: 'utf8' }).stdout
+  return readFileSync(file, 'utf8')
 }
 
 function electronBinary() {
