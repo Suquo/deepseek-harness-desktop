@@ -1,15 +1,78 @@
 diff --git a/lib/index.js b/lib/index.js
-index bcbbb7b4de1e7573ee3459164dd1eed5013170ff..81da35d7a2645532a0fb99ddac750190842372be 100644
+index bd9741ed440979753359abc5c479550ee5827167..1f05e5389e601481000dfb1b9696b8fe9d1e61bb 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -2646,4 +2646,4 @@ var SubagentRuntime = class extends Service {
+@@ -240,7 +240,7 @@ function createActivationObserver(emit, provider, childId, parent) {
+ 			const own = child.session.events.slice(boundary);
+ 			const output = finalAssistantOutput(own);
+ 			captured = {
+-				stopReason: epochStopReason(own),
++				...epochTerminal(own, childId),
+ 				...output === void 0 ? {} : { output }
+ 			};
+ 		},
+@@ -268,23 +268,32 @@ function createActivationObserver(emit, provider, childId, parent) {
+ * failure still wins over a cancellation — stopping a child that had already
+ * failed does not turn its failure into a cancellation.
+ * @param events - this epoch's own event suffix.
+-* @returns its terminal stop reason; `completed` only for an epoch that both
+-*   closed cleanly and had nothing left to run.
++* @param childId - the durable child session id named in any failure diagnostic.
++* @returns its terminal facts; `completed` only for an epoch that both closed
++*   cleanly and had nothing left to run.
+ */
+-function epochStopReason(events) {
++function epochTerminal(events, childId) {
+ 	const { end, droppedUnrun } = foldConsumedWork(events);
+ 	switch (end?.data.reason.kind) {
+-		case "max-tokens": return "max-tokens";
++		case "max-tokens": return { stopReason: "max-tokens" };
+ 		case "aborted":
+-		case "interrupted": return "aborted";
+-		case "error": return "error";
+-		case "blocked": return "refusal";
++		case "interrupted": return { stopReason: "aborted" };
++		case "error": {
++			const failure = end.data.reason.error;
++			const code = typeof failure?.code === "string" && failure.code.length > 0 ? failure.code : "UNKNOWN";
++			const message = typeof failure?.message === "string" && failure.message.length > 0 ? failure.message : "no failure message recorded";
++			return {
++				stopReason: "error",
++				diagnostic: limitSubagentDiagnostic(`${code} — ${message} (child session ${childId})`)
++			};
++		}
++		case "blocked": return { stopReason: "refusal" };
+ 		case void 0:
+-		case "completed": return droppedUnrun ? "aborted" : "completed";
++		case "completed": return { stopReason: droppedUnrun ? "aborted" : "completed" };
+ 		/* v8 ignore next 3 -- `TurnEndReason` is merge-extensible, so this arm needs a
+ 		* backend that adds a variant; treating an unnameable reason as success would
+ 		* report failed work as completed. */
+-		default: return "error";
++		default: return { stopReason: "error" };
+ 	}
+ }
+ /** Render any listener-thrown value without letting coercion escape containment. */
+@@ -1495,7 +1504,10 @@ var SubagentContinuationManager = class {
+ 				content: [{
+ 					type: "text",
+ 					text: summary
+-				}, ...terminal.output === void 0 ? [{
++				}, ...terminal.diagnostic === void 0 ? [] : [{
++					type: "text",
++					text: `Diagnostic: ${terminal.diagnostic}`
++				}], ...terminal.output === void 0 ? [{
+ 					type: "text",
+ 					text: "It left no closing message."
+ 				}] : [{
+@@ -2672,4 +2684,4 @@ var SubagentRuntime = class extends Service {
  	}
  };
  //#endregion
 -export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
 +export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
 diff --git a/lib/types/out-of-process.d.ts b/lib/types/out-of-process.d.ts
-index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..1d1c5700fcf915f4caf40a0a7e7879a0c186fcfd 100644
+index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..32cbb86e09c3f0826cf1299d1f705dc9cd2ff02b 100644
 --- a/lib/types/out-of-process.d.ts
 +++ b/lib/types/out-of-process.d.ts
 @@ -19,6 +19,15 @@ import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopRea

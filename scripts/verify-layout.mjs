@@ -316,7 +316,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-web-app',
     '@deepseek-ai/dsh-workflow',
   ]],
-  // Test-only pins. These five are NOT product dependencies: they exist so
+  // Test-only pins. These six are NOT product dependencies: they exist so
   // focused integration tests can mount the real host services for delegation
   // (issue #40) and image admission (issue #54) instead of doubling them. They
   // still move with the pin, so they belong on the recorded surface.
@@ -324,6 +324,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-agent-loop',
     '@deepseek-ai/dsh-attachment-local',
     '@deepseek-ai/dsh-fs-observation-policy',
+    '@deepseek-ai/dsh-session-persistence-jsonl',
     '@deepseek-ai/dsh-subagent-spawn-in-process',
     '@deepseek-ai/dsh-tool-subagent',
   ]],
