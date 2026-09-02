@@ -26,7 +26,7 @@ The pinned pi-ai patch now prevents unsupported reasoning-disable fields in its 
 | Type check | ✅ | `corepack yarn typecheck` |
 | Lint | N/A | No lint command configured |
 | Tests | ✅ | Desktop: 83 files, 884 passed/4 skipped; market: 19 files, 272 passed; preset: 164 passed |
-| E2E | ✅ | Real llm runtime + pi-ai adapter sent nine test scenarios only to a bound `127.0.0.1` endpoint |
+| E2E | ✅ | Real llm runtime + pi-ai adapter sent ten test scenarios only to a bound `127.0.0.1` endpoint |
 | Full headless gate | ✅ | `corepack yarn check`; exact tested commit and output tail recorded in the PR |
 
 ## Files Changed
@@ -48,8 +48,8 @@ The pinned pi-ai patch now prevents unsupported reasoning-disable fields in its 
 
 ## TDD Evidence
 
-- Red: the focused file ran 9 tests with exactly 3 failures—the DeepSeek invention, Azure invention, and missing exported allowlist census—while all six existing PR #61 cases passed.
-- Green: the same focused file ran 9/9 after the patch was generated and installed through Yarn.
+- Red: the initial focused file ran 9 tests with exactly 3 failures—the DeepSeek invention, Azure invention, and missing exported allowlist census—while all six existing PR #61 cases passed. A committed-tree mutation after review ran all ten final scenarios: the allowlisted/declared controls executed first, then the DeepSeek and Azure invention assertions failed as intended.
+- Green: the final focused file ran 10/10 after the patch was restored through Yarn.
 
 ## Deviations from Plan
 

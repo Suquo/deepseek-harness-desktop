@@ -123,4 +123,3 @@ corepack yarn check
 - [ ] No file under `deepseek-harness/` or `.agents/` changes
 - [ ] Issue receives implementation evidence and stays open
 - [ ] PR uses `Refs #62`
-

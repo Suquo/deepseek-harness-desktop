@@ -458,26 +458,29 @@ describe('a bare pi-ai route on the wire', {
     expectRealRequest(allowed, DEEPSEEK_ALLOW_TARGET)
     expect(allowed.thinking).toEqual({ type: 'disabled' })
 
-    // Declarations outrank the fallback: a string is sent verbatim.
-    const declared = await wireBody({
-      ...bareRoute(),
-      models: [{ id: DEEPSEEK_ALLOW_TARGET.model, reasoningEfforts: { off: 'declared-off', high: 'high' } }],
-    }, undefined, DEEPSEEK_ALLOW_TARGET)
-    expectRealRequest(declared, DEEPSEEK_ALLOW_TARGET)
-    expect(declared.thinking).toEqual({ type: 'declared-off' })
-
-    // The built-in K2.7 entry is the catalog's actual explicit-null case; it is
-    // always-thinking and must omit rather than falling through to any literal.
-    const explicitNull = await wireBody(bareRoute(), undefined, DEEPSEEK_NULL_TARGET)
-    expectRealRequest(explicitNull, DEEPSEEK_NULL_TARGET)
-    expectNoThinking(explicitNull)
-
     // RED before issue #62: Kimi's thinking-only endpoint has no `off`
     // declaration, but the old `undefined !== null` predicate still fabricated
     // `{ type: "disabled" }`. The grounded safe behavior is omission.
     const denied = await wireBody(bareRoute(), undefined, DEEPSEEK_DENY_TARGET)
     expectRealRequest(denied, DEEPSEEK_DENY_TARGET)
     expectNoThinking(denied)
+  })
+
+  it('honors explicit DeepSeek Off declarations before the allowlist fallback', async () => {
+    // The built-in K2.7 entry is the catalog's actual explicit-null case; it is
+    // always-thinking and must omit rather than falling through to any literal.
+    const explicitNull = await wireBody(bareRoute(), undefined, DEEPSEEK_NULL_TARGET)
+    expectRealRequest(explicitNull, DEEPSEEK_NULL_TARGET)
+    expectNoThinking(explicitNull)
+
+    // A string declaration outranks the allowlisted fixed fallback and goes out
+    // verbatim. Kept after the null control so both execute under mutation.
+    const declared = await wireBody({
+      ...bareRoute(),
+      models: [{ id: DEEPSEEK_ALLOW_TARGET.model, reasoningEfforts: { off: 'declared-off', high: 'high' } }],
+    }, undefined, DEEPSEEK_ALLOW_TARGET)
+    expectRealRequest(declared, DEEPSEEK_ALLOW_TARGET)
+    expect(declared.thinking).toEqual({ type: 'declared-off' })
   })
 
   it('omits Azure `none` when undeclared and preserves a declared Off spelling', async () => {
