@@ -30,14 +30,6 @@
   config:
     default: parametria
 
-# The patched runtime keeps upstream's bare continuable failure notice unless a
-# profile opts in. Parametria enables the desktop-owned bounded diagnostic so
-# its background `subagent` and `subagent_fork` rows do not launder child errors;
-# compatibility composition has no corresponding row and stays upstream-clean.
-- id: subagent
-  config:
-    continuableFailureDiagnostics: true
-
 # The session's own default model is deliberately NOT patched here.
 #
 # `dsh-base` leaves it at `deepseek-official`/`deepseek-v4-flash` — text-only,

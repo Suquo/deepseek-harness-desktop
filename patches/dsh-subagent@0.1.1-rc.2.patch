@@ -1,42 +1,59 @@
 diff --git a/lib/index.js b/lib/index.js
-index bd9741ed440979753359abc5c479550ee5827167..43bd6fadcbbfd83a418908693ca3180c7da98bdf 100644
+index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd23432903 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -219,9 +219,11 @@ function observeRun(emit, provider, parent, run) {
- * @param provider - the provider name recorded in the durable descriptor.
- * @param childId - the durable child session id.
- * @param parent - the exact live direct parent keying scoped dispatch.
-+* @param includeFailureDiagnostic - whether this profile enables desktop-owned
-+*   failure detail in the parent's settlement notice.
- * @returns the observer whose edges this epoch publishes.
- */
--function createActivationObserver(emit, provider, childId, parent) {
-+function createActivationObserver(emit, provider, childId, parent, includeFailureDiagnostic) {
- 	const identity = {
- 		runId: SubagentRunId(randomUUID()),
- 		provider,
-@@ -240,7 +242,7 @@ function createActivationObserver(emit, provider, childId, parent) {
+@@ -199,6 +199,7 @@ function observeRun(emit, provider, parent, run) {
+ 		emit("subagent/end", {
+ 			...identity,
+ 			stopReason: result.stopReason,
++			...result.diagnostic === void 0 ? {} : { diagnostic: result.diagnostic },
+ 			...result.output.length === 0 ? {} : { lastAssistantMessage: result.output }
+ 		}, parent);
+ 	}, () => {
+@@ -230,7 +231,10 @@ function createActivationObserver(emit, provider, childId, parent) {
+ 	};
+ 	let boundary = 0;
+ 	let captured = { stopReason: "completed" };
+-	const terminal = (failure) => failure === void 0 ? captured : { stopReason: "error" };
++	const terminal = (failure) => failure === void 0 ? captured : {
++		stopReason: "error",
++		diagnostic: subagentFailureDiagnostic(failure, childId)
++	};
+ 	return {
+ 		start: (child) => {
+ 			boundary = child.session.events.length;
+@@ -240,16 +244,17 @@ function createActivationObserver(emit, provider, childId, parent) {
  			const own = child.session.events.slice(boundary);
  			const output = finalAssistantOutput(own);
  			captured = {
 -				stopReason: epochStopReason(own),
-+				...epochTerminal(own, childId, includeFailureDiagnostic),
++				...epochTerminal(own, childId),
  				...output === void 0 ? {} : { output }
  			};
  		},
-@@ -268,23 +270,34 @@ function createActivationObserver(emit, provider, childId, parent) {
+ 		terminal,
+ 		settle: (failure) => {
+-			const { stopReason, output } = terminal(failure);
++			const { stopReason, diagnostic, output } = terminal(failure);
+ 			emit("subagent/end", {
+ 				...identity,
+ 				stopReason,
++				...diagnostic === void 0 ? {} : { diagnostic },
+ 				...output === void 0 ? {} : { lastAssistantMessage: output }
+ 			}, parent);
+ 		}
+@@ -268,25 +273,35 @@ function createActivationObserver(emit, provider, childId, parent) {
  * failure still wins over a cancellation — stopping a child that had already
  * failed does not turn its failure into a cancellation.
  * @param events - this epoch's own event suffix.
 -* @returns its terminal stop reason; `completed` only for an epoch that both
 -*   closed cleanly and had nothing left to run.
 +* @param childId - the durable child session id named in any failure diagnostic.
-+* @param includeFailureDiagnostic - whether to retain desktop-owned failure detail.
 +* @returns its terminal facts; `completed` only for an epoch that both closed
 +*   cleanly and had nothing left to run.
  */
 -function epochStopReason(events) {
-+function epochTerminal(events, childId, includeFailureDiagnostic) {
++function epochTerminal(events, childId) {
  	const { end, droppedUnrun } = foldConsumedWork(events);
  	switch (end?.data.reason.kind) {
 -		case "max-tokens": return "max-tokens";
@@ -46,16 +63,10 @@ index bd9741ed440979753359abc5c479550ee5827167..43bd6fadcbbfd83a418908693ca3180c
 -		case "error": return "error";
 -		case "blocked": return "refusal";
 +		case "interrupted": return { stopReason: "aborted" };
-+		case "error": {
-+			if (!includeFailureDiagnostic) return { stopReason: "error" };
-+			const failure = end.data.reason.error;
-+			const code = typeof failure?.code === "string" && failure.code.length > 0 ? failure.code : "UNKNOWN";
-+			const message = typeof failure?.message === "string" && failure.message.length > 0 ? failure.message : "no failure message recorded";
-+			return {
-+				stopReason: "error",
-+				diagnostic: limitSubagentDiagnostic(`${code} — ${message} (child session ${childId})`)
-+			};
-+		}
++		case "error": return {
++			stopReason: "error",
++			diagnostic: subagentFailureDiagnostic(end.data.reason.error, childId)
++		};
 +		case "blocked": return { stopReason: "refusal" };
  		case void 0:
 -		case "completed": return droppedUnrun ? "aborted" : "completed";
@@ -67,8 +78,16 @@ index bd9741ed440979753359abc5c479550ee5827167..43bd6fadcbbfd83a418908693ca3180c
 +		default: return { stopReason: "error" };
  	}
  }
++/** Render one child failure through the same bounded contract as a one-shot run. */
++function subagentFailureDiagnostic(failure, childId) {
++	const code = typeof failure?.code === "string" && failure.code.length > 0 ? failure.code : "UNKNOWN";
++	const message = typeof failure?.message === "string" && failure.message.length > 0 ? failure.message : "no failure message recorded";
++	return limitSubagentDiagnostic(`${code} — ${message} (child session ${childId})`);
++}
  /** Render any listener-thrown value without letting coercion escape containment. */
-@@ -1495,7 +1508,10 @@ var SubagentContinuationManager = class {
+ function renderThrown(value) {
+ 	try {
+@@ -1495,7 +1510,10 @@ var SubagentContinuationManager = class {
  				content: [{
  					type: "text",
  					text: summary
@@ -80,110 +99,33 @@ index bd9741ed440979753359abc5c479550ee5827167..43bd6fadcbbfd83a418908693ca3180c
  					type: "text",
  					text: "It left no closing message."
  				}] : [{
-@@ -2379,6 +2395,8 @@ async function settleRun(run) {
- */
- /** Named provider registry with one-shot runs, durable discovery, and continuable-child operations. */
- var SubagentRuntime = class extends Service {
-+	static Config = z.object({ continuableFailureDiagnostics: z.boolean().default(false) }).default({});
-+	config;
- 	providers = /* @__PURE__ */ new Map();
- 	continuations;
- 	/** Deployment contributions composed into unpublished continuable children. */
-@@ -2389,8 +2407,9 @@ var SubagentRuntime = class extends Service {
- 	* composes into the carrier.
- 	*/
- 	emitLifecycle;
--	constructor(ctx) {
-+	constructor(ctx, config = { continuableFailureDiagnostics: false }) {
- 		super(ctx, "subagents");
-+		this.config = config;
- 		this.emitLifecycle = createLifecycleEmitter(this.ctx, (parent) => scopeTarget(this, parent));
- 		ctx.inject(["agents"], (childCtx) => {
- 			const manager = new SubagentContinuationManager(childCtx, {
-@@ -2646,7 +2665,7 @@ var SubagentRuntime = class extends Service {
- 	* epoch, so the manager publishes its edges without owning event dispatch.
- 	*/
- 	observeActivation(provider, childId, parent) {
--		return createActivationObserver(this.emitLifecycle, provider, childId, parent);
-+		return createActivationObserver(this.emitLifecycle, provider, childId, parent, this.config.continuableFailureDiagnostics);
- 	}
- 	/** Reject the first requested capability that the provider lacks. */
- 	assertCapabilities(provider, request) {
-@@ -2672,4 +2691,4 @@ var SubagentRuntime = class extends Service {
+@@ -2672,4 +2690,4 @@ var SubagentRuntime = class extends Service {
  	}
  };
  //#endregion
 -export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
 +export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
-diff --git a/lib/types/index.d.ts b/lib/types/index.d.ts
-index d2bc84097c271ff6b4e68caa1e3a6f37c529faa0..eba36e423f11c82777ddd37cd8ce33a8edd29e96 100644
---- a/lib/types/index.d.ts
-+++ b/lib/types/index.d.ts
-@@ -31,6 +31,7 @@
-  * @module @deepseek-ai/dsh-subagent
-  */
- import { Context, Service } from '@deepseek-ai/cordis';
-+import { z } from 'zod';
- import type { Scoped } from '@deepseek-ai/dsh-scope';
- import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm';
- import type { Agent } from '@deepseek-ai/dsh-agent';
-@@ -95,8 +96,15 @@ declare module '@deepseek-ai/cordis' {
-         'subagent/end'(this: Scoped<SubagentRuntime>, info: SubagentRunEndInfo): void;
-     }
- }
-+/** Desktop-owned opt-in surface for continuable settlement failure detail. */
-+export interface Config {
-+    /** Include a bounded child diagnostic in continuable failure notices. */
-+    continuableFailureDiagnostics?: boolean;
-+}
- /** Named provider registry with one-shot runs, durable discovery, and continuable-child operations. */
- export declare class SubagentRuntime extends Service {
-+    static Config: z.ZodType<Config>;
-+    private readonly config;
-     private providers;
-     private continuations;
-     /** Deployment contributions composed into unpublished continuable children. */
-@@ -107,7 +115,7 @@ export declare class SubagentRuntime extends Service {
-      * composes into the carrier.
-      */
-     private readonly emitLifecycle;
--    constructor(ctx: Context);
-+    constructor(ctx: Context, config?: Config);
-     /**
-      * Establish one durable continuable child and deliver its initial prompt.
-      * Resolves when the child's inbox accepts that prompt, without waiting for the
 diff --git a/lib/types/lifecycle.d.ts b/lib/types/lifecycle.d.ts
-index 9d63a61b2497011fd4aba679ee480f2aacb3d245..7b6d9f5de4ab75948661eebe98e207c8e0d7dab8 100644
+index 9d63a61b2497011fd4aba679ee480f2aacb3d245..e015086482987ed4b1d2c015692d2e9b6549c63c 100644
 --- a/lib/types/lifecycle.d.ts
 +++ b/lib/types/lifecycle.d.ts
 @@ -25,6 +25,8 @@ import type { SubagentResult, SubagentRun, SubagentRunEndInfo, SubagentRunInfo }
  export interface ActivationTerminal {
      /** Why this epoch's last ordinary turn ended, or `error` when teardown failed. */
      readonly stopReason: SubagentResult['stopReason'];
-+    /** Desktop-owned bounded failure detail, present only when its profile opts in. */
++    /** Bounded child failure detail, absent when the Activation did not fail. */
 +    readonly diagnostic?: string;
      /** The epoch's final assistant content, absent when it produced none or failed. */
      readonly output?: ContentBlock[];
  }
-@@ -107,7 +109,9 @@ export declare function observeRun(emit: LifecycleEmitter, provider: string, par
-  * @param provider - the provider name recorded in the durable descriptor.
-  * @param childId - the durable child session id.
-  * @param parent - the exact live direct parent keying scoped dispatch.
-+ * @param includeFailureDiagnostic - whether this profile enables desktop-owned
-+ *   failure detail in the parent's settlement notice.
-  * @returns the observer whose edges this epoch publishes.
-  */
--export declare function createActivationObserver(emit: LifecycleEmitter, provider: string, childId: SessionId, parent: Agent): ActivationObserver;
-+export declare function createActivationObserver(emit: LifecycleEmitter, provider: string, childId: SessionId, parent: Agent, includeFailureDiagnostic: boolean): ActivationObserver;
- //# sourceMappingURL=lifecycle.d.ts.map
 diff --git a/lib/types/out-of-process.d.ts b/lib/types/out-of-process.d.ts
-index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..d75f4b5cf6b30c8a74bd4c4922efc5a7b1512224 100644
+index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..32cbb86e09c3f0826cf1299d1f705dc9cd2ff02b 100644
 --- a/lib/types/out-of-process.d.ts
 +++ b/lib/types/out-of-process.d.ts
-@@ -12,6 +12,15 @@
+@@ -19,6 +19,15 @@ import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopRea
+  * request needing any of them before `start` runs — never accepted-then-ignored.
   */
- import type { ContentBlock } from '@deepseek-ai/dsh-llm';
- import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopReason } from './types.ts';
+ export declare const NO_START_CAPABILITIES: SubagentCapabilities;
 +/**
 + * Limit provider-authored failure detail to {@link SubagentResult.diagnostic}'s
 + * documented 4096-byte budget without splitting a UTF-8 sequence. Exported so
@@ -194,5 +136,18 @@ index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..d75f4b5cf6b30c8a74bd4c4922efc5a7
 + */
 +export declare function limitSubagentDiagnostic(diagnostic: string): string;
  /**
-  * The capability advertisement of an out-of-process backend: NONE. A child in
-  * another process cannot honor parent-enforced start features
+  * Assert a configured timing bound is a positive finite number (it bounds a
+  * teardown or shutdown wait; zero, negative, or NaN would skip or wedge it).
+diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
+index 4c2adb0e30fa20ab7ad4ba4600c3da2ae8498d0b..689904defeba9ad9c281bafa3ca988564369be75 100644
+--- a/lib/types/types.d.ts
++++ b/lib/types/types.d.ts
+@@ -57,6 +57,8 @@ export interface SubagentRunEndInfo {
+     readonly local: boolean;
+     /** The terminal stop reason. */
+     readonly stopReason: SubagentResult['stopReason'];
++    /** Bounded child failure detail, absent when the run did not fail. */
++    readonly diagnostic?: string;
+     /**
+      * The child's final assistant output, selected by the same rule as
+      * {@link SubagentResult.output}; absent on infrastructure rejection or when
