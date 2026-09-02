@@ -23,8 +23,12 @@ const rootManifestPath = join(packageRoot, 'package.json')
 const rootManifest = JSON.parse(readFileSync(rootManifestPath, 'utf8'))
 const noticesPath = join(packageRoot, 'THIRD_PARTY_NOTICES.md')
 
-const TARGET_OSES = new Set(['darwin', 'linux', 'win32'])
-const TARGET_CPUS = new Set(['arm64', 'x64'])
+const DEFAULT_TARGET_CPUS = ['arm64', 'x64']
+const BUILD_PLATFORM_OSES = [
+  ['mac', 'darwin'],
+  ['win', 'win32'],
+  ['linux', 'linux'],
+]
 const REGEN_COMMAND = 'corepack yarn workspace dsh-plugin-desktop verify:notices'
 const LICENSE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt']
 
@@ -89,12 +93,55 @@ function licenseExpression(manifest) {
   return undefined
 }
 
-/**
- * Return true when a Yarn condition can ship in the supported release matrix.
- * libc is deliberately not narrowed: glibc and musl are both variants of the
- * requested linux/x64 and linux/arm64 OS/CPU triples.
- */
-export function targetsSupportedPlatform(condition) {
+/** Return the configured target name from either Electron Builder target form. */
+function targetName(target) {
+  return typeof target === 'string' ? target : target?.target
+}
+
+/** Return the explicit target architectures, or the unrestricted release defaults. */
+function targetCpus(target) {
+  return typeof target === 'object' && target !== null && Array.isArray(target.arch)
+    ? target.arch
+    : DEFAULT_TARGET_CPUS
+}
+
+/** Electron Builder targets are glibc on Linux unless their name explicitly selects musl. */
+function targetLibc(os, target) {
+  if (os !== 'linux') return undefined
+  const name = targetName(target)
+  return typeof name === 'string' && /(?:^|[-_])musl(?:$|[-_])/u.test(name) ? 'musl' : 'glibc'
+}
+
+/** Derive the exact optional-package platform tuples from Electron Builder targets. */
+export function deriveSupportedPlatforms(build) {
+  const platforms = []
+  for (const [buildKey, os] of BUILD_PLATFORM_OSES) {
+    for (const target of build?.[buildKey]?.target ?? []) {
+      if (typeof targetName(target) !== 'string') {
+        throw new Error(`verify-licenses: build.${buildKey}.target contains an unnamed target`)
+      }
+      for (const cpu of targetCpus(target)) {
+        if (typeof cpu !== 'string') {
+          throw new Error(`verify-licenses: build.${buildKey}.target contains a non-string architecture`)
+        }
+        const platform = { os, cpu }
+        const libc = targetLibc(os, target)
+        if (libc !== undefined) platform.libc = libc
+        if (!platforms.some((candidate) => candidate.os === platform.os
+          && candidate.cpu === platform.cpu
+          && candidate.libc === platform.libc)) {
+          platforms.push(platform)
+        }
+      }
+    }
+  }
+  return platforms
+}
+
+const supportedPlatforms = deriveSupportedPlatforms(rootManifest.build)
+
+/** Return true when a Yarn condition can ship in the configured release matrix. */
+export function targetsSupportedPlatform(condition, platforms = supportedPlatforms) {
   if (typeof condition !== 'string') return false
   const terms = new Map(
     condition.split(' & ').map((term) => {
@@ -106,9 +153,10 @@ export function targetsSupportedPlatform(condition) {
   )
   const os = terms.get('os')
   const cpu = terms.get('cpu')
-  return os !== undefined
-    && TARGET_OSES.has(os)
-    && (cpu === undefined || TARGET_CPUS.has(cpu))
+  const libc = terms.get('libc')
+  return os !== undefined && platforms.some((platform) => platform.os === os
+    && (cpu === undefined || platform.cpu === cpu)
+    && (libc === undefined || platform.libc === libc))
 }
 
 /** Generic optionals ship everywhere; conditioned optionals must match the matrix. */
@@ -163,7 +211,7 @@ export function renderNotices(manifests) {
     '| Package | Version | License |',
     '| --- | --- | --- |',
     ...[...manifests]
-      .sort((a, b) => a.name.localeCompare(b.name))
+      .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
       .map((entry) => `| ${entry.name} | ${entry.version ?? ''} | ${entry.license} |`),
     '',
     noticeRequirementsInUse.entries.length === 0
@@ -203,10 +251,10 @@ function yarnCommand() {
  * otherwise fetches the lockfile-resolvable archive; it never links or builds
  * these packages into node_modules.
  */
-function readLockedPackageArchives(requests) {
+export function readLockedPackageArchives(requests, options = {}) {
   const locators = [...new Set(requests.map((request) => request.record.resolution))]
-  const { command, prefix } = yarnCommand()
-  const result = spawnSync(command, [
+  const { command, prefix } = options.yarnCommand?.() ?? yarnCommand()
+  const result = (options.spawnSync ?? spawnSync)(command, [
     ...prefix,
     'info',
     ...locators,
@@ -304,22 +352,19 @@ function walkProductionPackages() {
         for (const [name, range] of Object.entries(current.manifest[section] ?? {})) {
           if (queued.has(name) || seen.has(name)) continue
           const record = resolveLockedPackage(lockDescriptors, name, range)
-          if (section === 'optionalDependencies') {
-            if (record === undefined) {
+          let installed
+          if (record === undefined) {
+            if (section === 'dependencies') installed = installedPackage(name, current.manifestPath)
+            if (installed === undefined) {
               failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
               continue
             }
-            if (!includesLockedOptional(record)) continue
           }
-          const installed = installedPackage(name, current.manifestPath)
+          if (section === 'optionalDependencies' && !includesLockedOptional(record)) continue
+          installed ??= installedPackage(name, current.manifestPath)
           if (installed !== undefined) {
             queued.add(name)
             queue.push(installed)
-            continue
-          }
-
-          if (record === undefined) {
-            failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
             continue
           }
           const isRequiredArchiveDependency = current.fromArchive && section === 'dependencies'

@@ -1,28 +1,58 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   createLockDescriptorIndex,
+  deriveSupportedPlatforms,
   includesLockedOptional,
   noticesDriftError,
+  readLockedPackageArchives,
   renderNotices,
   resolveLockedPackage,
   targetsSupportedPlatform,
 } from './verify-licenses.mjs'
 
-test('selects every supported OS and CPU pair independent of the host', () => {
-  for (const os of ['darwin', 'linux', 'win32']) {
-    for (const cpu of ['arm64', 'x64']) {
-      assert.equal(targetsSupportedPlatform(`os=${os} & cpu=${cpu}`), true, `${os}/${cpu}`)
-    }
-  }
-  assert.equal(targetsSupportedPlatform('os=linux & cpu=x64 & libc=musl'), true)
+const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+
+test('derives the supported platform matrix from Electron Builder targets', () => {
+  assert.deepEqual(deriveSupportedPlatforms(manifest.build), [
+    { os: 'darwin', cpu: 'arm64' },
+    { os: 'darwin', cpu: 'x64' },
+    { os: 'win32', cpu: 'x64' },
+    { os: 'linux', cpu: 'arm64', libc: 'glibc' },
+    { os: 'linux', cpu: 'x64', libc: 'glibc' },
+  ])
+
+  assert.equal(targetsSupportedPlatform('os=darwin & cpu=arm64'), true)
+  assert.equal(targetsSupportedPlatform('os=darwin & cpu=x64'), true)
+  assert.equal(targetsSupportedPlatform('os=win32 & cpu=x64'), true)
+  assert.equal(targetsSupportedPlatform('os=win32 & cpu=arm64'), false)
   assert.equal(targetsSupportedPlatform('os=linux & cpu=arm64 & libc=glibc'), true)
+  assert.equal(targetsSupportedPlatform('os=linux & cpu=x64 & libc=musl'), false)
   assert.equal(targetsSupportedPlatform('os=win32 & cpu=ia32'), false)
   assert.equal(targetsSupportedPlatform('os=linux & cpu=riscv64'), false)
   assert.equal(targetsSupportedPlatform('os=freebsd & cpu=x64'), false)
   assert.equal(targetsSupportedPlatform('cpu=wasm32'), false)
   assert.equal(includesLockedOptional({ conditions: 'os=win32 & cpu=ia32' }), false)
   assert.equal(includesLockedOptional({}), true)
+})
+
+test('respects per-target architectures and explicit Linux musl targets', () => {
+  const platforms = deriveSupportedPlatforms({
+    linux: {
+      target: [
+        { target: 'dir', arch: ['x64'] },
+        { target: 'dir-musl', arch: ['arm64'] },
+      ],
+    },
+  })
+  assert.deepEqual(platforms, [
+    { os: 'linux', cpu: 'x64', libc: 'glibc' },
+    { os: 'linux', cpu: 'arm64', libc: 'musl' },
+  ])
+  assert.equal(targetsSupportedPlatform('os=linux & cpu=x64 & libc=glibc', platforms), true)
+  assert.equal(targetsSupportedPlatform('os=linux & cpu=arm64 & libc=glibc', platforms), false)
+  assert.equal(targetsSupportedPlatform('os=linux & cpu=arm64 & libc=musl', platforms), true)
 })
 
 test('resolves an optional dependency to the exact lockfile record', () => {
@@ -47,6 +77,26 @@ test('names notice drift and prints the exact regeneration command', () => {
     'verify-licenses: THIRD_PARTY_NOTICES.md is out of date\n'
       + 'Regenerate it with: corepack yarn workspace dsh-plugin-desktop verify:notices',
   )
+})
+
+test('names a non-zero locked archive metadata fetch', () => {
+  assert.throws(
+    () => readLockedPackageArchives([
+      { name: 'native-linux', record: { resolution: 'native-linux@npm:1.2.3' } },
+    ], {
+      yarnCommand: () => ({ command: 'yarn', prefix: [] }),
+      spawnSync: () => ({ status: 1, stderr: 'cache unavailable\n', stdout: '' }),
+    }),
+    new Error('Yarn could not read locked optional package metadata: cache unavailable'),
+  )
+})
+
+test('sorts notice rows by codepoint rather than locale', () => {
+  const notices = renderNotices([
+    { name: 'a-package', version: '1.0.0', license: 'MIT' },
+    { name: 'B-package', version: '1.0.0', license: 'MIT' },
+  ])
+  assert.ok(notices.indexOf('| B-package |') < notices.indexOf('| a-package |'))
 })
 
 test('retains sharp LGPL attribution in generated notices', () => {

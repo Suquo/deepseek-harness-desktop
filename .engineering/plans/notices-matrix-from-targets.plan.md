@@ -28,7 +28,7 @@ So that the legal inventory neither claims unsupported binaries nor silently dri
 
 - `AGENTS.md`: keep the gate headless and do not edit `deepseek-harness/`.
 - ADR H-0001: keep the change in the desktop-owned overlay; no upstream fork edits.
-- The committed `THIRD_PARTY_NOTICES.md` diff must consist only of musl-row deletions.
+- The committed `THIRD_PARTY_NOTICES.md` diff must consist only of the four unsupported linuxmusl and four unsupported win32-arm64 row deletions (RM ruling on #81).
 - Target entries with explicit `arch` lists narrow that platform; string entries use the repository's supported x64/arm64 release default.
 
 ## Patterns to Follow
@@ -68,7 +68,7 @@ test('resolves an optional dependency to the exact lockfile record', () => {
 |---|---|---|
 | `dsh-plugin-desktop/scripts/verify-licenses.mjs` | UPDATE | Derive and enforce target tuples, deterministic sort, testable archive failure, consolidated missing-lock error |
 | `dsh-plugin-desktop/scripts/verify-licenses.spec.mjs` | UPDATE | Cover target derivation/mutation, libc selection, sorting, and non-zero archive fetch |
-| `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` | UPDATE | Remove unsupported musl rows through the generator |
+| `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` | UPDATE | Remove unsupported musl and Windows arm64 rows through the generator |
 | `.engineering/reports/notices-matrix-from-targets-report.md` | CREATE | Record implementation and validation evidence |
 
 ---
@@ -95,7 +95,7 @@ test('resolves an optional dependency to the exact lockfile record', () => {
 
 - **File**: `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md`
 - **Action**: UPDATE
-- **Implement**: Run the canonical regeneration command, verify the diff contains only deletions of linuxmusl rows, and run `verify:licenses`.
+- **Implement**: Run the canonical regeneration command, verify the diff contains only the ruled eight deletions (four linuxmusl and four win32-arm64 rows), and run `verify:licenses`.
 - **Mirror**: package script `verify:notices` in `dsh-plugin-desktop/package.json:131`.
 - **Validate**: `corepack yarn workspace dsh-plugin-desktop verify:licenses`
 
@@ -128,7 +128,7 @@ corepack yarn check
 
 - [ ] Matrix derives from Electron Builder targets and respects per-platform architectures.
 - [ ] Linux defaults to glibc unless a musl target is configured.
-- [ ] Notices change only by removing linuxmusl rows.
+- [ ] Notices change only by removing four linuxmusl and four win32-arm64 rows.
 - [ ] Row sorting is a codepoint comparison.
 - [ ] Non-zero locked-archive reads produce a named, directly tested error.
 - [ ] Duplicate missing-lock reporting is consolidated.
@@ -136,4 +136,3 @@ corepack yarn check
 - [ ] Full headless gate passes at the pushed commit.
 - [ ] Self code review passes or all findings are resolved/disclosed.
 - [ ] Issue is updated and the PR closes #81.
-
