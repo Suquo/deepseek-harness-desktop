@@ -111,12 +111,13 @@ describe('published package surface', () => {
   it('builds every subpath the manifest exports, so a dropped tsdown entry cannot leave a dangling export', () => {
     // Standard 6, both directions on the Parametria subpaths (PR #66 R1): the
     // manifest names `./lib/<name>.js`, so `tsdown.config.ts` must declare the
-    // `<name>` entry that produces it — and vice versa for these three.
+    // `<name>` entry that produces it — and vice versa for these four.
     const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
     for (const subpath of [
       'parametria-capture',
       'parametria-evidence',
       'parametria-route-preflight',
+      'parametria-read-image-fallback',
     ]) {
       expect(manifest.exports).toHaveProperty(`./${subpath}`)
       expect(tsdown).toMatch(new RegExp(`^\\s*'${subpath}': 'src/${subpath}\\.ts',$`, 'm'))
@@ -172,6 +173,10 @@ describe('published package surface', () => {
     expect(manifest.exports).toHaveProperty('./parametria-route-preflight', {
       types: './lib/types/parametria-route-preflight.d.ts',
       default: './lib/parametria-route-preflight.js',
+    })
+    expect(manifest.exports).toHaveProperty('./parametria-read-image-fallback', {
+      types: './lib/types/parametria-read-image-fallback.d.ts',
+      default: './lib/parametria-read-image-fallback.js',
     })
     expect(manifest.exports).not.toHaveProperty('./windows-acl-runner')
     expect(manifest.exports).not.toHaveProperty('./desktop-cli')

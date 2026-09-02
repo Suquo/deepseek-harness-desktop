@@ -64,6 +64,9 @@ const DECLARED_DELTA = {
       'issue #52: discover every provider pinned by a dsh-tool-subagent row from this mounted '
       + 'preset and resolve it against the live llm registry at session start. The row is '
       + 'Parametria-only because compatibility and other profiles do not own its validator route',
+    'parametria-read-image-fallback':
+      'issue #54: let a text-only Parametria session read an image through the independently '
+      + 'registered vision route for the remainder of that turn, then restore its prior route',
   },
   /** Rows this preset drops. Empty on purpose: parity with `standard` is the point. */
   removed: {},
@@ -429,6 +432,19 @@ describe('the pinned-route preflight row', () => {
       && typeof other.config?.agentOptions?.provider === 'string'
     ))
     assert.ok(pinned.length > 0)
+  })
+})
+
+describe('the read_image fallback row', () => {
+  const row = ours.get('parametria-read-image-fallback')
+  const validator = ours.get('delegation/tool-subagent-validator')
+
+  it('is a top-level Parametria-only namespace plugin', () => {
+    assert.equal(row.name, 'dsh-plugin-desktop/parametria-read-image-fallback')
+  })
+
+  it('uses the exact route already pinned for the vision validator', () => {
+    assert.deepEqual(row.config, validator.config.agentOptions)
   })
 })
 

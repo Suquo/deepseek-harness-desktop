@@ -122,6 +122,16 @@ unresolved set is announced only once per session in a plugin generation, and a
 preflight-internal failure is logged and allowed to fail open so diagnostics can
 never prevent the session itself from starting.
 
+The adjacent `parametria-read-image-fallback` row closes the same route gap for
+the orchestrator itself. If a text-only session calls `read_image`, the upstream
+tool's exact-route gate asks composition for a fallback, validates the nominated
+`parametria-vision` model through its own modality lookup, and only then commits
+the image. The remainder of that turn runs on the vision route so the image is
+actually inspected; the following request restores the prior route (or preserves
+a model selection changed in the meantime). If the row is absent, malformed, or
+unavailable, the upstream refusal remains unchanged. Modlens is still available
+as a description-style alternative, but this path does not depend on it.
+
 The installer still reports which profile the launcher will boot — it is the
 first thing anyone debugging a run wants — but it no longer refuses over it, and
 it keeps its three answers apart: a recorded selection, none recorded yet

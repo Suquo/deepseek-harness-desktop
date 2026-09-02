@@ -67,6 +67,10 @@
       "types": "./lib/types/parametria-route-preflight.d.ts",
       "default": "./lib/parametria-route-preflight.js"
     },
+    "./parametria-read-image-fallback": {
+      "types": "./lib/types/parametria-read-image-fallback.d.ts",
+      "default": "./lib/parametria-read-image-fallback.js"
+    },
     "./profiles": {
       "types": "./lib/types/profiles.d.ts",
       "default": "./lib/profiles.js"
@@ -232,6 +236,7 @@
     "@deepseek-ai/dsh-terminal": "0.1.1-rc.2",
     "@deepseek-ai/dsh-timeout": "0.1.1-rc.2",
     "@deepseek-ai/dsh-token-meter": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-tool-fs": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-todo": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-workflow": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tools": "0.1.1-rc.2",
@@ -256,6 +261,8 @@
   },
   "devDependencies": {
     "@deepseek-ai/dsh-agent-loop": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-attachment-local": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-fs-observation-policy": "0.1.1-rc.2",
     "@deepseek-ai/dsh-subagent-spawn-in-process": "0.1.1-rc.2",
     "@deepseek-ai/dsh-tool-subagent": "0.1.1-rc.2",
     "@electron/asar": "3.4.1",
