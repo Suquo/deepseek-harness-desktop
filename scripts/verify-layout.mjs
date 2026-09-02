@@ -19,10 +19,11 @@ const market = readJson('dsh-community-market/package.json')
 const preset = readJson('dsh-preset-parametria/package.json')
 const presetProfile = readJson('dsh-preset-parametria/profile/package.json')
 const upstreamPackage = readJson('deepseek-harness/package.json')
-const noteDirectory = '.agents/notes/implemented/process'
-const noteName = '2026-08-15-pinned-upstream-and-isolated-yarn-workspace'
-const notePaths = [`${noteDirectory}/${noteName}.md`, `${noteDirectory}/${noteName}.zh.md`]
-const noteRecordPath = `${noteDirectory}/${noteName}.i18n.yaml`
+const listFiles = directory => readdirSync(resolve(root, directory), { withFileTypes: true })
+  .flatMap(entry => {
+    const path = `${directory}/${entry.name}`
+    return entry.isDirectory() ? listFiles(path) : [path]
+  })
 
 if (workspace.packageManager !== 'yarn@4.18.0') {
   fail('the product workspace must pin yarn@4.18.0')
@@ -560,14 +561,28 @@ for (const [selector, target] of Object.entries(workspace.resolutions ?? {})) {
   }
 }
 
-const noteRecord = readFileSync(resolve(root, noteRecordPath), 'utf8')
-for (const notePath of notePaths) {
-  // Hash the committed blob, not the working tree: checkout line endings
-  // differ per host, while HEAD:<path> is identical everywhere.
-  const expected = run('git', ['rev-parse', `HEAD:${notePath}`])
-  const recordLine = `${basename(notePath)}: ${expected}`
-  if (!noteRecord.split(/\r?\n/u).includes(recordLine)) {
-    fail(`${noteRecordPath} is stale for ${notePath}`)
+const noteRecordPaths = listFiles('.agents/notes')
+  .filter(path => path.endsWith('.i18n.yaml'))
+  .sort()
+if (noteRecordPaths.length === 0) {
+  fail('.agents/notes holds no bilingual consistency records')
+}
+for (const noteRecordPath of noteRecordPaths) {
+  const noteStem = noteRecordPath.slice(0, -'.i18n.yaml'.length)
+  const noteRecord = readFileSync(resolve(root, noteRecordPath), 'utf8')
+  for (const notePath of [`${noteStem}.md`, `${noteStem}.zh.md`]) {
+    // Hash the committed blob, not the working tree: checkout line endings
+    // differ per host, while HEAD:<path> is identical everywhere.
+    let expected
+    try {
+      expected = run('git', ['rev-parse', `HEAD:${notePath}`])
+    } catch {
+      fail(`${noteRecordPath} has no committed bilingual note at ${notePath}`)
+    }
+    const recordLine = `${basename(notePath)}: ${expected}`
+    if (!noteRecord.split(/\r?\n/u).includes(recordLine)) {
+      fail(`${noteRecordPath} is stale for ${notePath}`)
+    }
   }
 }
 
