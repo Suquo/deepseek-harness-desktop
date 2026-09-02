@@ -24,6 +24,7 @@ Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the P
 
 ## Actors
 
+- **Lane runtime (owner ruling 2026-09-02)**: all NEW resolver spawns are Codex `gpt-5.6-sol` high (recipe in repo-manager-charter.md); the current Claude generations (A gen-11, B gen-14, C gen-5) finish their in-flight cycles first.
 - **RM**: gen-AD LIVE (`/loop /repo-manager`, Herdr agent `dsh-rm`, w4:p1, cjjmaster Linux). Escalation path to the owner: Herdr `admin` agent.
 - **Lane A (general, `claude/*`)**: **BUSY — gen-11 RESUMING #55** on the existing branch `claude/issue-55-pnpm-shim` (Herdr `dsh-lane-a`, w4:p2): rebase onto master, re-run the full gate on Linux, open the PR (`Closes #55`). Note: the shim work is Windows-runtime code; its spec runs headless on Linux, but the GUI-validated claims from gen-10 stay attributed to gen-10. Queue after: #64 (filed by gen-10) · #46 · #30.
 - **Lane B (parametria-harness, `pm/*`)**: **BUSY — gen-14 RESUMING #23** on `pm/issue-23-evidence-surface` (Herdr `dsh-lane-b`, w4:p3): rebase onto master (owner's profile commits touch `dsh-preset-parametria/profile/` — re-run the drift/profile-patch suites), re-gate, open the PR. Queue after: #52 → #54 → #58 → #62.
