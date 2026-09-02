@@ -37,7 +37,6 @@ export const ROUTE_REMEDY = 'corepack yarn install:profile'
 
 /** Loader-entry shape used by the route discovery rule. */
 export interface RouteEntry {
-  readonly disabled: boolean
   readonly options: {
     readonly name: string
     readonly config?: unknown
@@ -57,7 +56,7 @@ export interface Config {}
 export const Config: z<Config> = z.object({})
 
 /**
- * Discover every active subagent provider pin in declaration order.
+ * Discover every subagent provider pin in declaration order.
  *
  * @param entries - the mounted preset's live loader entries.
  * @returns de-duplicated provider ids.
@@ -65,7 +64,7 @@ export const Config: z<Config> = z.object({})
 export function pinnedSubagentProviders(entries: Iterable<RouteEntry>): string[] {
   const providers = new Set<string>()
   for (const entry of entries) {
-    if (entry.disabled || entry.options.name !== SUBAGENT_PLUGIN) continue
+    if (entry.options.name !== SUBAGENT_PLUGIN) continue
     const config = entry.options.config as SubagentConfig | undefined
     const provider = config?.agentOptions?.provider
     if (typeof provider === 'string' && provider.length > 0) providers.add(provider)
@@ -109,17 +108,23 @@ export function installRoutePreflight(ctx: Context, entries: () => Iterable<Rout
       .filter(provider => !registered.has(provider))
     if (unresolved.length === 0) return
 
-    agent.inject(createUserMessage({
+    const message = createUserMessage({
       source: {
         kind: 'plugin',
         plugin: name,
         form: 'notice',
         summary: boundContextSummary(
-          `${PARAMETRIA_PRODUCT_NAME} route preflight failed: ${unresolved.join(', ')}`,
+          `${PARAMETRIA_PRODUCT_NAME} route missing: ${unresolved.join(', ')}; run ${ROUTE_REMEDY}`,
         ),
       },
       content: [{ type: 'text', text: unresolvedRouteBanner(unresolved) }],
-    }))
+    })
+    // `agent.inject()` would not reach the durable surface until the first
+    // turn claims it. This acceptance criterion is SESSION-START visibility,
+    // so append the plugin-sourced user message now; the public surface API
+    // publishes it to clients immediately and includes it in the next model
+    // history without waking the agent.
+    agent.session.append('user/message', message, { surfaceOp: 'append' })
   })
 }
 
@@ -130,7 +135,13 @@ export function installRoutePreflight(ctx: Context, entries: () => Iterable<Rout
  * @param config - the resolved plugin config.
  */
 export function apply(ctx: Context, _config: Config): void {
-  const tree = ctx.fiber.entry?.parent.tree
+  // `Entry.parent`, `EntryGroup.tree`, and `EntryTree.entries()` are public
+  // exports of `@deepseek-ai/cordis-plugin-loader`. Reading that tree is the
+  // loader's composition API, not an assumption about another plugin's
+  // service internals; it is also the only exact view of this mounted preset
+  // generation (re-reading the YAML could race a later generation).
+  const entry = ctx.fiber.entry
+  const tree = entry?.parent.tree
   if (!tree) {
     throw new Error(
       `${name} must be mounted as a loader entry inside the ${PARAMETRIA_PRODUCT_NAME} preset`,

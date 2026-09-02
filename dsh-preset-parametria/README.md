@@ -191,11 +191,11 @@ packaged Electron binary directly with Chromium's `--user-data-dir` switch.
 any argument it does not enumerate.) It only means anything with `--default`,
 and says so rather than being ignored.
 
-## The six things it composes
+## The five things it composes
 
-Five are guarantees the composition enforces. The sixth (section 6) is a
+Four are guarantees the composition enforces. The fifth (section 5) is a
 convention the persona states and the fences hold in place — named separately
-because a persona instruction is not a guarantee, and section 6 says so.
+because a persona instruction is not a guarantee, and section 5 says so.
 
 ### 1. A validator that can actually see
 
@@ -268,28 +268,7 @@ route through the `agent/request` waterfall would displace the pin. Nothing in
 this composition does either, but neither is fenced here — they are properties
 of the surrounding deployment.
 
-### 2. A pinned validator route that fails before delegation
-
-The validator's explicit provider is useful only when a live adapter owns that
-route. A copied preset can keep naming `parametria-vision` after the machine-wide
-profile patch has gone missing; previously that mismatch appeared only when the
-run first called `subagent_validator`, after useful work had already begun.
-
-The top-level `parametria-route-preflight` row closes that delay at session
-start. It walks the mounted preset's live loader tree for every active
-`dsh-tool-subagent` row with an `agentOptions.provider` pin, then compares those
-ids with `ctx.llm.listProviders()`. If any pin is absent, the session receives a
-loud notice naming the provider and the remedy:
-
-    corepack yarn install:profile
-
-If every pin resolves, the plugin injects nothing. Neither side is a hardcoded
-provider list: preset rows declare required routes and the live LLM registry
-declares available routes, so a future pinned row automatically participates.
-The row belongs to this preset rather than the desktop's compatibility patch;
-non-Parametria sessions retain their upstream behavior and receive no check.
-
-### 3. A skill root that travels with the preset
+### 2. A skill root that travels with the preset
 
 `dsh-skill-filesystem` is mounted inside the preset with `customSkillDirs`
 resolved from the preset's own `baseUrl`, so the skill lands in *this preset's*
@@ -301,7 +280,7 @@ resolving unchanged. Seeding a placeholder under the real skill's name would
 shadow the working skill with a stub. Issue #7 migrates the canonical copy in
 here; the seam is what this package delivers.
 
-### 4. A session model that is left alone
+### 3. A session model that is left alone
 
 The profile deliberately does **not** pin `agent-default-model`. Issue #1's
 acceptance criterion is that a run whose *main* model is text-only still
@@ -309,7 +288,7 @@ produces successful subagent image reads — pinning a vision model for the
 session would make that untestable, and a saved user selection outranks the
 composition row anyway.
 
-### 5. A run that meets this host's sandbox boundaries without widening the session
+### 4. A run that meets this host's sandbox boundaries without widening the session
 
 The first live run of this profile hit three sandbox refusals under the composed
 `workspace-write` default and ended with the operator typing
@@ -369,12 +348,12 @@ route and is fenced against growing a "switch the session instead" sentence.
 
 **A cost worth naming:** `$PWD\.uv-cache` is a real directory in whatever
 workspace the run happens in — typically a user repository, and this package
-still cannot gitignore it for a consumer. Section 6 is the other half of that
+still cannot gitignore it for a consumer. Section 5 is the other half of that
 trade for *this* repository: `.uv-cache/` is ignored here, and the fence there
 derives the ignore list from the persona, so the next dot-prefixed workspace
 directory the persona names fails the gate until it is ignored too.
 
-### 6. A run whose artifacts land in one directory the host resolves
+### 5. A run whose artifacts land in one directory the host resolves
 
 The same relocation move as section 4, applied to output instead of caches —
 and, since issue #23, the one place the relocation is *computed* rather than
@@ -483,10 +462,10 @@ carry their own issues, because #9 closes with this section:
   composition. No *grant* narrower than a sandbox mode exists to compose, which
   is why section 4 ships a per-call escalation instead.
 - **A write the harness can REFUSE by path — no issue, because no surface.**
-  Issue #23 delivered the structural half of section 6 (the host resolves,
+  Issue #23 delivered the structural half of section 5 (the host resolves,
   creates and publishes the run directory, and one module owns the derivation),
   but not enforcement: nothing at this pin can deny a write outside a root, per
-  the citations in section 6. Evidence landing beside the session transcript in
+  the citations in section 5. Evidence landing beside the session transcript in
   upstream's reserved `sessionDir` remains the reversible alternative recorded
   on issue #9 — it costs the confined producers, which cannot write there.
 - **The skill's own documented paths** — its examples write to `C:/tmp/...` and
@@ -553,9 +532,9 @@ real `boot()` and the live `llm` registry — is
 - **#9** — the PR #8 follow-ups. Item 2 landed in PR #10; item 3's mount half
   was observed live (its validator-route half moved to #1, which owns the
   pending-live datum); item 1 shipped in two halves — the sandbox half in
-  PR #21 (section 5) and the evidence half here (section 6). What neither half
+  PR #21 (section 4) and the evidence half here (section 5). What neither half
   could express became #23 and #24.
-- **#23** — the structural evidence surface (section 6): the run directory is
+- **#23** — the structural evidence surface (section 5): the run directory is
   resolved, created and published by the host through `ctx.shellEnv`, derived in
   one module shared with the capture tool. **#24** — command-level execution
   policy, the half of item 1 no composition surface can grant; it landed as the

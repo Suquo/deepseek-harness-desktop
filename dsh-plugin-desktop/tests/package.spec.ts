@@ -111,7 +111,7 @@ describe('published package surface', () => {
   it('builds every subpath the manifest exports, so a dropped tsdown entry cannot leave a dangling export', () => {
     // Standard 6, both directions on the Parametria subpaths (PR #66 R1): the
     // manifest names `./lib/<name>.js`, so `tsdown.config.ts` must declare the
-    // `<name>` entry that produces it — and vice versa for these two.
+    // `<name>` entry that produces it — and vice versa for these three.
     const tsdown = readFileSync(new URL('tsdown.config.ts', packageRoot), 'utf8')
     for (const subpath of [
       'parametria-capture',
