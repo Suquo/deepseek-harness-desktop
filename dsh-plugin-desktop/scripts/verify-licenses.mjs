@@ -26,6 +26,7 @@ const noticesPath = join(packageRoot, 'THIRD_PARTY_NOTICES.md')
 const TARGET_OSES = new Set(['darwin', 'linux', 'win32'])
 const TARGET_CPUS = new Set(['arm64', 'x64'])
 const REGEN_COMMAND = 'corepack yarn workspace dsh-plugin-desktop verify:notices'
+const LICENSE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt']
 
 /** Licenses accepted for redistribution inside the desktop installers. */
 const ALLOWED_LICENSES = new Set([
@@ -110,6 +111,11 @@ export function targetsSupportedPlatform(condition) {
     && (cpu === undefined || TARGET_CPUS.has(cpu))
 }
 
+/** Generic optionals ship everywhere; conditioned optionals must match the matrix. */
+export function includesLockedOptional(record) {
+  return record.conditions === undefined || targetsSupportedPlatform(record.conditions)
+}
+
 /** Build an exact descriptor-to-lock-record index from Yarn's lockfile. */
 export function createLockDescriptorIndex(lockfile) {
   const parsed = parseYaml(lockfile)
@@ -135,9 +141,18 @@ export function noticesDriftError() {
   ].join('\n')
 }
 
+function noticeRequirements(manifests) {
+  const entries = manifests.filter((entry) => NOTICE_LICENSES.has(entry.license))
+  const usedLicenses = new Set(entries.map((entry) => entry.license))
+  return {
+    entries,
+    licenses: [...NOTICE_LICENSES].filter((license) => usedLicenses.has(license)),
+  }
+}
+
 /** Render the committed notice format from validated package manifests. */
 export function renderNotices(manifests) {
-  const noticeOnly = manifests.filter((entry) => NOTICE_LICENSES.has(entry.license))
+  const noticeRequirementsInUse = noticeRequirements(manifests)
   const lines = [
     '# Third-Party Notices',
     '',
@@ -151,9 +166,9 @@ export function renderNotices(manifests) {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((entry) => `| ${entry.name} | ${entry.version ?? ''} | ${entry.license} |`),
     '',
-    noticeOnly.length === 0
+    noticeRequirementsInUse.entries.length === 0
       ? ''
-      : `> Notice-required licenses in use: ${[...new Set(noticeOnly.map((entry) => entry.license))].join(', ')}. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.`,
+      : `> Notice-required licenses in use: ${noticeRequirementsInUse.licenses.join(', ')}. Their license texts ship inside node_modules; see the package LICENSE files for the full terms.`,
     '',
   ].filter((line) => line !== '')
   return lines.join('\n')
@@ -166,21 +181,21 @@ function installedPackage(name, fromManifestPath) {
     name,
     manifestPath,
     manifest: JSON.parse(readFileSync(manifestPath, 'utf8')),
-    hasLicenseFile: ['LICENSE', 'LICENSE.md', 'LICENSE.txt']
-      .some((file) => existsSync(join(dirname(manifestPath), file))),
+    hasLicenseFile: LICENSE_FILES.some((file) => existsSync(join(dirname(manifestPath), file))),
     fromArchive: false,
   }
 }
 
 function yarnCommand() {
+  const corepackRoot = process.env.COREPACK_ROOT
+  if (corepackRoot !== undefined) {
+    return { command: process.execPath, prefix: [join(corepackRoot, 'dist', 'yarn.js')] }
+  }
   const yarnPath = process.env.npm_execpath
-  if (yarnPath !== undefined && yarnPath.endsWith('.cjs')) {
+  if (yarnPath !== undefined && /\.[cm]?js$/u.test(yarnPath)) {
     return { command: process.execPath, prefix: [yarnPath] }
   }
-  return {
-    command: process.platform === 'win32' ? 'corepack.cmd' : 'corepack',
-    prefix: ['yarn'],
-  }
+  throw new Error(`Run this check through Corepack Yarn: ${REGEN_COMMAND}`)
 }
 
 /**
@@ -232,8 +247,7 @@ function readLockedPackageArchives(requests) {
     if (manifest.name !== request.name || manifest.version !== request.record.version) {
       throw new Error(`${locator}: cached package manifest does not match yarn.lock`)
     }
-    const hasLicenseFile = ['LICENSE', 'LICENSE.md', 'LICENSE.txt']
-      .some((file) => archive.getEntry(`${prefixPath}${file}`) !== null)
+    const hasLicenseFile = LICENSE_FILES.some((file) => archive.getEntry(`${prefixPath}${file}`) !== null)
     return {
       name: request.name,
       manifestPath: rootManifestPath,
@@ -289,6 +303,14 @@ function walkProductionPackages() {
       for (const section of ['dependencies', 'optionalDependencies']) {
         for (const [name, range] of Object.entries(current.manifest[section] ?? {})) {
           if (queued.has(name) || seen.has(name)) continue
+          const record = resolveLockedPackage(lockDescriptors, name, range)
+          if (section === 'optionalDependencies') {
+            if (record === undefined) {
+              failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
+              continue
+            }
+            if (!includesLockedOptional(record)) continue
+          }
           const installed = installedPackage(name, current.manifestPath)
           if (installed !== undefined) {
             queued.add(name)
@@ -296,15 +318,12 @@ function walkProductionPackages() {
             continue
           }
 
-          const record = resolveLockedPackage(lockDescriptors, name, range)
           if (record === undefined) {
             failures.push(`${current.name} -> ${name}: absent package has no matching yarn.lock entry`)
             continue
           }
           const isRequiredArchiveDependency = current.fromArchive && section === 'dependencies'
-          const isSupportedOptional = section === 'optionalDependencies'
-            && (record.conditions === undefined || targetsSupportedPlatform(record.conditions))
-          if (isRequiredArchiveDependency || isSupportedOptional) {
+          if (isRequiredArchiveDependency || section === 'optionalDependencies') {
             queued.add(name)
             pendingArchives.set(name, { name, record })
           } else if (section === 'dependencies') {
@@ -351,10 +370,10 @@ function main() {
     }
   }
 
-  const noticeOnly = manifests.filter((entry) => NOTICE_LICENSES.has(entry.license))
-  const summary = noticeOnly.length === 0
+  const noticeRequirementsInUse = noticeRequirements(manifests)
+  const summary = noticeRequirementsInUse.entries.length === 0
     ? `verify-licenses: ${total} production packages carry redistribution-safe licenses`
-    : `verify-licenses: ${total} production packages checked; ${noticeOnly.length} use notice-required licenses (${[...new Set(noticeOnly.map((entry) => entry.license))].join(', ')})`
+    : `verify-licenses: ${total} production packages checked; ${noticeRequirementsInUse.entries.length} use notice-required licenses (${noticeRequirementsInUse.licenses.join(', ')})`
   process.stdout.write(`${summary}\n`)
 }
 
