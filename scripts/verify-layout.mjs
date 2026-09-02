@@ -40,10 +40,18 @@ const workspaces = [
 // A root script is a `&&` chain of commands. Compare whole trimmed segments,
 // never substrings: `includes('yarn workspace x test')` also matches
 // `yarn workspace x test:e2e`, and matches mentions that never execute.
-const chainRuns = (chain, command) => (workspace.scripts[chain] ?? '')
+const chainSegments = chain => (workspace.scripts[chain] ?? '')
   .split('&&')
   .map(segment => segment.trim())
-  .includes(command)
+const chainRuns = (chain, command) => chainSegments(chain).includes(command)
+
+const electronCheck = 'node --test scripts/verify-electron-install.spec.mjs && node scripts/verify-electron-install.mjs'
+if (workspace.scripts['check:electron'] !== electronCheck) {
+  fail(`the root check:electron script must be exactly: ${electronCheck}`)
+}
+if (!chainRuns('check', 'yarn check:electron')) {
+  fail('the root check script must run yarn check:electron')
+}
 
 if (JSON.stringify(workspace.workspaces) !== JSON.stringify(workspaces.map(([name]) => name))) {
   fail(`the root Yarn workspace must contain exactly: ${workspaces.map(([name]) => name).join(', ')}`)
