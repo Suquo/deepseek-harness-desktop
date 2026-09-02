@@ -2,7 +2,7 @@
 
 ## Summary
 
-Replace the license verifier's hardcoded platform cross-product with a release matrix derived from `dsh-plugin-desktop/package.json` Electron Builder targets. Match Linux optional packages against glibc unless an explicit musl target exists, preserve deterministic codepoint ordering, expose the locked-archive read seam for a non-zero-exit regression test, consolidate the duplicate missing-lock failure, and regenerate the committed notices file with only the unsupported musl rows removed.
+Replace the license verifier's hardcoded platform cross-product with a fork-owned release matrix declared in `dsh-plugin-desktop/package.json`. Consume only that declaration, cross-fence it against every Electron Builder platform target and explicit target architecture, preserve deterministic codepoint ordering, expose the locked-archive read seam for a non-zero-exit regression test, consolidate the duplicate missing-lock failure, and regenerate the committed notices file with only the ruled eight unsupported rows removed.
 
 ## User Story
 
@@ -29,7 +29,8 @@ So that the legal inventory neither claims unsupported binaries nor silently dri
 - `AGENTS.md`: keep the gate headless and do not edit `deepseek-harness/`.
 - ADR H-0001: keep the change in the desktop-owned overlay; no upstream fork edits.
 - The committed `THIRD_PARTY_NOTICES.md` diff must consist only of the four unsupported linuxmusl and four unsupported win32-arm64 row deletions (RM ruling on #81).
-- Target entries with explicit `arch` lists narrow that platform; string entries use the repository's supported x64/arm64 release default.
+- Electron Builder arch-less targets use the host architecture; the verifier must not infer release architectures from them.
+- The fork declaration is authoritative; every declared OS needs a build target, every build platform target needs a declaration, and every explicit target architecture must exactly match it.
 
 ## Patterns to Follow
 
@@ -66,8 +67,9 @@ test('resolves an optional dependency to the exact lockfile record', () => {
 
 | File | Action | Purpose |
 |---|---|---|
-| `dsh-plugin-desktop/scripts/verify-licenses.mjs` | UPDATE | Derive and enforce target tuples, deterministic sort, testable archive failure, consolidated missing-lock error |
-| `dsh-plugin-desktop/scripts/verify-licenses.spec.mjs` | UPDATE | Cover target derivation/mutation, libc selection, sorting, and non-zero archive fetch |
+| `dsh-plugin-desktop/package.json` | UPDATE | Declare the fork's distribution matrix and its provenance honestly without changing Electron Builder configuration |
+| `dsh-plugin-desktop/scripts/verify-licenses.mjs` | UPDATE | Resolve and cross-fence declared tuples, deterministic sort, testable archive failure, consolidated missing-lock error |
+| `dsh-plugin-desktop/scripts/verify-licenses.spec.mjs` | UPDATE | Cover all target shapes, fail-closed mismatches, sorting, and non-zero archive fetch |
 | `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` | UPDATE | Remove unsupported musl and Windows arm64 rows through the generator |
 | `.engineering/reports/notices-matrix-from-targets-report.md` | CREATE | Record implementation and validation evidence |
 
@@ -75,11 +77,11 @@ test('resolves an optional dependency to the exact lockfile record', () => {
 
 ## Tasks
 
-### Task 1: Derive and test the release platform matrix
+### Task 1: Declare, resolve, and cross-fence the release platform matrix
 
-- **Files**: verifier and focused spec
+- **Files**: package manifest, verifier, and focused spec
 - **Action**: UPDATE
-- **Implement**: Parse Electron Builder `build.mac`, `build.win`, and `build.linux` target entries into exact `(os, cpu, libc)` tuples; respect explicit per-target arch arrays; use x64/arm64 for string targets; default Linux targets to glibc and recognize explicit musl target names.
+- **Implement**: Add a fork-owned `(os, cpu, libc)` declaration with an honest provenance comment. Flatten only that declaration; normalize every documented Electron Builder target shape and fail closed when a declared/build platform is missing, a shape is unknown, or any explicit `arch` differs.
 - **Mirror**: `dsh-plugin-desktop/scripts/verify-licenses.mjs:119-133` — pure derivation plus query helpers.
 - **Validate**: `corepack yarn workspace dsh-plugin-desktop node --test scripts/verify-licenses.spec.mjs`
 
@@ -126,8 +128,9 @@ corepack yarn check
 
 ## Acceptance Criteria
 
-- [ ] Matrix derives from Electron Builder targets and respects per-platform architectures.
-- [ ] Linux defaults to glibc unless a musl target is configured.
+- [ ] Matrix comes only from the explicit fork declaration and respects every explicit per-platform target architecture.
+- [ ] Arch-less Electron Builder targets contribute no invented architectures or libc variants.
+- [ ] Missing or unrecognized build shapes fail with `ReleaseMatrixConfigurationError`.
 - [ ] Notices change only by removing four linuxmusl and four win32-arm64 rows.
 - [ ] Row sorting is a codepoint comparison.
 - [ ] Non-zero locked-archive reads produce a named, directly tested error.

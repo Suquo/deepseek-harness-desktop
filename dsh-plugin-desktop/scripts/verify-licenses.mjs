@@ -23,7 +23,6 @@ const rootManifestPath = join(packageRoot, 'package.json')
 const rootManifest = JSON.parse(readFileSync(rootManifestPath, 'utf8'))
 const noticesPath = join(packageRoot, 'THIRD_PARTY_NOTICES.md')
 
-const DEFAULT_TARGET_CPUS = ['arm64', 'x64']
 const BUILD_PLATFORM_OSES = [
   ['mac', 'darwin'],
   ['win', 'win32'],
@@ -93,52 +92,123 @@ function licenseExpression(manifest) {
   return undefined
 }
 
-/** Return the configured target name from either Electron Builder target form. */
-function targetName(target) {
-  return typeof target === 'string' ? target : target?.target
+/** Named configuration failure: an unknown shape must never shrink notices cleanly. */
+export class ReleaseMatrixConfigurationError extends Error {
+  constructor(message) {
+    super(`dsh-plugin-desktop: invalid dshReleaseMatrix/build configuration: ${message}`)
+    this.name = 'ReleaseMatrixConfigurationError'
+  }
 }
 
-/** Return the explicit target architectures, or the unrestricted release defaults. */
-function targetCpus(target) {
-  return typeof target === 'object' && target !== null && Array.isArray(target.arch)
-    ? target.arch
-    : DEFAULT_TARGET_CPUS
+function releaseMatrixError(message) {
+  throw new ReleaseMatrixConfigurationError(message)
 }
 
-/** Electron Builder targets are glibc on Linux unless their name explicitly selects musl. */
-function targetLibc(os, target) {
-  if (os !== 'linux') return undefined
-  const name = targetName(target)
-  return typeof name === 'string' && /(?:^|[-_])musl(?:$|[-_])/u.test(name) ? 'musl' : 'glibc'
+/** Normalize every documented Electron Builder target shape without guessing an arch. */
+function normalizeBuildTargets(value, label) {
+  const targets = Array.isArray(value) ? value : [value]
+  if (targets.length === 0) releaseMatrixError(`${label} must not be empty`)
+  return targets.map((target, index) => {
+    const targetLabel = `${label}[${String(index)}]`
+    const normalized = typeof target === 'string' ? { target } : target
+    if (typeof normalized !== 'object' || normalized === null || Array.isArray(normalized)
+      || typeof normalized.target !== 'string' || normalized.target.length === 0) {
+      return releaseMatrixError(`${targetLabel} must be a target name or target object`)
+    }
+    let name = normalized.target
+    let arch = normalized.arch
+    const suffixPosition = name.lastIndexOf(':')
+    if (suffixPosition > 0) {
+      if (arch === undefined) arch = name.slice(suffixPosition + 1)
+      name = name.slice(0, suffixPosition)
+    }
+    if (arch === undefined) return { name }
+    const architectures = Array.isArray(arch) ? arch : [arch]
+    if (architectures.length === 0
+      || architectures.some((architecture) => typeof architecture !== 'string' || architecture.length === 0)) {
+      return releaseMatrixError(`${targetLabel}.arch must be a non-empty architecture or array`)
+    }
+    return { name, architectures: [...new Set(architectures)] }
+  })
 }
 
-/** Derive the exact optional-package platform tuples from Electron Builder targets. */
-export function deriveSupportedPlatforms(build) {
-  const platforms = []
-  for (const [buildKey, os] of BUILD_PLATFORM_OSES) {
-    for (const target of build?.[buildKey]?.target ?? []) {
-      if (typeof targetName(target) !== 'string') {
-        throw new Error(`verify-licenses: build.${buildKey}.target contains an unnamed target`)
+function sameStringSet(left, right) {
+  return left.length === right.length && left.every((value) => right.includes(value))
+}
+
+/** Resolve the fork declaration after fencing it in both directions against build targets. */
+export function resolveReleaseMatrix(manifest) {
+  const declaration = manifest?.dshReleaseMatrix
+  if (!Array.isArray(declaration) || declaration.length === 0) {
+    return releaseMatrixError('dshReleaseMatrix must be a non-empty array')
+  }
+  const build = manifest?.build
+  if (typeof build !== 'object' || build === null || Array.isArray(build)) {
+    return releaseMatrixError('build must be an object')
+  }
+
+  const buildKeyByOs = new Map(BUILD_PLATFORM_OSES.map(([buildKey, os]) => [os, buildKey]))
+  const declaredByOs = new Map()
+  for (const [index, entry] of declaration.entries()) {
+    const label = `dshReleaseMatrix[${String(index)}]`
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      return releaseMatrixError(`${label} must be an object`)
+    }
+    if (typeof entry.os !== 'string' || !buildKeyByOs.has(entry.os)) {
+      return releaseMatrixError(`${label}.os must be one of darwin, win32, linux`)
+    }
+    if (declaredByOs.has(entry.os)) {
+      return releaseMatrixError(`dshReleaseMatrix declares ${entry.os} more than once`)
+    }
+    if (!Array.isArray(entry.cpu) || entry.cpu.length === 0
+      || entry.cpu.some((cpu) => typeof cpu !== 'string' || cpu.length === 0)
+      || new Set(entry.cpu).size !== entry.cpu.length) {
+      return releaseMatrixError(`${label}.cpu must be a non-empty array of unique architectures`)
+    }
+    if (entry.os === 'linux') {
+      if (typeof entry.libc !== 'string' || entry.libc.length === 0) {
+        return releaseMatrixError(`${label}.libc must name the declared Linux libc`)
       }
-      for (const cpu of targetCpus(target)) {
-        if (typeof cpu !== 'string') {
-          throw new Error(`verify-licenses: build.${buildKey}.target contains a non-string architecture`)
-        }
-        const platform = { os, cpu }
-        const libc = targetLibc(os, target)
-        if (libc !== undefined) platform.libc = libc
-        if (!platforms.some((candidate) => candidate.os === platform.os
-          && candidate.cpu === platform.cpu
-          && candidate.libc === platform.libc)) {
-          platforms.push(platform)
-        }
+    } else if (entry.libc !== undefined) {
+      return releaseMatrixError(`${label}.libc is only valid for Linux`)
+    }
+    declaredByOs.set(entry.os, entry)
+  }
+
+  for (const [buildKey, os] of BUILD_PLATFORM_OSES) {
+    const section = build[buildKey]
+    const declared = declaredByOs.get(os)
+    if (declared === undefined) {
+      if (typeof section === 'object' && section !== null && !Array.isArray(section)
+        && Object.hasOwn(section, 'target')) {
+        return releaseMatrixError(`build.${buildKey} has targets but dshReleaseMatrix does not declare ${os}`)
+      }
+      continue
+    }
+    if (typeof section !== 'object' || section === null || Array.isArray(section)) {
+      return releaseMatrixError(`dshReleaseMatrix declares ${os} but build.${buildKey} is missing`)
+    }
+    if (!Object.hasOwn(section, 'target')) {
+      return releaseMatrixError(`build.${buildKey}.target is required for declared ${os}`)
+    }
+    const targets = normalizeBuildTargets(section.target, `build.${buildKey}.target`)
+    for (const target of targets) {
+      if (target.architectures !== undefined && !sameStringSet(target.architectures, declared.cpu)) {
+        return releaseMatrixError(
+          `dshReleaseMatrix ${os} CPUs [${declared.cpu.join(', ')}] do not match build.${buildKey} target ${JSON.stringify(target.name)} architectures [${target.architectures.join(', ')}]`,
+        )
       }
     }
   }
-  return platforms
+
+  return declaration.flatMap((entry) => entry.cpu.map((cpu) => {
+    const platform = { os: entry.os, cpu }
+    if (entry.libc !== undefined) platform.libc = entry.libc
+    return platform
+  }))
 }
 
-const supportedPlatforms = deriveSupportedPlatforms(rootManifest.build)
+const supportedPlatforms = resolveReleaseMatrix(rootManifest)
 
 /** Return true when a Yarn condition can ship in the configured release matrix. */
 export function targetsSupportedPlatform(condition, platforms = supportedPlatforms) {

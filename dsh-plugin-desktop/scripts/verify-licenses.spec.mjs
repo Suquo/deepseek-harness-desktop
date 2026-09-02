@@ -3,24 +3,29 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
   createLockDescriptorIndex,
-  deriveSupportedPlatforms,
   includesLockedOptional,
   noticesDriftError,
   readLockedPackageArchives,
+  ReleaseMatrixConfigurationError,
   renderNotices,
+  resolveReleaseMatrix,
   resolveLockedPackage,
   targetsSupportedPlatform,
 } from './verify-licenses.mjs'
 
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
-test('derives the supported platform matrix from Electron Builder targets', () => {
-  assert.deepEqual(deriveSupportedPlatforms(manifest.build), [
-    { os: 'darwin', cpu: 'arm64' },
+test('resolves the fork release declaration and fences explicit build architectures', () => {
+  assert.equal(
+    manifest.dshReleaseMatrixComment,
+    'Fork-declared distribution set: macOS universal releases, Windows configured installer arches, and Linux x64/arm64 glibc development builds.',
+  )
+  assert.deepEqual(resolveReleaseMatrix(manifest), [
     { os: 'darwin', cpu: 'x64' },
+    { os: 'darwin', cpu: 'arm64' },
     { os: 'win32', cpu: 'x64' },
-    { os: 'linux', cpu: 'arm64', libc: 'glibc' },
     { os: 'linux', cpu: 'x64', libc: 'glibc' },
+    { os: 'linux', cpu: 'arm64', libc: 'glibc' },
   ])
 
   assert.equal(targetsSupportedPlatform('os=darwin & cpu=arm64'), true)
@@ -37,22 +42,89 @@ test('derives the supported platform matrix from Electron Builder targets', () =
   assert.equal(includesLockedOptional({}), true)
 })
 
-test('respects per-target architectures and explicit Linux musl targets', () => {
-  const platforms = deriveSupportedPlatforms({
-    linux: {
-      target: [
-        { target: 'dir', arch: ['x64'] },
-        { target: 'dir-musl', arch: ['arm64'] },
-      ],
-    },
+function singlePlatformManifest(target, cpu = ['x64']) {
+  return {
+    dshReleaseMatrix: [{ os: 'win32', cpu }],
+    build: { win: { target } },
+  }
+}
+
+for (const [shape, target] of [
+  ['string target', 'nsis'],
+  ['array-of-strings target', ['nsis', 'zip']],
+  ['object target without arch', { target: 'nsis' }],
+  ['array object target without arch', [{ target: 'nsis' }]],
+  ['object target with array arch', { target: 'nsis', arch: ['x64'] }],
+  ['object target with string arch', { target: 'nsis', arch: 'x64' }],
+  ['string target with arch suffix', 'nsis:x64'],
+]) {
+  test(`accepts the documented Electron Builder ${shape}`, () => {
+    assert.deepEqual(resolveReleaseMatrix(singlePlatformManifest(target)), [
+      { os: 'win32', cpu: 'x64' },
+    ])
   })
-  assert.deepEqual(platforms, [
-    { os: 'linux', cpu: 'x64', libc: 'glibc' },
-    { os: 'linux', cpu: 'arm64', libc: 'musl' },
-  ])
-  assert.equal(targetsSupportedPlatform('os=linux & cpu=x64 & libc=glibc', platforms), true)
-  assert.equal(targetsSupportedPlatform('os=linux & cpu=arm64 & libc=glibc', platforms), false)
-  assert.equal(targetsSupportedPlatform('os=linux & cpu=arm64 & libc=musl', platforms), true)
+}
+
+function assertMatrixError(manifestFixture, message) {
+  assert.throws(
+    () => resolveReleaseMatrix(manifestFixture),
+    {
+      name: ReleaseMatrixConfigurationError.name,
+      message: `dsh-plugin-desktop: invalid dshReleaseMatrix/build configuration: ${message}`,
+    },
+  )
+}
+
+test('fails closed when build is absent', () => {
+  assertMatrixError(
+    { dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }] },
+    'build must be an object',
+  )
+})
+
+test('fails closed when a declared platform section is absent', () => {
+  assertMatrixError(
+    { dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }], build: {} },
+    'dshReleaseMatrix declares win32 but build.win is missing',
+  )
+})
+
+test('fails closed when a declared platform has no target', () => {
+  assertMatrixError(
+    { dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }], build: { win: {} } },
+    'build.win.target is required for declared win32',
+  )
+})
+
+test('fails closed when a build target has no declaration', () => {
+  assertMatrixError(
+    {
+      dshReleaseMatrix: [{ os: 'win32', cpu: ['x64'] }],
+      build: { win: { target: 'nsis' }, mac: { target: 'dir' } },
+    },
+    'build.mac has targets but dshReleaseMatrix does not declare darwin',
+  )
+})
+
+test('fails closed on an unrecognized target shape', () => {
+  assertMatrixError(
+    singlePlatformManifest(42),
+    'build.win.target[0] must be a target name or target object',
+  )
+})
+
+test('fails closed on an empty target list', () => {
+  assertMatrixError(
+    singlePlatformManifest([]),
+    'build.win.target must not be empty',
+  )
+})
+
+test('fails closed when an explicit target architecture disagrees with the declaration', () => {
+  assertMatrixError(
+    singlePlatformManifest({ target: 'nsis', arch: ['arm64'] }),
+    'dshReleaseMatrix win32 CPUs [x64] do not match build.win target "nsis" architectures [arm64]',
+  )
 })
 
 test('resolves an optional dependency to the exact lockfile record', () => {
