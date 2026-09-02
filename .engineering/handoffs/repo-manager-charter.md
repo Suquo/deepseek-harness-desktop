@@ -61,7 +61,7 @@ Run `node scripts/upstream-watch.mjs` at least once per RM working day (morning 
 
 ## CI TRIAGE CLASSES (seed set — grow from real incidents here)
 
-Stale merge ref → merge master INTO the branch · aggregator-check-passes-vacuously when a path-filter job fails — never merge on the aggregator alone [SSR #666] · hung runner → cancel + rerun-failed · a red leg's summary can MASK same-package failures — attribute from the job log, not the summary [SSR #492]. This repo has no CI workflow yet: until one lands, "required CI" = the full local headless gate (`corepack yarn check`) run by the resolver in the worktree, with its tail pasted in the PR body; standing up CI is an early queue item.
+Stale merge ref → merge master INTO the branch · aggregator-check-passes-vacuously when a path-filter job fails — never merge on the aggregator alone [SSR #666] · hung runner → cancel + rerun-failed · a red leg's summary can MASK same-package failures — attribute from the job log, not the summary [SSR #492]. CI exists (`.github/workflows/ci.yml`, see CLAUDE.md) but fork PR-EVENT triggers are dormant (#3): the RM dispatches `gh workflow run ci.yml --ref <branch>` per head and the dispatch run is the evidence of record. **Dispatch runs may not attach to the PR's check rollup, and the `master-required-checks` ruleset then BLOCKS `gh pr merge`** — the chartered path (CLAUDE.md, owner-ruled 2026-08-19) is `gh pr merge N --merge --admin` under the same head guard, ONLY after enumerating all five dispatch jobs green on that exact SHA [2026-09-02, PR #72]. · **Environment fences must be judged on the CI datum, never on the author's machine** — a fence that passes locally because its remedy was hand-run is a false green [PR #74].
 
 ## ENVIRONMENT
 
