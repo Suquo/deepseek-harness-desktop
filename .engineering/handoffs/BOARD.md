@@ -35,6 +35,8 @@
 
 **Workspace etiquette (owner 2026-09-02):** agent test launches go to Hyprland ws7-10 only (rules auto-place them; amended 2026-09-02 from 6-9); ws1-6 are the owner's. Prefer headless; never move/focus a headed window; report any stray window's class/title to admin. Full text in repo-manager-charter.md.
 
+**Charter integrity note (2026-09-03):** commit `19dbccf62f` silently deleted TWO charter bullets during a restructure — the race-rebase protocol and the operator-rulings/ASKING-SURFACE bullet. Both restored (`c573073fc6`, `eac3459d51`). Nothing tests charter content, so the rule now is: **when a silent edit is found, recover the FULL deleted range (`git show <sha> -- <file> | grep '^-'`), never only the item that made you notice.** Reported to admin via `report-admin.sh`; delivery may have crossed an admin restart, so this board entry is the durable copy.
+
 ## Standing goal (owner ruling, 2026-08-19 — full text in repo-manager-charter.md)
 
 Track upstream (harness releases + anywhere-labs overlay) WITHOUT breaking the Parametria-harness work; on breaking updates the RM decides inherit/adapt/hold-back/skip against the product mission; run-session exports are a standing insight-harvest input.
