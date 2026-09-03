@@ -97,6 +97,12 @@ Timing-sensitive measurement runs in ANY repo on this machine can request a shor
 
 Rationale: a suquo frame-timing lane was competing with a core-pinned rustc compile on 2026-09-02 and neither RM could see the other. Numbers measured under contention are not evidence.
 
+**CPU ALLOCATION — the load governor is the SINGLE authority (admin ruling 2026-09-03).** `tools/load-governor.sh` derives each process's CPU set from its repo/worktree path and re-asserts it every ~2 minutes. **Never pin a lane at spawn** — a spawn-time `taskset` survives at most two minutes, so a charter that named per-lane core sets described something the machine did not do, and which pin was live depended on where the timer happened to be. This charter has never carried such a table and must not acquire one; if a brief or a doc here ever names cores, delete the pin and leave the governor alone. Lanes keep `nice 10`. (`CARGO_BUILD_JOBS` is a Rust knob and does not apply to this Node/Yarn repo.)
+
+  Two consequences that are ours to act on:
+  - **Within-repo contention is the RM's to stagger.** Each repo is now contained to one band, so cross-repo contention cannot occur — but this fork's PRIMARY checkout (where the RM's `corepack yarn check` runs) and its lane worktrees share that band. **Do not run an RM gate and a lane gate at the same time**; serialize them, which the dual-spawn disjointness discipline already implies for the lanes themselves.
+  - **Measurement work: the fleet-quiet lease is MANDATORY for definitive arms, and the receipt records the OBSERVED affinity read at run time** (`taskset -cp $$` from inside the run), never the affinity anyone assumed. A core budget that shifts under a running arm is an instrument change we would refuse from a lane — see the INSTRUMENT-CHANGE RULE — and the lease protects a measurement far better than a pin ever did.
+
 ## ENVIRONMENT
 
 Outer workspace is Yarn 4 via Corepack (`corepack yarn ...`, never bare npm/pnpm at root); the pinned `deepseek-harness/` submodule keeps its own pnpm workspace, touched only via root `upstream:*` scripts and NEVER edited from desktop branches. Full headless gate: `corepack yarn check`. Graphical launch is explicit (`corepack yarn dev`) and never part of headless validation. gh backtick bodies via `--body-file`. Fresh worktrees need `corepack yarn install --immutable` (native builds: koffi, node-pty, electron — first install is slow). Electron's stdout may not flush through pipes — verify app liveness by process list + the Host's loopback port, not by log tail.
