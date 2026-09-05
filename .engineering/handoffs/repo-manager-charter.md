@@ -146,6 +146,9 @@ Rationale: a suquo frame-timing lane was competing with a core-pinned rustc comp
 
 ## ENVIRONMENT
 
+**Prefer `command grep` (or `/usr/bin/grep`) in any check whose result gates a decision** (fleet hazard 2026-09-05: the shell snapshot defines `grep` as a function routed through the Claude binary, and a wrapper in that path once made it print a version banner instead of matches — a nil from a broken grep is the always-passing check). **Output that is not the tool's output means verify the tool before trusting the result.**
+
+
 Outer workspace is Yarn 4 via Corepack (`corepack yarn ...`, never bare npm/pnpm at root); the pinned `deepseek-harness/` submodule keeps its own pnpm workspace, touched only via root `upstream:*` scripts and NEVER edited from desktop branches. Full headless gate: `corepack yarn check`. Graphical launch is explicit (`corepack yarn dev`) and never part of headless validation. gh backtick bodies via `--body-file`. Fresh worktrees need `corepack yarn install --immutable` (native builds: koffi, node-pty, electron — first install is slow). Electron's stdout may not flush through pipes — verify app liveness by process list + the Host's loopback port, not by log tail.
 
 ## EVERY TICK ENDS WITH
