@@ -46,7 +46,7 @@ Never post, edit, or imitate a comment whose first line begins **Review verdict:
 ## WORKTREES ONLY — NEVER THE PRIMARY CHECKOUT, NEVER MASTER
 
 - `C:\Users\chidi\Documents\deepseek-harness-desktop` is the RM's + operator's. Verify `git rev-parse --show-toplevel` each iteration.
-- One worktree per issue under `~/.dsh-resolver-worktrees/issue-<n>` (never /tmp — keep native builds on the persistent disk). Fresh worktrees: `corepack yarn install --immutable` first (koffi/node-pty/electron native builds make the first install slow) and `git submodule update --init` if your work reads the pinned upstream source. Remove + prune when resolved.
+- **A worktree INSTALLS its own dependencies (`corepack yarn install --immutable`, then `check:electron` self-heals the Electron binary) and NEVER symlinks `node_modules` — or anything — into the primary checkout** (fleet lesson 2026-09-05: a symlinked `node_modules` fails the bundler's outside-project-root check at build, masked because earlier chains died at test first, and an install run through the links reinstalled the PRIMARY checkout). One worktree per issue under `~/.dsh-resolver-worktrees/issue-<n>` (never /tmp — keep native builds on the persistent disk). Fresh worktrees: `corepack yarn install --immutable` first (koffi/node-pty/electron native builds make the first install slow) and `git submodule update --init` if your work reads the pinned upstream source. Remove + prune when resolved.
 - Never commit/push master; never force-push a branch you didn't create; never kill processes you didn't start; never `git checkout X && git reset --hard` (recover via detached checkout + `git branch -f`).
 
 ## CLAIM DURABILITY
