@@ -148,6 +148,8 @@ Rationale: a suquo frame-timing lane was competing with a core-pinned rustc comp
 
 ## ENVIRONMENT
 
+**VALIDATE A CLEAN RESULT AGAINST A KNOWN POSITIVE BEFORE REPORTING IT AS SAFETY (fleet rule 2026-09-18).** "Nothing found" and "the check is broken" are the same output, and the broken one looks like good news — the direction nobody investigates. So before reporting a negative, feed the check something it MUST flag; if it stays silent the negative means nothing yet. It costs one control and under a minute. **The uncontrolled check is the one that lies:** four fleet instances in one day, including a search built from wording that had been QUOTED to the searcher, which then failed to find the very line it was quoting. **Also state the SCOPE of a negative** — a clean result over two files is not a clean result over the repo, and the gap between them is where my own uncontrolled scan hid (2026-09-18: I reported "no edit of mine was made from a stripped message" from a scan covering two of three charters; the control later showed the scan worked, and widening it surfaced only false positives — but the claim had been broader than the evidence). A control also calibrates FALSE positives: the same scan flags two adjacent inline-code spans (`` `a` `b` ``) as a collapsed span, which is noise to know about, not a finding.
+
 **Prefer `command grep` (or `/usr/bin/grep`) in any check whose result gates a decision** (fleet hazard 2026-09-05: the shell snapshot defines `grep` as a function routed through the Claude binary, and a wrapper in that path once made it print a version banner instead of matches — a nil from a broken grep is the always-passing check). **Output that is not the tool's output means verify the tool before trusting the result.**
 
 
