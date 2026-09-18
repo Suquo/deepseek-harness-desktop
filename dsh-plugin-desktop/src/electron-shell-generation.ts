@@ -9,11 +9,35 @@ import {
   shell,
   Tray,
 } from 'electron'
+import type { WebContents } from 'electron'
 import { formatDesktopExitCode } from './desktop-logger.ts'
 import type { ElectronPlatformStrategy } from './electron-platform.ts'
 import type { DesktopNotification, DesktopShellSpec } from './runtime.ts'
 import { prepareTrayIcon } from './tray-icons.ts'
 import { desktopWindowOptions } from './window-options.ts'
+
+/**
+ * Exchange the Host's launch token inside the BrowserWindow's own session
+ * before the marker-bearing renderer URL loads (0.1.5-rc.2 browser
+ * authentication). Keeping the exchange separate preserves the desktop query
+ * markers across upstream's redirect to a clean `/` and keeps the token out of
+ * renderer history.
+ * @param renderer - the window's web contents, whose session receives the cookie.
+ * @param spec - shell spec carrying the token-bearing authentication URL.
+ * @throws {Error} when the exchange does not end in HTTP 200.
+ */
+async function authenticateRendererSession(renderer: WebContents, spec: DesktopShellSpec): Promise<void> {
+  const authenticated = await renderer.session.fetch(spec.authenticationUrl, {
+    method: 'GET',
+    credentials: 'include',
+    redirect: 'follow',
+    cache: 'no-store',
+  })
+  if (authenticated.status !== 200) {
+    throw new Error(`dsh-plugin-desktop: browser authentication failed with HTTP ${String(authenticated.status)}`)
+  }
+  await authenticated.body?.cancel()
+}
 
 const MIN_ZOOM_LEVEL = -4
 const MAX_ZOOM_LEVEL = 4
@@ -174,6 +198,7 @@ export class ElectronShellGeneration {
     }
 
     try {
+      await authenticateRendererSession(window.webContents, spec)
       await window.loadURL(spec.url)
       tray = new Tray(prepareTrayIcon(spec.trayIcons, platform.platform))
       this.tray = tray

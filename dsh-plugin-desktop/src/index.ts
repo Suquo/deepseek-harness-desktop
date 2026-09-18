@@ -8,6 +8,7 @@ import {
   LOCALE_SETTINGS_NAMESPACE,
   type LocaleSettings,
 } from '@deepseek-ai/dsh-client-locale'
+import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import {
   THEME_SETTINGS_NAMESPACE,
@@ -42,7 +43,7 @@ export const name = 'desktop-shell'
 
 /** Services required before the shell can register its renderer generation. */
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
-export const inject = ['webServer', 'webRuntime', 'appExit', 'settings']
+export const inject = ['webServer', 'webRuntime', 'appExit', 'settings', 'connection']
 
 /**
  * Standard settings namespace shared by tray and configuration surfaces. The
@@ -276,6 +277,7 @@ export function apply(ctx: Context, config: Config): void {
     () => runtime.schedule({
       ...config,
       url: desktopRendererUrl(ctx.webServer.port, config.mode, runtime.platform),
+      authenticationUrl: ctx.connection.authenticatedUrl(`http://127.0.0.1:${String(ctx.webServer.port)}`),
       // Display identity only: this name reaches the tray tooltip and the tray's "Open …" command,
       // and the caption reaches the Windows title bar and the accessible window title. It is the
       // same constant the served document's title and web manifest carry — `PARAMETRIA_PRODUCT_NAME`

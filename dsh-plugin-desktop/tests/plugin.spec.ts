@@ -121,6 +121,10 @@ function createHarness(platform: DesktopRuntime['platform'] = 'darwin'): PluginH
   }
   const ctx = {
     desktopRuntime: runtime,
+    // 0.1.5-rc.2 browser authentication: the Host mints the token-bearing root URL.
+    connection: {
+      authenticatedUrl: vi.fn((baseUrl: string) => `${new URL(baseUrl).origin}/authentication-fixture`),
+    },
     webServer: {
       host: '127.0.0.1',
       port: 43120,
@@ -233,6 +237,7 @@ describe('desktop Host plugin', () => {
     expect(harness.shell()).toEqual(expect.objectContaining({
       mode: 'compatibility',
       url: 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin',
+      authenticationUrl: 'http://127.0.0.1:43120/authentication-fixture',
       productName: 'Parametria',
       windowTitle: 'Parametria',
       readThemeSource: expect.any(Function),

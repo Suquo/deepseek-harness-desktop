@@ -284,7 +284,22 @@ try {
   ]) {
     if (ids.has(id)) throw new Error(`assembled advanced Web graph unexpectedly includes ${id}`)
   }
-  const response = await fetch(expectedUrl)
+  // Since 0.1.5-rc.2 every index request needs the browser session cookie. Do
+  // what the Electron shell does: exchange the Host's launch token first, then
+  // request the marker-bearing root with the minted cookie. An unauthenticated
+  // request answering 200 would mean the boundary had silently disappeared.
+  const anonymous = await fetch(expectedUrl)
+  await anonymous.body?.cancel()
+  if (anonymous.status !== 401) {
+    throw new Error(`unauthenticated Web root returned HTTP ${String(anonymous.status)} instead of 401`)
+  }
+  const exchange = await fetch(ctx.connection.authenticatedUrl(new URL(expectedUrl).origin), { redirect: 'manual' })
+  await exchange.body?.cancel()
+  const cookie = exchange.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
+  if (cookie === '') {
+    throw new Error(`browser authentication returned HTTP ${String(exchange.status)} without a session cookie`)
+  }
+  const response = await fetch(expectedUrl, { headers: { cookie } })
   const html = await response.text()
   if (response.status !== 200) {
     throw new Error(`assembled Web root returned HTTP ${String(response.status)}`)

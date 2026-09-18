@@ -66,6 +66,7 @@ const electron = vi.hoisted(() => {
   const browserWindowOn = vi.fn()
   const browserWindowOff = vi.fn()
   const loadURL = vi.fn(async (_url: string) => {})
+  const sessionFetch = vi.fn(async (_url: string, _init?: unknown) => ({ status: 200, body: null as { cancel(): Promise<void> } | null }))
   const menuTemplates: unknown[][] = []
   const notifications: Notification[] = []
   let zoomLevel = 0
@@ -93,6 +94,7 @@ const electron = vi.hoisted(() => {
     off: vi.fn(),
     setZoomLevel: vi.fn((level: number) => { zoomLevel = level }),
     setWindowOpenHandler: vi.fn(),
+    session: { fetch: sessionFetch },
   }
   const nativeTheme = { themeSource: 'system' }
 
@@ -179,6 +181,7 @@ const electron = vi.hoisted(() => {
     browserWindowOff,
     browserWindowOn,
     loadURL,
+    sessionFetch,
     dialog,
     Menu: {
       buildFromTemplate: vi.fn((template: unknown[]) => {
@@ -225,6 +228,7 @@ const spec: DesktopShellSpec = {
   minWidth: 900,
   minHeight: 640,
   url: 'http://127.0.0.1:43120/',
+  authenticationUrl: 'http://127.0.0.1:43120/authentication-fixture',
   productName: 'DSH Desktop',
   windowTitle: 'DeepSeek Harness Desktop',
   iconPath: '/tmp/app-icon.png',
@@ -292,6 +296,8 @@ describe('Electron desktop runtime', {
     diagnostics.export.mockReset()
     electron.loadURL.mockReset()
     electron.loadURL.mockResolvedValue(undefined)
+    electron.sessionFetch.mockReset()
+    electron.sessionFetch.mockResolvedValue({ status: 200, body: null })
     electron.dialog.showMessageBox.mockResolvedValue({ response: 0, checkboxChecked: false })
     electron.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] })
     electron.dialog.showSaveDialog.mockResolvedValue({ canceled: true, filePath: undefined })
@@ -303,6 +309,31 @@ describe('Electron desktop runtime', {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('exchanges the launch token in the window session before loading the renderer URL', async () => {
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.schedule(spec)
+    await runtime.mountScheduled()
+
+    expect(electron.sessionFetch).toHaveBeenCalledExactlyOnceWith(spec.authenticationUrl, expect.objectContaining({
+      credentials: 'include',
+      redirect: 'follow',
+    }))
+    expect(electron.loadURL).toHaveBeenCalledExactlyOnceWith(spec.url)
+    expect(electron.sessionFetch.mock.invocationCallOrder[0])
+      .toBeLessThan(electron.loadURL.mock.invocationCallOrder[0] as number)
+  })
+
+  it('never loads the renderer when browser authentication is refused', async () => {
+    electron.sessionFetch.mockResolvedValueOnce({ status: 401, body: null })
+    const { ElectronDesktopRuntime } = await import('../src/electron-runtime.ts')
+    const runtime = new ElectronDesktopRuntime(async () => {})
+    runtime.schedule(spec)
+
+    await expect(runtime.mountScheduled()).rejects.toThrow('browser authentication failed with HTTP 401')
+    expect(electron.loadURL).not.toHaveBeenCalled()
   })
 
   it('uses the native macOS frame, Dock icon, and template tray image', async () => {
