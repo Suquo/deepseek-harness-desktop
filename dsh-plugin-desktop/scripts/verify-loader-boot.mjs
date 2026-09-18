@@ -136,6 +136,11 @@ try {
         // disposer-returning tapIndex the real Web carrier exposes.
         tapIndex() { return () => {} },
       })
+      // 0.1.5-rc.2 browser authentication: the desktop plugin injects the Host
+      // connection to mint the renderer's token-bearing authentication URL.
+      host.provide('connection', {
+        authenticatedUrl(baseUrl) { return `${new URL(baseUrl).origin}/authentication-fixture` },
+      })
       host.provide('webRuntime', {})
       host.provide('appExit', () => {})
       host.provide('settings', {
@@ -170,6 +175,9 @@ try {
   }
   if (mountedSpec?.url !== 'http://127.0.0.1:43120/?dsh-desktop-mode=compatibility&dsh-desktop-platform=darwin') {
     throw new Error(`desktop plugin produced an unexpected renderer URL: ${String(mountedSpec?.url)}`)
+  }
+  if (mountedSpec?.authenticationUrl !== 'http://127.0.0.1:43120/authentication-fixture') {
+    throw new Error(`desktop plugin produced an unexpected authentication URL: ${String(mountedSpec?.authenticationUrl)}`)
   }
 } finally {
   try {
