@@ -61,6 +61,8 @@ describe('DeepSeek streaming tool calls', () => {
       options: () => connection,
       resolveApiKey: async () => 'test-key',
       resolveUserId: () => 'test-user' as AnonymousUserId,
+      // No plugin-contributed top-level fields: the wire request is the adapter's own.
+      prepareExtensions: () => Promise.resolve({ fields: {}, accept: () => Promise.resolve() }),
     })
     const chunks: StreamChunk[] = []
 

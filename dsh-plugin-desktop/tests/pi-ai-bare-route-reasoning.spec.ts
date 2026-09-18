@@ -5,10 +5,12 @@
  * PR #59 fixed the declared half of this — the managed `parametria-vision`
  * route no longer declares a valueless `off:`. It could not fix the bare half,
  * and the bare half is the larger one: a route that declares no `models:` at
- * all inherits pi-ai's own catalog entries, and 163 of those entries carry
- * `reasoning: true` with NO `thinkingLevelMap` whatsoever. At the pinned
- * `@earendil-works/pi-ai@0.82.1` (unchanged through 0.85.1) the `openrouter` branch of
- * `dist/api/openai-completions.js` read that absence as a declaration:
+ * all inherits pi-ai's own catalog entries, and many of those entries carry
+ * `reasoning: true` with NO `thinkingLevelMap` whatsoever (163 at pi-ai
+ * 0.82.1; 98 in the openrouter catalog at the pinned 0.85.1). At
+ * `@earendil-works/pi-ai@0.82.1`, and unchanged through the pinned 0.85.1, the
+ * `openrouter` branch of `dist/api/openai-completions.js` read that absence as
+ * a declaration:
  *
  *   else if (model.thinkingLevelMap?.off !== null) {
  *       openRouterParams.reasoning = { effort: model.thinkingLevelMap?.off ?? "none" };
@@ -20,6 +22,14 @@
  * cannot be disabled` — the failure that killed both validator children of
  * 2026-08-20 and, through the operator's bare `openrouter` route, 26 requests
  * across five sessions.
+ *
+ * The incident's own model, `google/gemini-3.6-flash`, has since left that
+ * class upstream: pi-ai 0.85.1's catalog declares its `thinkingLevelMap` with
+ * `off: null`, which the unpatched branch already reads as "send nothing". The
+ * class itself did not empty out, so the fence now drives a model that is still
+ * in it (`MODEL` below) and records the incident model's new declaration as its
+ * own assertion — a catalog that dropped that `off: null` again would put the
+ * incident back and fail here rather than go unnoticed.
  *
  * `patches/pi-ai@0.85.1.patch` replaces that test in the `openrouter` and
  * `string-thinking` branches — the two whose payload is `map?.off ?? "none"` —
@@ -40,12 +50,13 @@
  * bug": its payload is the fixed literal `{ type: "disabled" }` and never the
  * map's value, so there is no declared SPELLING for a string guard to require
  * — measured, NO catalog model on that dialect declares a string `off`, so the
- * same guard would not gate the disable but delete it, for all 33 models that
- * currently receive one (24 with no map, 9 with a map lacking the key; 4 more
- * declare `off: null` and already send nothing). And `{ type: "disabled" }` is
- * a field those endpoints accept, where `{ effort: "none" }` is a value
- * OpenRouter rejects — so deleting it would turn Off into a no-op on 33 models
- * to fix a failure nothing has observed. That is a separate decision with its
+ * same guard would not gate the disable but delete it, for every model that
+ * currently receives one (at pi-ai 0.85.1: 31 — 18 with no map, 13 with a map
+ * lacking the key; 4 more declare `off: null` and already send nothing; at
+ * 0.82.1 it was 33 — 24 and 9). And `{ type: "disabled" }` is a field those
+ * endpoints accept, where `{ effort: "none" }` is a value OpenRouter rejects —
+ * so deleting it would turn Off into a no-op on those models to fix a failure
+ * nothing has observed. That is a separate decision with its
  * own evidence, not this patch's rule applied consistently.
  *
  * The consequence for this fence is that the branch still runs the pre-fix
@@ -91,12 +102,19 @@ const OPENROUTER_CATALOG_SPECIFIER = '@earendil-works/pi-ai/providers/openrouter
 /** A bare route names the pi-ai provider and nothing else; this is that key. */
 const ROUTE = 'openrouter'
 /**
- * The model both dead validator children asked for, and the model the
- * operator's own bare `openrouter` route serves. It is used because it is the
- * incident's model, and the census assertion below states the property that
- * makes it the incident's model rather than assuming it.
+ * A reasoning model on the `openrouter` dialect that still declares NO level
+ * map at the pinned pi-ai — the bug class this patch exists for. The census
+ * assertion below states that property of the installed catalog rather than
+ * assuming it.
  */
-const MODEL = 'google/gemini-3.6-flash'
+const MODEL = 'google/gemini-2.5-flash'
+/**
+ * The model both dead validator children asked for, and the model the
+ * operator's own bare `openrouter` route serves. pi-ai 0.85.1 declares its map
+ * with `off: null`, which took it out of the bug class; that declaration is
+ * asserted so a catalog regression that restores the incident is visible.
+ */
+const INCIDENT_MODEL = 'google/gemini-3.6-flash'
 const API_KEY_ENV = 'OPENROUTER_API_KEY'
 /** Not a credential: the adapter refuses to send at all when the reference misses. */
 const PLACEHOLDER_KEY = 'pi-ai-bare-route-reasoning-spec-placeholder'
@@ -299,13 +317,14 @@ describe('a bare OpenRouter route on the wire', {
   // margin over it that the two sibling wire specs derived.
   timeout: process.platform === 'win32' ? 10_000 : 5_000,
 }, () => {
-  it('still finds the incident model in the bug class the patch is about', () => {
+  it('still finds a model in the bug class the patch is about', () => {
     // The precondition every assertion below rests on, stated as properties of
-    // the INSTALLED catalog rather than assumed from the incident report: this
-    // model reasons, declares no level map at all, and selects the branch the
-    // patch changed. A pin bump that gives it a map, or moves it off this
-    // dialect, makes the rest of this file measure something else — and says so
-    // here rather than going quietly green.
+    // the INSTALLED catalog rather than assumed: this model reasons, declares no
+    // level map at all, and selects the branch the patch changed. A pin bump
+    // that gives it a map, or moves it off this dialect, makes the rest of this
+    // file measure something else — and says so here rather than going quietly
+    // green. (That is exactly what pi-ai 0.85.1 did to the incident model; see
+    // the next test.)
     const entry = catalog[MODEL]
     expect(entry).toBeDefined()
     expect(entry?.reasoning).toBe(true)
@@ -320,6 +339,20 @@ describe('a bare OpenRouter route on the wire', {
       && model.compat?.thinkingFormat === 'openrouter'
       && typeof model.thinkingLevelMap?.off !== 'string')
     expect(bugClass.length).toBeGreaterThanOrEqual(50)
+  })
+
+  it('records that the incident model now declares its disable as `off: null`', () => {
+    // Upstream's catalog, not this patch, took the incident model out of the
+    // bug class: at pi-ai 0.85.1 it declares a level map whose `off` is `null`,
+    // which even the unpatched branch reads as "send nothing". Stated here so a
+    // catalog regression that drops the declaration — putting the incident back
+    // on exactly the model the operator's route serves — fails by name.
+    const incident = catalog[INCIDENT_MODEL]
+    expect(incident).toBeDefined()
+    expect(incident?.reasoning).toBe(true)
+    expect(incident?.compat?.thinkingFormat).toBe('openrouter')
+    expect(incident?.thinkingLevelMap).toBeDefined()
+    expect(incident?.thinkingLevelMap).toHaveProperty('off', null)
   })
 
   it('sends no reasoning field at all when no effort is selected — the bare-route fix', async () => {

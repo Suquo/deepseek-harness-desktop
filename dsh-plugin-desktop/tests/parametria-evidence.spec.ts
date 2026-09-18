@@ -21,8 +21,9 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { SESSION_FORMAT_VERSION, SessionId } from '@deepseek-ai/dsh-session'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import { ShellEnvRegistry } from '@deepseek-ai/dsh-shell-env'
 import {
@@ -49,15 +50,15 @@ function execution(session?: { id: string; cwd?: string }): ToolExecution {
   return {
     signal,
     token: Symbol('evidence-test') as ToolExecution['token'],
-    callId: CallId('evidence-call'),
-    rootCallId: CallId('evidence-call'),
+    callId: ToolCallId('evidence-call'),
+    rootCallId: ToolCallId('evidence-call'),
     name: 'pwsh',
     arguments: { command: 'true' },
     ...(session === undefined
       ? {}
       : {
           agent: {
-            session: { header: { version: 0, id: session.id, cwd: session.cwd, createdAt: 0 } },
+            session: { header: { version: SESSION_FORMAT_VERSION, id: SessionId(session.id), cwd: session.cwd, createdAt: 0 } },
           } as Agent,
         }),
   }

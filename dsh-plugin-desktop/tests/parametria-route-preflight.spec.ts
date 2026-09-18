@@ -95,7 +95,7 @@ function compositionEntries(rows: readonly CompositionRow[]): RouteEntry[] {
 }
 
 function noticeText(session: Session): string[] {
-  return session.events.flatMap(event => {
+  return session.snapshotEvents().flatMap(event => {
     if (event.type !== 'user/message' || event.data.source.kind !== 'plugin') return []
     return event.data.content.flatMap(block => block.type === 'text' ? [block.text] : [])
   })
@@ -141,11 +141,13 @@ describe('session-start preflight against the live LLM registry', () => {
 
     start()
     expect(published).toHaveLength(1)
-    expect(session.events).toHaveLength(1)
+    const events = session.snapshotEvents()
+    expect(events).toHaveLength(1)
     expect(session.surface.nodes).toEqual([0])
-    expect(session.events[0]?.type).toBe('user/message')
-    const message = session.events[0]?.type === 'user/message'
-      ? session.events[0].data
+    expect(events[0]?.type).toBe('user/message')
+    const first = events[0]
+    const message = first?.type === 'user/message'
+      ? first.data
       : undefined
     expect(message?.source).toMatchObject({
       kind: 'plugin',
@@ -166,11 +168,11 @@ describe('session-start preflight against the live LLM registry', () => {
 
     const registration = ctx.llm.registerAdapter([route], new SilentAdapter())
     start()
-    expect(session.events).toHaveLength(1)
+    expect(session.snapshotEvents()).toHaveLength(1)
 
     registration()
     start()
-    expect(session.events).toHaveLength(1)
+    expect(session.snapshotEvents()).toHaveLength(1)
 
     const next = ctx.sessions.create(SessionId(`route-preflight-${++nextSession}`))
     ctx.emit('agent/session-start', { agent: { session: next } as Agent, source: 'startup' })
@@ -185,12 +187,12 @@ describe('session-start preflight against the live LLM registry', () => {
     start('resume')
     entries.reverse()
     start('compact')
-    expect(session.events).toHaveLength(1)
+    expect(session.snapshotEvents()).toHaveLength(1)
 
     entries.pop()
     start('clear')
     start('resume')
-    expect(session.events).toHaveLength(2)
+    expect(session.snapshotEvents()).toHaveLength(2)
   })
 
   it('fails open when the live registry throws during synchronous session publication', async () => {
@@ -201,7 +203,7 @@ describe('session-start preflight against the live LLM registry', () => {
     })
 
     expect(() => start()).not.toThrow()
-    expect(session.events).toEqual([])
+    expect(session.snapshotEvents()).toEqual([])
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'))
   })
 
@@ -212,7 +214,7 @@ describe('session-start preflight against the live LLM registry', () => {
     const warning = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
 
     expect(() => start()).not.toThrow()
-    expect(session.events).toEqual([])
+    expect(session.snapshotEvents()).toEqual([])
     expect(warning).toHaveBeenCalledWith(expect.stringContaining('loader tree unavailable'))
   })
 
@@ -222,14 +224,14 @@ describe('session-start preflight against the live LLM registry', () => {
 
     start()
 
-    expect(session.events).toEqual([])
+    expect(session.snapshotEvents()).toEqual([])
   })
 
   it('re-reads the mounted rows at session start', async () => {
     const entries: RouteEntry[] = []
     const { session, start } = await mounted(entries)
     start()
-    expect(session.events).toEqual([])
+    expect(session.snapshotEvents()).toEqual([])
 
     entries.push(row('added-after-mount'))
     start()
@@ -294,7 +296,7 @@ describe('session-start preflight against the live LLM registry', () => {
     const installed = await mounted(entries)
     installed.ctx.llm.registerAdapter(declaredRoutes, new SilentAdapter())
     installed.start()
-    expect(installed.session.events).toEqual([])
+    expect(installed.session.snapshotEvents()).toEqual([])
   })
 })
 

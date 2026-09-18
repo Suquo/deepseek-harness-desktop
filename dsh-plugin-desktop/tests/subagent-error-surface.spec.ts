@@ -18,7 +18,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import LlmRuntime, {
-  CallId,
+  ToolCallId,
   LlmAdapter,
   LlmError,
   type GenerateOptions,
@@ -26,6 +26,7 @@ import LlmRuntime, {
   type StreamChunk,
 } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import SubagentRuntime, {
   limitSubagentDiagnostic,
@@ -115,6 +116,7 @@ async function setup(options: {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -129,7 +131,7 @@ async function setup(options: {
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn)
-  const parent = ctx.agentLoop.create(SessionId('parent-session'), {
+  const parent = await ctx.agentLoop.create(SessionId('parent-session'), {
     provider: 'desktop-parent',
     model: 'parent-model',
   })
@@ -138,7 +140,7 @@ async function setup(options: {
 
 /** Flatten the real continuation manager notices currently owned by a parent. */
 function settlementNotices(parent: Agent): string[] {
-  const logged = parent.session.events.flatMap(event => event.type === 'user/message'
+  const logged = parent.session.snapshotEvents().flatMap(event => event.type === 'user/message'
     ? [event.data]
     : [])
   return [...logged, ...parent.inbox.nextStep, ...parent.inbox.nextTurn].flatMap((message) => {
@@ -206,16 +208,27 @@ function resultText(result: { content: { type: string; text?: string }[] }): str
 }
 
 describe('subagent parent-side error surface', () => {
-  it("hands the parent's tool result the child's error code, message, and session id", async () => {
+  it('refuses a mis-routed delegation before any child exists, naming the unresolved provider', async () => {
+    // Since upstream PR #2663 (merge f76a225a7d; `preflightChildLlmRoute` in
+    // dsh-tool-subagent) the tool resolves the child's LLM route BEFORE it
+    // creates the child. A provider with no registered adapter therefore fails
+    // the delegation itself: there is no child turn, so no `NO_ADAPTER` code and
+    // no child session id to carry — those now surface only for failures that
+    // happen inside a running child, which the tests below still pin through
+    // the patched seam. What this fence keeps proving is the incident's point:
+    // the parent is told WHICH route is broken, not a bare "run failed".
     const { ctx, parent } = await setup()
     await ctx.plugin(ToolSubagent, {
       provider: 'spawn',
       agentOptions: { provider: MISROUTED_PROVIDER, model: 'vision-preview' },
     })
+    const starts: unknown[] = []
+    const disposeStart = ctx.on('subagent/start', info => void starts.push(info))
+    const sessionsBefore = ctx.sessions.list().map(session => session.id)
 
     const result = await ctx.tools.execute({
       signal: new AbortController().signal,
-      callId: CallId('call-mis-routed'),
+      callId: ToolCallId('call-mis-routed'),
       name: 'subagent',
       arguments: {
         description: 'validate the render',
@@ -225,14 +238,15 @@ describe('subagent parent-side error surface', () => {
       agent: parent,
     })
 
+    disposeStart()
+
     expect(result.isError).toBe(true)
     const text = resultText(result)
-    // The headline stays upstream's wording; the cause rides the seam's
-    // diagnostic channel, which rc.8 already renders.
-    expect(text).toContain('subagent run failed')
-    expect(text).toContain('NO_ADAPTER')
     expect(text).toContain(`no adapter registered for provider "${MISROUTED_PROVIDER}"`)
-    expect(text).toMatch(/\(child session [0-9a-f-]{36}\)/)
+    // Refused before creation: no run started and no session beyond the parent's.
+    expect(starts).toEqual([])
+    expect(ctx.sessions.list().map(session => session.id)).toEqual(sessionsBefore)
+    expect(sessionsBefore).toEqual([parent.session.id])
   })
 
   it('names the child session id that a harvest can actually open', async () => {

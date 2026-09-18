@@ -8,7 +8,7 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import {
-  CallId,
+  ToolCallId,
   createUserMessage,
   LlmAdapter,
   LlmRuntime,
@@ -97,7 +97,7 @@ async function setup(config = {
 async function readImage(ctx: Context, agent: Agent, executionSignal = signal) {
   return ctx.tools.execute({
     signal: executionSignal,
-    callId: CallId(`fallback-image-${++nextCall}`),
+    callId: ToolCallId(`fallback-image-${++nextCall}`),
     name: 'read_image',
     arguments: { file_path: 'red.png' },
     agent,
@@ -188,7 +188,7 @@ describe('patched read_image modality gate', () => {
     const history = createUserMessage({
       content: [{
         type: 'tool-result',
-        toolCallId: CallId('historical-read-image'),
+        toolCallId: ToolCallId('historical-read-image'),
         content: result.content,
       }],
       source: { kind: 'plugin', plugin: 'parametria-read-image-fallback-test' },
