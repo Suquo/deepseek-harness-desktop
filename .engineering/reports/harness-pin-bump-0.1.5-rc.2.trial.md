@@ -35,7 +35,7 @@ the host/client API breaks.
 | `0.1.5-rc.2` | **`deepseek-flash`** (text + image) + the three above |
 | `0.1.6-alpha.2` | `deepseek-flash`, `deepseek-v4-pro` (no newer model) |
 
-## What moved, commit by commit (15 commits on the branch)
+## What moved, commit by commit
 
 1. **Pin surface** — gitlink `fb2c4b9e69`, `upstream.json`, 200-entry surface (was 190),
    lockfile by Yarn 4.18.0; retired `dsh-client-runtime` / `dsh-host-apiproxy` removed and
