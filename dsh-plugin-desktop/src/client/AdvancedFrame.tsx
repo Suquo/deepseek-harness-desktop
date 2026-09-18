@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from './contracts.ts'
 import type { DesktopClientPlatform } from './environment.ts'
 import {
@@ -17,20 +18,28 @@ export interface AdvancedFrameInjected {
 
 /** Full advanced root slot props. */
 export type AdvancedFrameProps = PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay'>
   & AdvancedFrameInjected
 
+/** Default `main` entry: the Conversation, shown whenever no global panel is selected. */
+const CONVERSATION_ENTRY = 'conversation'
+
+/**
+ * The keyed `main` slot's selected entry. Subscribing here rather than in the
+ * frame keeps a panel switch from re-rendering the column geometry.
+ */
+const MainPanel = memo(function MainPanel({ usePanelInfo, renderSlot }: Pick<AdvancedFrameProps, 'usePanelInfo' | 'renderSlot'>) {
+  const panelId = usePanelInfo(info => info.activePanelId)
+  return renderSlot('main', {}, { entryKey: panelId ?? CONVERSATION_ENTRY })
+})
+
 /** Desktop-owned transparent frame around the unchanged product surfaces. */
-export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: AdvancedFrameProps) {
+export function AdvancedFrame({ layout, platform, renderSlot, usePanelInfo }: AdvancedFrameProps) {
   const subscribeLayout = useCallback((listener: () => void) => layout.subscribe(listener), [layout])
   const readLayout = useCallback(() => layout.getSnapshot(), [layout])
   const panels = useSyncExternalStore(subscribeLayout, readLayout)
   const frameRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
-  const detailsSession = useSessions((state) => {
-    const current = state.current
-    return current !== undefined && state.byId[current]?.blank === false ? current : undefined
-  })
 
   useEffect(() => {
     const element = frameRef.current
@@ -45,21 +54,25 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { layout.setNarrow(narrow) }, [layout, narrow])
 
-  const previousSession = useRef(detailsSession)
-  useEffect(() => {
-    if (detailsSession !== undefined && previousSession.current !== undefined && previousSession.current !== detailsSession) {
-      layout.closeDetails()
-    }
-    previousSession.current = detailsSession
-  }, [detailsSession, layout])
-
   const collapsed = panels.narrow ? !panels.narrowExpanded : panels.sidebar === 0
   const sidebarPreference = collapsed ? 0 : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
+  const railWidth = platform === 'darwin' ? MACOS_SIDEBAR_COLLAPSED : SIDEBAR_COLLAPSED
+  // The width the right panel's occupant would get if drawn. While it is
+  // hidden on a narrow frame the expanded rail counts as yielding, because
+  // opening the panel collapses it (`DesktopLayoutState.openRightbar`).
+  const offered = computeDesktopColumns(
+    viewport,
+    !panels.rightbarShown && panels.narrow ? 0 : sidebarPreference,
+    panels.rightbar,
+    railWidth,
+  )
+  // The grid reserves a track only when the occupant asks for one; otherwise
+  // the drawn panel hangs over the center from a zero-width column.
   const columns = computeDesktopColumns(
     viewport,
     sidebarPreference,
-    detailsSession === undefined ? 0 : panels.details,
-    platform === 'darwin' ? MACOS_SIDEBAR_COLLAPSED : SIDEBAR_COLLAPSED,
+    panels.rightbarTrack ? panels.rightbar : 0,
+    railWidth,
   )
 
   return (
@@ -68,7 +81,8 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
       className="dshDesktopFrame"
       data-desktop-platform={platform}
       data-sidebar-collapsed={collapsed || undefined}
-      style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.details}px` }}
+      data-rightbar-fullscreen={panels.rightbarFullscreen || undefined}
+      style={{ gridTemplateColumns: `${columns.sidebar}px minmax(0, 1fr) ${columns.rightbar}px` }}
     >
       {platform === 'darwin' && <div className="dshDesktopMacCaptionRow" aria-hidden="true" />}
       {platform === 'win32' && <div className="dshDesktopWindowsCaptionRow" aria-hidden="true" />}
@@ -77,8 +91,12 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
           {renderSlot('sidebar', { collapsed, width: columns.sidebar })}
         </div>
       </aside>
-      <main className="dshDesktopConversationSurface">{renderSlot('conversation', {})}</main>
-      <aside className="dshDesktopDetailsSurface">{renderSlot('details', {})}</aside>
+      <main className="dshDesktopConversationSurface">
+        <MainPanel usePanelInfo={usePanelInfo} renderSlot={renderSlot} />
+      </main>
+      <aside className="dshDesktopRightbarSurface">
+        {renderSlot('rightbar', { width: offered.rightbar, viewportWidth: viewport, canShow: offered.rightbar > 0 })}
+      </aside>
       <div className="dshDesktopOverlay" data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
@@ -90,19 +108,19 @@ export function AdvancedFrame({ layout, platform, renderSlot, useSessions }: Adv
           onResize={(width) => { layout.setSidebar(width) }}
         />
       )}
-      {columns.details > 0 && (
+      {panels.rightbarShown && !panels.rightbarFullscreen && offered.rightbar > 0 && (
         <ResizeHandle
-          side="details"
-          left={viewport - columns.details}
-          size={columns.details}
-          onResize={(width) => { layout.setDetails(width) }}
+          side="rightbar"
+          left={viewport - offered.rightbar}
+          size={offered.rightbar}
+          onResize={(width) => { layout.setRightbar(width) }}
         />
       )}
     </div>
   )
 }
 
-function ResizeHandle(props: { side: 'sidebar' | 'details'; left: number; size: number; onResize: (width: number) => void }) {
+function ResizeHandle(props: { side: 'sidebar' | 'rightbar'; left: number; size: number; onResize: (width: number) => void }) {
   const origin = useRef(0)
   const base = useRef(0)
   const onPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {

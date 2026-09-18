@@ -176,21 +176,24 @@ describe('Parametria brand presentation', () => {
     const css = parametriaBrandStyles()
 
     // display:none, not a visual hide: the superseded string must leave the accessibility tree.
-    expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_headline \.pXSMma_headlineText \{ display: none; \}/)
-    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; grid-area: 1 / 2; }`)
+    // The badge is excluded by class, so only the text span it sits beside is removed.
+    expect(css).toMatch(/\.dshDesktopConversationSurface \.pXSMma_headline \.pXSMma_titleGroup > span:not\(\.pXSMma_previewBadge\) \{ display: none; \}/)
+    expect(css).toContain(`.dshDesktopConversationSurface .pXSMma_headline .pXSMma_titleGroup::before { content: "${HERO_HEADLINE_TEXT}"; }`)
 
     // The replacement must not re-introduce nowrap: upstream's headline text wraps, and this one
-    // sits in the same auto-sized column.
-    expect(css).not.toMatch(/\.pXSMma_headline::after \{[^}]*white-space/)
+    // sits in the same wrapping row.
+    expect(css).not.toMatch(/\.pXSMma_titleGroup::before \{[^}]*white-space/)
   })
 
-  it('still finds the headline grid it places the replacement into', () => {
+  it('still finds the title group it places the replacement into', () => {
     const bundle = upstreamBundle(CONVERSATION)
 
-    // The replacement claims a cell by explicit placement, so both facts are load-bearing: the
-    // headline is a grid, and upstream puts the text it supersedes at row 1, column 2.
-    expect(bundle).toMatch(/\.pXSMma_headline\{[^}]*display:grid/)
-    expect(bundle).toContain('.pXSMma_headlineText{grid-area:1/2}')
+    // The replacement is the title group's `::before`, i.e. its first flex item, so both facts are
+    // load-bearing: the group is a flex row, and upstream renders the text it supersedes as the
+    // group's class-less FIRST child, ahead of the preview badge. A pin that reorders the group, or
+    // gives the text a class of its own, fails here instead of shipping the headline out of place.
+    expect(bundle).toMatch(/\.pXSMma_titleGroup\{[^}]*display:flex/)
+    expect(bundle).toMatch(/className: \w+\.titleGroup,\s*children: \[\(0, \w+\.jsx\)\("span", \{ children: t\("hero\.headline"\) \}\), \(0, \w+\.jsx\)\("span", \{\s*className: \w+\.previewBadge,/)
   })
 
   it('still finds the superseded upstream headline in the pinned conversation bundle', () => {

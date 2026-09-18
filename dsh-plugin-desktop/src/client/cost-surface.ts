@@ -46,7 +46,11 @@
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+// The action-row slot moved from the conversation package into the chat
+// package at 0.1.5-rc.2 (same render site, same `{ messageId }` owner share);
+// the slot registry's `ctx.slots` is declared by the renderer package.
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { RateSource } from './cost-rates.ts'
 import { TurnCostBadge } from './TurnCostBadge.tsx'
 

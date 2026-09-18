@@ -178,8 +178,8 @@ ${lockup}.${SIDEBAR.wide}::after { content: "${PARAMETRIA_WORDMARK}"; flex: none
 .${SIDEBAR.logoRow} .${SIDEBAR.railMark} svg > * { display: none; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} { background: ${mark}; }
 .${CONVERSATION.fishHitbox} .${CONVERSATION.fish} > * { display: none; }
-.${CONVERSATION.headline} .${CONVERSATION.headlineText} { display: none; }
-.${CONVERSATION.headline}::after { content: "${HERO_HEADLINE_TEXT}"; grid-area: 1 / 2; }
+.${CONVERSATION.headline} .${CONVERSATION.titleGroup} > span:not(.${CONVERSATION.previewBadge}) { display: none; }
+.${CONVERSATION.headline} .${CONVERSATION.titleGroup}::before { content: "${HERO_HEADLINE_TEXT}"; }
 `
 }
 

@@ -80,7 +80,8 @@ export const UPSTREAM_BRAND_CLASSES = {
     fishHitbox: 'pXSMma_fishHitbox',
     fish: 'pXSMma_fish',
     headline: 'pXSMma_headline',
-    headlineText: 'pXSMma_headlineText',
+    titleGroup: 'pXSMma_titleGroup',
+    previewBadge: 'pXSMma_previewBadge',
   },
 } as const satisfies Record<string, Readonly<Record<string, string>>>
 
@@ -168,9 +169,12 @@ export const UPSTREAM_BRAND_CLASSES = {
  *
  * The hero headline replaces upstream's own text. It is removed with `display: none` rather than
  * hidden, so the superseded string leaves the accessibility tree instead of being announced
- * alongside the replacement, and the replacement claims the grid cell upstream assigned that text
- * (`grid-area: 1 / 2`) — every child of the headline grid is explicitly placed, so an auto-placed
- * replacement would only land correctly by accident.
+ * alongside the replacement. Since 0.1.5-rc.2 upstream renders that text as the class-less first
+ * child of a `titleGroup` flex row ahead of the preview badge — "own element: keeps the headline
+ * text addressable apart from the badge", in upstream's words — so the replacement is that
+ * group's `::before`: the first flex item, the slot the superseded text held, with no placement
+ * to claim. (Through 0.1.1-rc.2 the headline was a grid and the replacement claimed the text's
+ * explicit cell, `grid-area: 1 / 2`.)
  *
  * The wordmark takes NEUTRAL ink rather than Parametria's accent blue (owner call, 2026-08-20,
  * superseding the accent treatment this sheet shipped with), and it gets there by this sheet DECLARING
@@ -208,7 +212,7 @@ ${lockup}.hHd-Xa_wide::after { content: "${PARAMETRIA_WORDMARK}"; flex: none; fo
 .dshDesktopUpstreamSidebar .hHd-Xa_railMark svg > * { display: none; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish { background: ${mark}; }
 .dshDesktopConversationSurface .pXSMma_fishHitbox .pXSMma_fish > * { display: none; }
-.dshDesktopConversationSurface .pXSMma_headline .pXSMma_headlineText { display: none; }
-.dshDesktopConversationSurface .pXSMma_headline::after { content: "${HERO_HEADLINE_TEXT}"; grid-area: 1 / 2; }
+.dshDesktopConversationSurface .pXSMma_headline .pXSMma_titleGroup > span:not(.pXSMma_previewBadge) { display: none; }
+.dshDesktopConversationSurface .pXSMma_headline .pXSMma_titleGroup::before { content: "${HERO_HEADLINE_TEXT}"; }
 `
 }

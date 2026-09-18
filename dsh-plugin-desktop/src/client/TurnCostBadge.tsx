@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useSyncExternalStore } from 'react'
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { RateSource } from './cost-rates.ts'
 import { formatCost, formatDuration } from './cost-model.ts'
-import { costHeadline, foldTurnCost, rateProvenance, selectCostNodes, turnOfMessage } from './turn-cost.ts'
+import {
+  costHeadline, foldTurnCost, rateProvenance, readTrajectoryHook, readTrajectoryNodes,
+  selectCostNodes, turnOfMessage,
+} from './turn-cost.ts'
 
 /** Values the cost-surface registration hands every badge. */
 export interface TurnCostBadgeInjected {
@@ -15,6 +18,17 @@ export interface TurnCostBadgeInjected {
 export type TurnCostBadgeProps = PropsRuntime<'conversation.chat.assistant-actions'> & TurnCostBadgeInjected
 
 /**
+ * Stand-in for the trajectory hook when no trajectory view is composed: the
+ * surface then prices from the Chat nodes (fail-open). Composition does not
+ * change under a mounted badge, so one mount always calls the same hook.
+ * @param selector - the selector the real hook would run.
+ * @returns the selector's reading of an absent trajectory.
+ */
+function useNoTrajectory<T>(selector: (snapshot: unknown) => T): T {
+  return selector(undefined)
+}
+
+/**
  * Per-generation cost and per-step timing for one finished turn.
  *
  * Rendered into upstream's own assistant action row, so it sits with the turn
@@ -24,13 +38,17 @@ export type TurnCostBadgeProps = PropsRuntime<'conversation.chat.assistant-actio
  * @param props - the slot's owner share plus the injected rate source.
  * @returns the badge.
  */
-export function TurnCostBadge({ messageId, useSession, rateSource }: TurnCostBadgeProps) {
+export function TurnCostBadge(props: TurnCostBadgeProps) {
+  const { messageId, useChat, rateSource } = props
+  const useTrajectory = readTrajectoryHook(props) ?? useNoTrajectory
   const subscribe = useCallback((listener: () => void) => rateSource.subscribe(listener), [rateSource])
   const getSnapshot = useCallback(() => rateSource.getSnapshot(), [rateSource])
   const rates = useSyncExternalStore(subscribe, getSnapshot)
 
-  const nodes = useSession(selectCostNodes)
-  const turnTimings = useSession(state => state.chat.legacy.turnTimings)
+  const trajectoryNodes = useTrajectory(readTrajectoryNodes)
+  const chatNodes = useChat(state => state.legacy.nodes)
+  const turnTimings = useChat(state => state.legacy.turnTimings)
+  const nodes = useMemo(() => selectCostNodes(trajectoryNodes, chatNodes), [trajectoryNodes, chatNodes])
   const turn = useMemo(() => turnOfMessage(nodes, messageId), [nodes, messageId])
   const cost = useMemo(
     () => turn === undefined ? undefined : foldTurnCost(nodes, turn, rates.table, turnTimings),

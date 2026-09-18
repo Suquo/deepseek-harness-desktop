@@ -5,6 +5,9 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 // The desktop client does not load or register a settings surface.
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+// The Workspace UI's declarations name the sidebar slot it mounts into.
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { applyAdvancedShell } from './advanced-shell.ts'
 import { startRendererBootReporter } from './boot-health.ts'
 import { installCostSurface } from './cost-surface.ts'
@@ -55,7 +58,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => installWorkspaceFolderDrop({
       create: input => ctx.workspaces.create(input),
-      startSession: workspaceId => { ctx.workspaces.startSession(workspaceId) },
+      // Session navigation moved from the Workspace service to the Workspace
+      // UI at 0.1.5-rc.2 (same explicit-target semantics). Resolved at drop
+      // time, as upstream's own callers do: the drop target is that UI's.
+      startSession: workspaceId => { ctx.uiWorkspace.startSession(workspaceId) },
       ...(environment.platform === 'win32'
         ? { validateDirectory: (path: string) => requestDesktopDirectoryValidation(path) }
         : {}),

@@ -1,4 +1,5 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {} from './contracts.ts'
 import type { DesktopClientEnvironment } from './environment.ts'
@@ -18,7 +19,7 @@ export function applyAdvancedShell(ctx: ClientContext, environment: DesktopClien
     throw new Error(`dsh-plugin-desktop: advanced shell received mode ${JSON.stringify(environment.mode)}`)
   }
 
-  const desktopLayout = new DesktopLayoutState()
+  const desktopLayout = new DesktopLayoutState(id => ctx.slots.entries('main').some(entry => entry.options.key === id))
   ctx.effect(
     () => provideDesktopLayout(ctx, desktopLayout),
     'desktop: layout service',
@@ -45,12 +46,15 @@ export function applyAdvancedShell(ctx: ClientContext, environment: DesktopClien
     }
   }, 'desktop: theme presenter')
 
+  // The children are upstream's own root contract since 0.1.5-rc.2: the
+  // Conversation is the default entry of the keyed `main` slot (global panels
+  // are its other keys) and the former details surface is the `rightbar`.
   ctx.effect(() => ctx.slots.register({
     name: 'root',
     children: {
       'sidebar': { kind: 'single', scope: 'root' },
-      'conversation': { kind: 'single', scope: 'session-maybe' },
-      'details': { kind: 'single', scope: 'session' },
+      'main': { kind: 'keyed', scope: 'root' },
+      'rightbar': { kind: 'single', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
     },
     inject: () => ({ layout: desktopLayout, platform: environment.platform }),

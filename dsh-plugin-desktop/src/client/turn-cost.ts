@@ -20,7 +20,7 @@
  * says so rather than presenting a partial total as a complete one.
  */
 
-import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { AssistantMessageNode, ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { CostLine, RateTable, TokenBuckets } from './cost-model.ts'
 import { NO_TOKENS, addTokens, formatCost, priceTokens, ratesFor, readTokenBuckets } from './cost-model.ts'
 
@@ -134,25 +134,27 @@ function isAssistant(node: ConversationNode): node is AssistantMessageNode {
  * profile ever omits the trajectory view (fail-open, standard 4). The caller
  * can tell the two apart — nodes without provenance price as `unpriced`, never
  * as free.
- * @param snapshot - the session's conversation snapshot.
+ * @param trajectory - the trajectory target's event nodes, when that view is composed.
+ * @param chat - the Chat target's `legacy.nodes`.
  * @returns the nodes to fold, preferring the attributable source.
  */
-export function selectCostNodes(snapshot: ConversationSnapshot): readonly ConversationNode[] {
-  const trajectory = readTrajectoryNodes(snapshot.views)
-  return trajectory !== undefined && trajectory.length > 0 ? trajectory : snapshot.chat.legacy.nodes
+export function selectCostNodes(
+  trajectory: readonly ConversationNode[] | undefined,
+  chat: readonly ConversationNode[],
+): readonly ConversationNode[] {
+  return trajectory !== undefined && trajectory.length > 0 ? trajectory : chat
 }
 
 /**
  * The one member of the trajectory view snapshot this surface reads.
  *
- * Restated here rather than imported: the package DECLARES
- * `ConversationViewSnapshotMap.trajectory` inside `trajectory-contract.d.ts`,
- * but its `./client` entry re-exports only `inject` and `apply`, so the module
- * augmentation is not reachable from an importer and `views.get('trajectory')`
- * does not type-check. `tests/client-trajectory-view.spec.ts` diffs this
- * restatement against the INSTALLED `.d.ts`, so a pin bump that renames or
- * reshapes the target fails the gate here instead of silently returning
- * undefined and quietly costing nothing.
+ * Restated here rather than imported, deliberately: the package that declares
+ * it is not a dependency of this one (see `tests/client-trajectory-view.spec.ts`
+ * for why), so this surface reads it through an untyped edge.
+ * `tests/client-trajectory-view.spec.ts` diffs this restatement against the
+ * INSTALLED `.d.ts`, so a pin bump that renames or reshapes the target fails
+ * the gate here instead of silently returning undefined and quietly costing
+ * nothing.
  */
 export interface TrajectoryViewSnapshot {
   /** Session events assembled as nodes — the assistant ones carrying `provenance`. */
@@ -163,14 +165,37 @@ export interface TrajectoryViewSnapshot {
 export const TRAJECTORY_VIEW_TARGET = 'trajectory'
 
 /**
- * Read the trajectory view's nodes through the untyped edge of the view store.
- * @param views - the snapshot's registered view targets.
- * @returns the trajectory event nodes, when that view is composed.
+ * The session-scoped selector hook the trajectory view supplies, named
+ * `use` + its hook key. Since 0.1.5-rc.2 conversation targets are assembled
+ * lazily — a target builds only once something subscribes through it — so the
+ * surface must read the trajectory through this hook, which subscribes and so
+ * activates it. Reading `views.get('trajectory')` would see nothing unless the
+ * Trajectory tab happened to be open, and every generation would quietly price
+ * as `unpriced`.
  */
-export function readTrajectoryNodes(views: ConversationSnapshot['views']): readonly ConversationNode[] | undefined {
-  const get = (views as unknown as { get(target: string): unknown }).get.bind(views)
-  const snapshot = get(TRAJECTORY_VIEW_TARGET) as Partial<TrajectoryViewSnapshot> | undefined
-  return Array.isArray(snapshot?.eventNodes) ? snapshot.eventNodes : undefined
+export const TRAJECTORY_HOOK_PROP = 'useTrajectory'
+
+/** Selector hook over the trajectory snapshot, as restated here. */
+export type TrajectorySelectorHook = <T>(selector: (snapshot: unknown) => T) => T
+
+/**
+ * Find the trajectory hook among a session-scoped slot component's props.
+ * @param props - the component's props.
+ * @returns the hook, or undefined when no trajectory view is composed.
+ */
+export function readTrajectoryHook(props: object): TrajectorySelectorHook | undefined {
+  const hook = (props as Record<string, unknown>)[TRAJECTORY_HOOK_PROP]
+  return typeof hook === 'function' ? hook as TrajectorySelectorHook : undefined
+}
+
+/**
+ * Read the event nodes off a trajectory snapshot of unverified shape.
+ * @param snapshot - the value the trajectory hook selected from.
+ * @returns the trajectory event nodes, or undefined for an unrecognised shape.
+ */
+export function readTrajectoryNodes(snapshot: unknown): readonly ConversationNode[] | undefined {
+  const eventNodes = (snapshot as Partial<TrajectoryViewSnapshot> | undefined)?.eventNodes
+  return Array.isArray(eventNodes) ? eventNodes : undefined
 }
 
 /**
