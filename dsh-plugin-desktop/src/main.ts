@@ -70,6 +70,7 @@ import { DesktopStartupGeneration } from './startup-generation.ts'
 import { DesktopStartupStateCommit } from './startup-state-commit.ts'
 import {
   desktopInstallAnchor,
+  healDesktopProfileModuleFallback,
   prepareDesktopProfile,
   type SkippedOptionalEntry,
 } from './profile.ts'
@@ -488,6 +489,7 @@ async function start(): Promise<void> {
     }
     startupStage = 'profile-composition'
     lifecycleRecorder.transitionStartupStage(startupStage)
+    await healDesktopProfileModuleFallback(homeDir)
     const prepared = prepareDesktopProfile(
       process.env.DSH_TELEMETRY_DISABLED,
       homeDir,

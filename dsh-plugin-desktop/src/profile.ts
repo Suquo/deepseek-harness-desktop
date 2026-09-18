@@ -8,6 +8,7 @@ import { evaluate, isJsExpr, type EntryOptions } from '@deepseek-ai/cordis-plugi
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import {
   composeEntries,
+  DEFAULT_PROFILE_PATCH_RELOAD,
   healProfilesModuleFallback,
   initProfile,
   loadOptionalPatches,
@@ -159,11 +160,11 @@ export function readDesktopShellMode(config: SettingsFileConfig): DesktopShellMo
 
 /** Resolve the public Web template once and reject an incompatible DSH release. */
 function requiredWebBundles(): string[] {
-  const bundles = PROFILE_TEMPLATES.web
-  if (bundles === undefined) {
+  const template = PROFILE_TEMPLATES.web
+  if (template === undefined) {
     throw new Error(`${BIN_NAME}: installed dsh-app-boot has no web profile template`)
   }
-  return [...bundles]
+  return [...template.bundles]
 }
 
 /** Prepared profile inputs consumed by app-boot. */
@@ -259,7 +260,7 @@ function loadRecoveryFilteredProfile(
     if (template === undefined) {
       throw new Error(`${BIN_NAME}: profile ${JSON.stringify(profileName)} does not exist`)
     }
-    initProfile(profileDir, template)
+    initProfile(profileDir, template.bundles, template.patchReload)
   }
   const manifest = readProfileManifest(BIN_NAME, profileDir)
   const rawBundles = (manifest.dsh?.profile as { bundles?: unknown } | undefined)?.bundles
@@ -268,6 +269,15 @@ function loadRecoveryFilteredProfile(
     throw new Error(`${BIN_NAME}: dsh.profile.bundles must be an array of package names`)
   }
   const bundles = (rawBundles ?? []) as string[]
+  // Same derivation as upstream loadProfileDirectory: validate an explicit
+  // lifecycle, and default an absent one to the historical live reload.
+  const rawPatchReload: unknown = (manifest.dsh?.profile as { patchReload?: unknown } | undefined)?.patchReload
+  if (rawPatchReload !== undefined && rawPatchReload !== 'live' && rawPatchReload !== 'startup') {
+    throw new Error(
+      `${BIN_NAME}: profile manifest ${join(profileDir, 'package.json')} dsh.profile.patchReload must be "live" or "startup"`,
+    )
+  }
+  const patchReload = rawPatchReload ?? DEFAULT_PROFILE_PATCH_RELOAD
   const layers: Profile['layers'] = []
   for (const packageName of bundles) {
     if (desktopPluginBundleMutable(packageName) && disabledBundles.has(packageName)) continue
@@ -294,6 +304,7 @@ function loadRecoveryFilteredProfile(
     layers,
     patchPath,
     patches: existsSync(patchPath) ? loadOverlayPatches(BIN_NAME, patchPath) : [],
+    patchReload,
   }
 }
 
@@ -402,7 +413,22 @@ function omitUnresolvedOptionalEntries(
 }
 
 /**
- * Load and compose one desktop profile generation.
+ * Maintain the shared `$DSH_HOME/profiles/node_modules` fallback that lets
+ * profile-local code resolve the installation's packages. Upstream made the
+ * heal asynchronous (it takes a cross-process lock), so it can no longer run
+ * inside the synchronous {@link prepareDesktopProfile}; every launch awaits
+ * this immediately before preparing, which is where the heal used to run.
+ * @param home - Harness home whose profiles share the fallback.
+ * @returns settlement once the shared fallback is current.
+ */
+export async function healDesktopProfileModuleFallback(home: string = resolveDshHome()): Promise<void> {
+  await healProfilesModuleFallback({ installAnchor: INSTALL_ANCHOR, home })
+}
+
+/**
+ * Load and compose one desktop profile generation. Callers that boot or
+ * resolve modules from the result first await
+ * {@link healDesktopProfileModuleFallback} for the same home.
  * @param telemetryDisabled - inherited DSH telemetry opt-out value.
  * @param home - Harness home containing profiles and the machine-wide patch.
  * @param platform - native platform selecting launcher-owned safety overlays.
@@ -420,7 +446,6 @@ export function prepareDesktopProfile(
   const profileDir = profileName === DESKTOP_PROFILE_NAME
     ? ensureDesktopProfile(home)
     : resolveProfileDir(profileName, home)
-  healProfilesModuleFallback(INSTALL_ANCHOR, home)
   const disabledBundles = pluginStatePath === undefined
     ? new Set<string>()
     : readDesktopDisabledBundles(pluginStatePath, profileName)

@@ -13,7 +13,6 @@ import {
   THEME_SETTINGS_NAMESPACE,
   type ThemeSettings,
 } from '@deepseek-ai/dsh-client-ui-theme'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
 import {
   handleRendererBootRequest,
   RENDERER_BOOT_REPORT_PATH,
@@ -35,7 +34,7 @@ import {
   parametriaWebManifest,
   serveShellAsset,
 } from './shell-branding.ts'
-import type { DesktopShellMode } from './runtime.ts'
+import type { DesktopLocale, DesktopShellMode } from './runtime.ts'
 import type {} from './runtime.ts'
 
 /** Stable Cordis plugin name. */
@@ -45,11 +44,27 @@ export const name = 'desktop-shell'
 /** Services required by the desktop shell; `desktopRuntime` is probed, not required. */
 export const inject = ['webServer', 'webRuntime', 'appExit', 'settings']
 
-/** Standard settings namespace shared by tray and configuration surfaces. */
-export const DESKTOP_SETTINGS_NAMESPACE = settingsNamespace('dsh-desktop')
+/**
+ * Standard settings namespace shared by tray and configuration surfaces. The
+ * settings service validates a namespace literal at each call (its
+ * `settingsNamespace` brand constructor is no longer exported).
+ */
+export const DESKTOP_SETTINGS_NAMESPACE = 'dsh-desktop'
 
-const UI_THEME_SETTINGS_NAMESPACE = settingsNamespace(THEME_SETTINGS_NAMESPACE)
-const UI_LOCALE_SETTINGS_NAMESPACE = settingsNamespace(LOCALE_SETTINGS_NAMESPACE)
+const UI_THEME_SETTINGS_NAMESPACE = THEME_SETTINGS_NAMESPACE
+const UI_LOCALE_SETTINGS_NAMESPACE = LOCALE_SETTINGS_NAMESPACE
+
+/**
+ * Narrow the upstream locale preference to the translations Desktop chrome ships.
+ * Upstream opened `LocaleId` to any language tag contributed by a language pack;
+ * the tray only carries `zh` and `en`, so any other tag delegates to the OS
+ * locale exactly as an absent preference does.
+ * @param preference - the `locale` settings section's preference, if any.
+ * @returns the bundled Desktop locale, or `undefined` to follow the OS.
+ */
+function desktopLocalePreference(preference: string | undefined): DesktopLocale | undefined {
+  return preference === 'zh' || preference === 'en' ? preference : undefined
+}
 
 /** Desktop settings presented by the standard settings service. */
 export interface DesktopSettings {
@@ -255,7 +270,7 @@ export function apply(ctx: Context, config: Config): void {
   }
   ctx.on('settings/updated', (namespace, next) => {
     if (namespace !== UI_LOCALE_SETTINGS_NAMESPACE) return
-    runtime.setLocalePreference((next as LocaleSettings).preference)
+    runtime.setLocalePreference(desktopLocalePreference((next as LocaleSettings).preference))
   })
   ctx.effect(
     () => runtime.schedule({
@@ -273,7 +288,9 @@ export function apply(ctx: Context, config: Config): void {
       iconPath,
       trayIcons,
       readLocalePreference: () => {
-        return (ctx.settings.get(UI_LOCALE_SETTINGS_NAMESPACE) as LocaleSettings | undefined)?.preference
+        return desktopLocalePreference(
+          (ctx.settings.get(UI_LOCALE_SETTINGS_NAMESPACE) as LocaleSettings | undefined)?.preference,
+        )
       },
       readThemeSource: () => {
         const theme = ctx.settings.get(UI_THEME_SETTINGS_NAMESPACE) as ThemeSettings | undefined

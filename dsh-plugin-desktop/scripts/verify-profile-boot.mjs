@@ -13,7 +13,7 @@ import {
 import { DESKTOP_SETTINGS_NAMESPACE } from '../lib/index.js'
 import { installDesktopPnpmRuntime } from '../lib/desktop-runtime-environment.js'
 import { installProfilePackageResolver } from '../lib/module-resolution.js'
-import { prepareDesktopProfile } from '../lib/profile.js'
+import { healDesktopProfileModuleFallback, prepareDesktopProfile } from '../lib/profile.js'
 import { DesktopProfileService } from '../lib/profile-service.js'
 
 const BIN_NAME = 'dsh-plugin-desktop-profile-smoke'
@@ -35,6 +35,7 @@ try {
     '  default: minimal',
     '',
   ].join('\n'))
+  await healDesktopProfileModuleFallback(home)
   const prepared = prepareDesktopProfile('1', home, 'win32')
   const hostServicePluginDir = join(
     prepared.profile.dir,
