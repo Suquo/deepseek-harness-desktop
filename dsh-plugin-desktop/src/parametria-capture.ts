@@ -12,24 +12,24 @@
  * read-only) rather than the restricted token's default DACL, so the
  * client-end open asks for write access no restricting SID holds. Upstream
  * documents the boundary verbatim at
- * `deepseek-harness/packages/sandbox/sandbox-windows-acl/README.md:99` —
- * *"tools that must capture output cannot run confined"*. The failing
+ * `deepseek-harness/packages/sandbox/sandbox-windows-acl/README.md:171` —
+ * *"Piped stdio capture is impossible for confined grandchildren"*. The failing
  * `CreateNamedPipeW` is called by Python's asyncio INSIDE the confined child,
  * so no yarn patch to any DSH package can reach it, and no relocation of the
  * output, the uv cache, or the temp directory changes it.
  *
  * The mechanism this issue was originally specced against cannot help either.
  * `PreToolDecision` is `allow | deny | ask` and nothing else
- * (`deepseek-harness/packages/core/tools/src/index.ts:588`, with input rewrite
- * explicitly excluded at `:585`), so a `tools/pre-execute` grant cannot widen a
+ * (`deepseek-harness/packages/core/tools/src/index.ts:581`, with input rewrite
+ * explicitly excluded at `:578`), so a `tools/pre-execute` grant cannot widen a
  * call; and the escalation ask is raised inside the bash tool BODY, after that
  * waterfall has already settled
- * (`packages/shell/tool-bash/src/index.ts:330`-`:335`). Auto-answering the ask
+ * (`packages/shell/tool-bash/src/index.ts:329`-`:334`). Auto-answering the ask
  * instead is structurally unavailable to the case that needs it most: a
  * delegated child is pinned to `approvalPolicy: 'never'`
- * (`packages/subagent/subagent/src/child-agent.ts:202`) and that policy is
+ * (`packages/subagent/subagent/src/child-agent.ts:245`) and that policy is
  * decided BEFORE the `approval/request` waterfall dispatches
- * (`packages/interaction/user-approval/src/index.ts:312`), so a validator child
+ * (`packages/interaction/user-approval/src/index.ts:266`), so a validator child
  * that needs a capture cannot obtain one at any price.
  *
  * ## What this tool is, and how narrow it is

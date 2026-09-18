@@ -91,7 +91,7 @@
 #
 # WHY THE ROW SITS HERE rather than in the machine patch that carries the
 # vision route. Both would work — a host-level tool row IS inherited by a
-# preset-composed agent (`core/tools/src/index.ts:1161` seeds the global layer
+# preset-composed agent (`core/tools/src/index.ts:1151` seeds the global layer
 # into every scope's view) — but a machine-wide row would put this tool in
 # EVERY profile's roster, including sessions that will never open Parametria.
 # The preset is itself machine-wide, so mounting the capability beside the

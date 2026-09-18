@@ -300,14 +300,14 @@ describe('the module declares the boundary it crosses', () => {
    * standard 3 exists to forbid.
    */
   const CITATIONS: readonly [string, number, string][] = [
-    ['packages/sandbox/sandbox-windows-acl/README.md', 99, 'tools that must capture output cannot run confined'],
-    ['packages/subagent/subagent/src/child-agent.ts', 202, "approvalPolicy:"],
-    ['packages/interaction/user-approval/src/index.ts', 312, "=== 'never') return 'rejected'"],
-    ['packages/core/tools/src/index.ts', 588, 'export type PreToolDecision ='],
-    ['packages/core/tools/src/index.ts', 585, 'Input rewriting is excluded'],
-    ['packages/shell/tool-bash/src/index.ts', 330, 'async execute(args: BashToolArgs, exec)'],
+    ['packages/sandbox/sandbox-windows-acl/README.md', 171, 'Piped stdio capture is impossible for confined grandchildren'],
+    ['packages/subagent/subagent/src/child-agent.ts', 245, "approvalPolicy:"],
+    ['packages/interaction/user-approval/src/index.ts', 266, "=== 'never') return 'rejected'"],
+    ['packages/core/tools/src/index.ts', 581, 'export type PreToolDecision ='],
+    ['packages/core/tools/src/index.ts', 578, 'Input rewriting is excluded'],
+    ['packages/shell/tool-bash/src/index.ts', 329, 'async execute(args: BashToolArgs, exec)'],
     // Cited by the preset row that mounts this tool, for the same reason.
-    ['packages/core/tools/src/index.ts', 1161, 'this.layers.global.tools.entries()'],
+    ['packages/core/tools/src/index.ts', 1151, 'this.layers.global.tools.entries()'],
   ]
 
   it.each(CITATIONS)('%s:%d still says what this change cites it for', (file, line, anchor) => {
