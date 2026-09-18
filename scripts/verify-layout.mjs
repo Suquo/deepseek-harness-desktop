@@ -534,6 +534,7 @@ for (const [selector, target] of Object.entries(workspace.resolutions ?? {})) {
 // the installed tree unpatched without `yarn install` complaining. Snapshotting
 // the SHAPES makes a dropped or added selector a named failure in both directions.
 const patchedPackages = [
+  ['@deepseek-ai/dsh', ['exact']],
   ['@deepseek-ai/dsh-app-boot', ['caret', 'exact']],
   ['@deepseek-ai/dsh-client-ui-directory-picker-browse', ['caret', 'exact']],
   ['@deepseek-ai/dsh-client-ui-workspace', ['caret', 'exact']],

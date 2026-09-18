@@ -272,6 +272,24 @@ describe('published package surface', () => {
     expect(installedBoot).toContain(marker)
   })
 
+  it('patches the dsh CLI so the desktop shim may address its own desktop profile', () => {
+    // Upstream reserves the `desktop` profile for its own Electron app (19444907f0);
+    // this fork's Electron app owns that profile, so its CLI shim opts out of the
+    // refusal through the patched runCli option (see src/desktop-cli.ts).
+    const patchPath = './patches/dsh@0.1.5-rc.2.patch'
+    expect(workspaceManifest.resolutions).toMatchObject({
+      '@deepseek-ai/dsh@npm:0.1.5-rc.2': expect.stringContaining(patchPath),
+    })
+    const marker = 'if (!allowDesktopProfile) rejectElectronProfile('
+    const patch = readFileSync(new URL(patchPath, workspaceRoot), 'utf8')
+    const installedBin = readFileSync(new URL(
+      'node_modules/@deepseek-ai/dsh/lib/bin.js',
+      packageRoot,
+    ), 'utf8')
+    expect(patch.split(marker)).toHaveLength(3)
+    expect(installedBin.split(marker)).toHaveLength(3)
+    expect(installedBin).toContain('async function runCli({ allowDesktopProfile = false } = {})')
+  })
   it('patches read_image with the validated composition fallback seam', () => {
     const patchPath = './patches/dsh-tool-fs@0.1.5-rc.2.patch'
     expect(workspaceManifest.resolutions).toMatchObject({

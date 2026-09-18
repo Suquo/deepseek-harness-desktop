@@ -44,11 +44,21 @@ describe('packaged dsh bootstrap', () => {
         '--dump-config',
       ])
       expect(url).toMatch(/\/node_modules\/@deepseek-ai\/dsh\/lib\/bin\.js$/u)
+      return { runCli }
     })
+    const runCli = vi.fn(async (_options: { allowDesktopProfile: boolean }) => {})
 
     await runDesktopDshCli(environment, load, argv)
 
     expect(load).toHaveBeenCalledOnce()
+    // Since 0.1.5-rc.2 importing the entry runs nothing; the shim must call it,
+    // and it owns the Electron-reserved `desktop` profile.
+    expect(runCli).toHaveBeenCalledExactlyOnceWith({ allowDesktopProfile: true })
+  })
+
+  it('refuses an entry that exports no runCli instead of silently doing nothing', async () => {
+    await expect(runDesktopDshCli({}, async () => ({}), ['node', '/app/desktop-cli.js', '--version']))
+      .rejects.toThrow('does not export runCli')
   })
 
   it('defaults profile and plugin commands without overriding explicit or global modes', () => {
@@ -97,10 +107,12 @@ describe('packaged dsh bootstrap', () => {
       }
       const argv = [process.execPath, '/app/desktop-cli.js', 'plugin', 'add', 'example-plugin']
 
-      await runDesktopDshCli(environment, async () => {
-        writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'example-plugin': '1.0.0' } }))
-        process.exit(0)
-      }, argv)
+      await runDesktopDshCli(environment, async () => ({
+        runCli: async () => {
+          writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'example-plugin': '1.0.0' } }))
+          process.exit(0)
+        },
+      }), argv)
 
       expect(environment).toEqual({ DSH_HOME: homeDir })
       expect(argv.slice(2)).toEqual(['plugin', '--profile', 'desktop', 'add', 'example-plugin'])
@@ -134,13 +146,15 @@ describe('packaged dsh bootstrap', () => {
         DSH_HOME: homeDir,
         DSH_DESKTOP_DEFAULT_PROFILE: 'desktop',
         [DESKTOP_INSTALL_RECOVERY_STATE_ENV]: statePath,
-      }, async () => {
-        writeFileSync(webManifest, JSON.stringify({
-          name: 'web-profile',
-          dependencies: { 'example-plugin': '1.0.0' },
-        }))
-        process.exit(0)
-      }, [process.execPath, '/app/desktop-cli.js', 'plugin', '--profile', 'web', 'add', 'example-plugin'])
+      }, async () => ({
+        runCli: async () => {
+          writeFileSync(webManifest, JSON.stringify({
+            name: 'web-profile',
+            dependencies: { 'example-plugin': '1.0.0' },
+          }))
+          process.exit(0)
+        },
+      }), [process.execPath, '/app/desktop-cli.js', 'plugin', '--profile', 'web', 'add', 'example-plugin'])
 
       expect(JSON.parse(readFileSync(statePath, 'utf8'))).toMatchObject({
         profileName: 'web',
@@ -168,10 +182,12 @@ describe('packaged dsh bootstrap', () => {
         DSH_HOME: homeDir,
         DSH_DESKTOP_DEFAULT_PROFILE: 'desktop',
         [DESKTOP_INSTALL_RECOVERY_STATE_ENV]: statePath,
-      }, async () => {
-        writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'broken-plugin': '0.0.0' } }))
-        process.exit(1)
-      }, [process.execPath, '/app/desktop-cli.js', 'plugin', 'add', 'broken-plugin'])
+      }, async () => ({
+        runCli: async () => {
+          writeFileSync(manifestPath, JSON.stringify({ dependencies: { 'broken-plugin': '0.0.0' } }))
+          process.exit(1)
+        },
+      }), [process.execPath, '/app/desktop-cli.js', 'plugin', 'add', 'broken-plugin'])
 
       expect(readFileSync(manifestPath, 'utf8')).toBe(originalManifest)
       expect(existsSync(statePath)).toBe(false)

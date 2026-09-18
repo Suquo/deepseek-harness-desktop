@@ -112,6 +112,30 @@ class CapturedDesktopCliExit {
   constructor(readonly code: number) {}
 }
 
+/**
+ * The packaged `dsh` entry. Since 0.1.5-rc.2 it runs itself only as the process
+ * entry (`import.meta.main`) and exports `runCli`; importing it does nothing on
+ * its own. `allowDesktopProfile` is carried by `patches/dsh@0.1.5-rc.2.patch`:
+ * upstream reserves the `desktop` profile for its own Electron app, and this
+ * shim is the Electron application that owns it here.
+ */
+interface DshCliEntry {
+  runCli(options: { allowDesktopProfile: boolean }): Promise<void>
+}
+
+/**
+ * Import the packaged CLI entry and run it for the desktop-owned profile.
+ * @param load - ESM loader for the entry module.
+ * @throws {Error} when the entry exports no `runCli`, rather than silently doing nothing.
+ */
+async function enterDshCli(load: (url: string) => Promise<unknown>): Promise<void> {
+  const entry = await load(DSH_ENTRY_URL) as Partial<DshCliEntry> | undefined
+  if (typeof entry?.runCli !== 'function') {
+    throw new Error(`packaged dsh entry ${DSH_ENTRY_URL} does not export runCli`)
+  }
+  await entry.runCli({ allowDesktopProfile: true })
+}
+
 /** Run one built-in-terminal add inside the same durable recovery boundary as Market installs. */
 async function loadWithInstallRecovery(
   load: (url: string) => Promise<unknown>,
@@ -136,7 +160,7 @@ async function loadWithInstallRecovery(
     )
   }) as typeof process.exit
   try {
-    await load(DSH_ENTRY_URL)
+    await enterDshCli(load)
   } catch (cause) {
     if (cause instanceof CapturedDesktopCliExit) capturedExitCode = cause.code
     else failure = cause
@@ -201,7 +225,7 @@ export async function runDesktopDshCli(
     await loadWithInstallRecovery(load, store)
     return
   }
-  await load(DSH_ENTRY_URL)
+  await enterDshCli(load)
 }
 
 function isDirectExecution(): boolean {
