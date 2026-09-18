@@ -35,8 +35,9 @@ describe('community market launcher', () => {
       actions: instance.actions,
       useStore,
       t,
-      useSessions: (() => undefined) as MarketLauncherProps['useSessions'],
-      useWorkspaces: (() => undefined) as MarketLauncherProps['useWorkspaces'],
+      // 0.1.5-rc.2's sidebar footer-action slot injects the panel hook in place
+      // of the session and workspace hooks; the launcher reads none of them.
+      usePanelInfo: (select => select({ activePanelId: null })) as MarketLauncherProps['usePanelInfo'],
     } satisfies MarketLauncherProps
 
     const { rerender } = render(<MarketLauncher {...props} />)

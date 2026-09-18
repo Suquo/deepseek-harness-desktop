@@ -37,6 +37,7 @@ describe('package integration contract', () => {
     expect(manifest.dsh?.client?.inject).toEqual([
       '@deepseek-ai/dsh-client-locale',
       '@deepseek-ai/dsh-client-ui-layout',
+      '@deepseek-ai/dsh-client-ui-renderer',
       '@deepseek-ai/dsh-client-ui-settings',
       '@deepseek-ai/dsh-client-ui-sidebar',
     ])

@@ -203,6 +203,7 @@ describe('published package surface', () => {
     expect(manifest.dsh?.client).toEqual({
       platform: 'web',
       inject: [
+        '@deepseek-ai/dsh-client-ui-renderer',
         '@deepseek-ai/dsh-client-ui-theme',
       ],
     })
@@ -916,8 +917,11 @@ describe('published package surface', () => {
     // The caret resolution is the load-bearing half: other upstream packages
     // carry a real `^0.1.5-rc.2` edge on the seam, so dropping it installs an
     // UNPATCHED nested copy that ships while every behavioural test stays
-    // green (those resolve from this workspace root).
-    for (const consumer of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-host-apiproxy']) {
+    // green (those resolve from this workspace root). Since 0.1.5-rc.2
+    // `dsh-base` is the only `dependencies` edge (`dsh-host-apiproxy` was
+    // retired; the other consumers declare the seam as a peer, which resolves
+    // from the parent and cannot nest a copy).
+    for (const consumer of ['@deepseek-ai/dsh-base']) {
       const consumerRequire = createRequire(workspaceRequire.resolve(`${consumer}/package.json`))
       expect(consumerRequire.resolve('@deepseek-ai/dsh-subagent/package.json')).toBe(seamManifest)
     }

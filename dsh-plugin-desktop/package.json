@@ -110,6 +110,7 @@
   "dsh": {
     "client": {
       "inject": [
+        "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-theme"
       ],
       "platform": "web"
@@ -167,6 +168,7 @@
     "@deepseek-ai/dsh-client-modules": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-store": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-attachment": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-chat": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-commands": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-conversation": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-directory-picker-browse": "0.1.5-rc.2",
@@ -174,6 +176,7 @@
     "@deepseek-ai/dsh-client-ui-input-trigger": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-layout": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-primitives": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-settings": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-sidebar": "0.1.5-rc.2",
     "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
@@ -281,6 +284,7 @@
     "@deepseek-ai/dsh-tool-subagent": "0.1.5-rc.2",
     "@electron/asar": "3.4.1",
     "@types/js-yaml": "^4.0.9",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^22.20.0",
     "@types/react": "^18",
     "electron": "43.4.0",
