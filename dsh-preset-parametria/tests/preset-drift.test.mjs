@@ -33,8 +33,10 @@ import {
 const EVIDENCE_DIR_ENV = desktopDeclaration('parametria-evidence', 'EVIDENCE_DIR_ENV')
 
 const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
+// Since 0.1.5-rc.2 the shipped presets live inside `dsh-agent-presets`
+// (upstream f94495e527); they were under `apps/cli/config/agent-presets` before.
 const UPSTREAM_STANDARD = join(
-  UPSTREAM_ROOT, 'apps', 'cli', 'config', 'agent-presets', 'standard', 'agent.cordis.yml',
+  UPSTREAM_ROOT, 'packages', 'preset', 'agent-presets', 'presets', 'standard', 'agent.cordis.yml',
 )
 
 /**
@@ -120,7 +122,7 @@ describe('parametria preset vs the pinned upstream `standard` preset', () => {
   it('states WHAT each reconfigured row became, not merely that it differs', () => {
     // Knowing which rows differ is only half a fence: without this, a second
     // accidental edit to an already-declared row would still pass.
-    const persona = ours.get('persona').config.text
+    const persona = ours.get('persona').config.prefix
     assert.match(persona, /subagent_validator/, 'the persona must route visual checks to the validator')
     assert.match(persona, /suquo-systems-parametria/, 'the persona must name the skill the run depends on')
     // The sandbox half of issue #9 item 1. Composition cannot inject a

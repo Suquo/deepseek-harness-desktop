@@ -30,7 +30,7 @@ import { describe, it } from 'node:test'
 import { PACKAGE_ROOT, REPO_ROOT, desktopDeclaration, indexRows, readComposition } from './helpers.mjs'
 
 const PRESET_DIR = join(PACKAGE_ROOT, 'preset')
-const persona = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml'))).get('persona').config.text
+const persona = indexRows(readComposition(join(PRESET_DIR, 'agent.cordis.yml'))).get('persona').config.prefix
 
 /**
  * DOT-PREFIXED workspace directories the persona instructs a run to create.

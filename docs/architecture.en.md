@@ -37,7 +37,7 @@ Every profile or mode switch disposes the current generation before starting the
 - **Web Client** contains the official Web UI and third-party browser contributions. It works over the loopback carrier and does not call Electron directly.
 - **Native runtime** adapts Electron BrowserWindow, the tray, filesystem/network operations, and installers. `desktopRuntime` is for Desktop-owned rows only.
 
-At the pinned 0.1.1-rc.2 release, `dsh-client-modules` publishes the client boot
+At the pinned 0.1.5-rc.2 release, `dsh-client-modules` publishes the client boot
 graph through the Host's structured `webserver/index-inject` table as
 `{ kind: "global", name: "__DSH_BOOT__", value: graph }`.
 `dsh-host-webserver` owns rendering that row as a `globalThis["__DSH_BOOT__"]`

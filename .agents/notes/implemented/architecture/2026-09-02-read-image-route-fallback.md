@@ -10,7 +10,7 @@ English | [中文](2026-09-02-read-image-route-fallback.zh.md)
 
 ## Decision
 
-The fork carries a root Yarn patch, `patches/dsh-tool-fs@0.1.1-rc.2.patch`, that turns the exact-modality gate in `assertImageCapableRoute` into a seam: after the calling route fails the gate, the tool emits the `fs/read-image-route` waterfall and, if a listener returns an image-capable candidate that passes the same modality check, activates it only after the image is durably admitted. With no listener the original refusal is thrown unchanged, so compatibility composition is inert.
+The fork carries a root Yarn patch, `patches/dsh-tool-fs@0.1.5-rc.2.patch`, that turns the exact-modality gate in `assertImageCapableRoute` into a seam: after the calling route fails the gate, the tool emits the `fs/read-image-route` waterfall and, if a listener returns an image-capable candidate that passes the same modality check, activates it only after the image is durably admitted. With no listener the original refusal is thrown unchanged, so compatibility composition is inert.
 
 The desktop plugin `dsh-plugin-desktop/parametria-read-image-fallback` answers that waterfall only in the Parametria preset: it nominates the same route and model as `subagent_validator` (held equal by a preset drift fence), keeps the remaining requests of the active turn on that route, projects the historical image block to stable text when the prior route is restored on the next turn, and releases its per-agent state on `agent/disposed`.
 

@@ -218,13 +218,14 @@ describe('capabilities the README says the base composition already provides', (
 
 describe('the session default model', () => {
   it('is deliberately left at the bundle default', () => {
-    // Issue #1's acceptance criterion is that a run whose MAIN model is
-    // text-only still produces successful subagent image reads. Pinning a
-    // vision model for the session here would make that untestable.
+    // The profile inherits the bundle default rather than pinning one. This
+    // snapshot is a tripwire: when upstream moves the default, the deferral
+    // reasoning in cordis.patch.yml must be re-read (it was at 0.1.5-rc.2,
+    // when the default became the image-capable `deepseek-flash`).
     assert.equal(patched.has('agent-default-model'), false)
     assert.ok(sameValue(bundles.get('agent-default-model').config, {
       provider: 'deepseek-official',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
     }), 'the bundle default changed; re-read the deferral reasoning in cordis.patch.yml')
   })
 })

@@ -32,14 +32,17 @@
 
 # The session's own default model is deliberately NOT patched here.
 #
-# `dsh-base` leaves it at `deepseek-official`/`deepseek-v4-flash` — text-only,
-# which is exactly the first-run configuration where the blind validator was
-# found. Pinning a vision model for the session would hide whether the
-# validator's own pin works, and issue #1's acceptance criterion is precisely
-# "a run whose MAIN model is text-only still produces subagent image reads that
-# succeed". A saved user selection outranks this row anyway, so pinning it
-# would change nothing for the operator and would cost the profile its
-# demonstration. Revisit only if issue #1 closes on different evidence.
+# Since 0.1.5-rc.2 `dsh-base` defaults to `deepseek-official`/`deepseek-flash`,
+# which declares image input. Through 0.1.1-rc.2 it was the text-only
+# `deepseek-v4-flash` — the first-run configuration where the blind validator
+# was found — and this row demonstrated that case by inheriting it. Issue #1's
+# acceptance criterion is still "a run whose MAIN model is text-only still
+# produces subagent image reads that succeed", but that run now needs a
+# text-only main model selected explicitly (e.g. `deepseek-v4-pro`); it no
+# longer happens by default. Pinning a text-only model here to keep the old
+# demonstration would downgrade every new session below the current upstream
+# default, and a saved user selection outranks this row anyway, so it stays
+# unpatched.
 
 # ── optional product subagent providers (Codex, Claude Code) ────────────────
 #
@@ -60,7 +63,7 @@
 #    available to the agent as ordinary tools.
 #
 # The packages are declared in this profile's `package.json` (pinned to the
-# same 0.1.1-rc.2 the desktop profile runs); each registers a dormant provider
+# same 0.1.5-rc.2 the desktop profile runs); each registers a dormant provider
 # at mount and spawns its pinned package-local CLI only when called.
 - insert:
     - id: subagent-codex

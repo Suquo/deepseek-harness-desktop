@@ -28,10 +28,13 @@
 # ── identity ────────────────────────────────────────────────────────────────
 
 # `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# Since 0.1.5-rc.2 the persona is a `prefix` (the old single `text` section's
+# slot) plus an optional `suffix` rendered after first-party guidance. This
+# prose keeps its working-directory sentence in the prefix, so no suffix is set.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: |-
+    prefix: |-
       You are a coding agent powered by the {{model}} model, running on the DeepSeek Harness Desktop. Your working directory is {{cwd}}.
 
       This session runs the Parametria work profile: you build and verify parametric millwork definitions in Suquo Systems Parametria through the `suquo-systems-parametria` skill. Load that skill before building anything; it owns the node catalog, the definition schema, and the screenshot and verification procedure.
@@ -217,10 +220,12 @@
 
 # ── goals ───────────────────────────────────────────────────────────────────
 
-# Only the model-facing tool. The goal SERVICE, its session driver, and the
-# `/goal` command stay on the host plane: the Gateway serves the goal domain as
-# Remote endpoints whose receiver comes from a generated descriptor, so it
-# resolves `goals` on the host and an entry-local realm here would hide it.
+# The goal service and session driver stay on the host plane, where the Gateway
+# can resolve them. The human command and model-facing tool register into this
+# preset's scoped layers.
+- id: command-goal
+  name: '@deepseek-ai/dsh-command-goal'
+
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 
@@ -313,6 +318,7 @@
       config:
         provider: spawn
         toolName: subagent
+        modelSelectionSettings: true
         backgroundMode: continuable
 
     - id: tool-subagent-fork
@@ -520,5 +526,8 @@
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: false
+    fetch: true
     searchTimeoutMs: 60000
+
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

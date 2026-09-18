@@ -109,17 +109,24 @@ decision is "inherit" or "adapt".
 3. <a id="bump-surface"></a>Move the whole **bump surface** the script enumerated.
    **This paragraph is the authoritative statement of what that surface holds; the
    rest of this file and `scripts/verify-layout.mjs` cross-reference it rather than
-   restating the arithmetic.** At `0.1.1-rc.2` it is **190** entries:
+   restating the arithmetic.** At `0.1.5-rc.2` it is **200** entries:
 
    | Where | Entries | Enforced by |
    |---|---|---|
-   | `dsh-plugin-desktop/package.json` `dependencies` | 100 | `pinSurface` |
+   | `dsh-plugin-desktop/package.json` `dependencies` | 114 | `pinSurface` |
    | `dsh-plugin-desktop/package.json` `devDependencies` | 6 | `pinSurface` |
-   | `dsh-community-market/package.json` `devDependencies` | 38 | `pinSurface` |
-   | `dsh-community-market/package.json` `peerDependencies` | 28 | `pinSurface` |
+   | `dsh-community-market/package.json` `devDependencies` | 37 | `pinSurface` |
+   | `dsh-community-market/package.json` `peerDependencies` | 27 | `pinSurface` |
    | `dsh-preset-parametria/profile/package.json` `dependencies` | 3 | `pinSurface` |
-   | root `package.json` `resolutions` selectors | 15 | `patchedPackages` |
-   | **total** | **190** | |
+   | root `package.json` `resolutions` selectors | 13 | `patchedPackages` |
+   | **total** | **200** | |
+
+   0.1.5-rc.2 moved the set both ways (it was 190 at `0.1.1-rc.2`): `dsh-client-runtime`
+   and `dsh-host-apiproxy` were retired upstream, the market gained `dsh-client-store`,
+   and sixteen packages joined the desktop `dependencies` — split-out peers of host
+   packages plus the first-party peers `verify:closure` reported as reachable but
+   undeclared. The resolutions lost the absorbed `dsh-llm-deepseek` patch and traded the
+   two `dsh-sandbox-windows-acl` selectors for one `dsh-win32-process` selector.
 
    **The fifth row is not a workspace manifest**, and that is why it went
    unguarded until 0.1.1-rc.2. It is the profile TEMPLATE
@@ -267,20 +274,26 @@ For each patch:
 - [ ] **The covered behavior is re-tested at the new pin**, by the test that covers it
       or by hand if none does. Naming the behavior is part of the PR body.
 
-Per-patch specifics as of `0.1.1-rc.2`:
+Per-patch specifics as of `0.1.5-rc.2`:
 
 | Patch | Target | Behavior to re-test | Hazard |
 |---|---|---|---|
 | `app-builder-lib@26.15.7` | `out/codeSign/macCodeSign.js` | macOS signing path | **Not** harness-versioned — moves with electron-builder, not with the pin. Leave it alone during a pin bump. |
-| `dsh-app-boot` | `lib/index.js` (patch-list parsing) | app boot + patch list | Zero-context hunk. Relocated one line at rc.8 and applied on offset; applied clean at 0.1.1-rc.2. |
-| `dsh-client-ui-directory-picker-browse` | `lib/client.js` + 2 `.d.ts` | directory browse UI | 14 hunks — by far the largest; expect the most conflict here. **The only patch rc.8 actually broke**: its bundler now emits `DirectoryBrowser_module_css_default` alphabetically sorted, which moved a pure-insertion point. Re-cut with the added key in its alphabetical slot so the context survives the next sort. That re-cut held: all 14 hunks applied unchanged at 0.1.1-rc.2. |
-| `dsh-client-ui-workspace` | `lib/client.js` | workspace client UI | — |
-| `dsh-llm-deepseek` | `lib/index.js` (response translation) | **provider wire** | Charter rule: a change to what reaches the provider's wire is not resolved by a green gate. Keep the issue open pending a live provider datum. Relocated 134 lines at rc.8 and a further ~742 lines at 0.1.1-rc.2 (patched region moved from line 321 to 1063), content unchanged — the surrounding `translate` streaming `tool_calls` loop is identical. |
-| `dsh-tool-fs` | `lib/index.js` + `lib/types/index.d.ts` + `lib/types/read-image.d.ts` | `read_image` exact-modality fallback seam and activation after durable image admission | Re-validate the `fs/read-image-route` event contract, exact fallback model lookup, fail-closed refusal/logging, and post-admission activation. Re-check the upstream-owned `fs/` namespace for a future event-name collision. |
-| `dsh-subagent` | `lib/index.js` (continuable lifecycle + notice + export list) + `lib/types/{lifecycle,out-of-process,types}.d.ts` | the exported `limitSubagentDiagnostic` seam plus unconditional continuable settlement diagnostics: terminal turn and teardown failures reach the parent notice and `subagent/end` as bounded `{code} — {message} (child session {id})` detail | **RE-VALIDATE:** all 9 context-bearing hunks, both error shapes, teardown failure, the `subagent/end` diagnostic, the 4096-byte UTF-8 bound, and the clean-completion negative case in `subagent-error-surface.spec.ts`. Also re-check the one-shot driver's import/export pairing — this patch's pair is `dsh-subagent-in-process-driver`, and the two must move together or the driver's import resolves to nothing. The `{code} — {message} (child session {id})` wording is duplicated across both patches and must move together. Applied clean at 0.1.1-rc.2. |
-| `dsh-subagent-in-process-driver` | `lib/index.js` | in-process subagent failure diagnostics: the child's terminal turn failure surfaces as the run's `diagnostic` instead of a bare stop reason | **RE-VALIDATE:** 4 hunks, one of which is the same barrel-import single-line hazard as `dsh-subagent` above. The `{code} — {message} (child session {id})` wording is duplicated across both patches and must move together. Applied clean at 0.1.1-rc.2. |
-| `dsh-sandbox-windows-acl` | `lib/types-CNjZgO4h.js` | Windows ACL sandbox spawn | **Hash-named target.** The bundler's content hash can change across releases, and then this patch fails by *path*, not by content — the target must be re-identified before the hunks can be judged. It did **not** fire at rc.8 or at 0.1.1-rc.2: the filename `lib/types-CNjZgO4h.js` has now held across three releases. Treat it as a hazard to check, not one that fires every time. |
-| `pi-ai@0.82.1` (#60) | `dist/api/openai-completions.js` (upstream source `src/api/openai-completions.ts`, per the shipped sourcemap) | **provider wire** — a bare OpenRouter route must send no `reasoning` field when nothing selects an effort | **Not** harness-versioned, but not independent of the pin either: `@earendil-works/pi-ai` arrives TRANSITIVELY through `@deepseek-ai/dsh-llm-pi-ai`, so a harness bump can move it while the patch filename still names the old version. Its single selector is a caret (`npm:^0.82.1`); when the transitive range moves the selector matches nothing, the patch applies to nothing, and `yarn install` still succeeds. **It is therefore NOT in `upstream-watch.mjs`'s `revalidation` set** (that set is `version === runtimePackageVersion`), so nothing above puts it on the bump checklist by itself — the trigger is `check:layout`, which since #60 fails on a patch that has resolutions entries but no `patch:` locator in the lockfile, plus `dsh-plugin-desktop/tests/pi-ai-bare-route-reasoning.spec.ts`, which fails on the behavior. Re-validate it on every bump anyway. Target path is stable, not hash-named. Charter rule: a wire change is not resolved by a green gate — the issue stays open pending a live provider datum. |
+| `dsh-app-boot` | `lib/index.js` (patch-list parsing) | app boot + patch list | Zero-context hunk. Relocated one line at rc.8, then 359 lines at 0.1.5-rc.2 (still inside `parsePatchList`, meaning re-read and unchanged). |
+| `dsh-client-ui-directory-picker-browse` | `lib/client.js` + 2 `.d.ts` | directory browse UI | 14 hunks — by far the largest; expect the most conflict here. rc.8 broke it (the bundler sorts `DirectoryBrowser_module_css_default` keys, so the added key lives in its alphabetical slot). 0.1.5-rc.2 broke two hunks by CONTEXT only: upstream thinned borders `1px` → `.5px` inside the long CSS line, and renamed `ctx.workspaces` → `ctx.uiWorkspace` around the win32 bridge. Re-cut with the insertions byte-identical. Our button still states `1px` — a look-and-feel follow-up, not a behavior change. |
+| `dsh-client-ui-workspace` | `lib/client.js` | workspace client UI | Relocated 371 lines at 0.1.5-rc.2; still on `WorkspaceBrowser`'s root, and upstream still has no OS-drop handling there. |
+| `dsh-tool-fs` | `lib/index.js` + `lib/types/index.d.ts` + `lib/types/read-image.d.ts` | `read_image` exact-modality fallback seam and activation after durable image admission | Re-validate the `fs/read-image-route` event contract, exact fallback model lookup, fail-closed refusal/logging, and post-admission activation. Re-check the upstream-owned `fs/` namespace for a future event-name collision (at 0.1.5-rc.2: `observed`, `edit-intent`, `write-intent`, `promises`). Re-cut at 0.1.5-rc.2 around upstream's new `assertDeploymentAccepts`; the patched `assertImageCapableRoute` is byte-identical to the 0.1.1-rc.2 result. |
+| `dsh-subagent` | `lib/index.js` (continuable lifecycle + notice + export list) + `lib/types/{lifecycle,out-of-process,types}.d.ts` | the exported `limitSubagentDiagnostic` seam plus unconditional continuable settlement diagnostics: terminal turn and teardown failures reach the parent notice and `subagent/end` as bounded `{code} — {message} (child session {id})` detail | **RE-VALIDATE:** all 9 context-bearing hunks, both error shapes, teardown failure, the `subagent/end` diagnostic, the 4096-byte UTF-8 bound, and the clean-completion negative case in `subagent-error-surface.spec.ts`. Also re-check the one-shot driver's import/export pairing — this patch's pair is `dsh-subagent-in-process-driver`, and the two must move together or the driver's import resolves to nothing. The `{code} — {message} (child session {id})` wording is duplicated across both patches and must move together. Re-cut at 0.1.5-rc.2: the settlement notice moved into a top-level `createSettlementMessage`, so its hunk was re-applied there (indentation only). |
+| `dsh-subagent-in-process-driver` | `lib/index.js` | in-process subagent failure diagnostics: the child's terminal turn failure surfaces as the run's `diagnostic` instead of a bare stop reason | **RE-VALIDATE:** 4 hunks, one of which is the same barrel-import single-line hazard as `dsh-subagent` above. The `{code} — {message} (child session {id})` wording is duplicated across both patches and must move together. Re-cut at 0.1.5-rc.2: the barrel-import neighbours changed. |
+| `dsh-win32-process` | `lib/index.js` (`spawnPipedProcess`, `spawnJobProcess`) | restricted Windows shells start with a hidden console show state (`dwFlags` 257 + `wShowWindow: 0`) | **Moved here at 0.1.5-rc.2** from `dsh-sandbox-windows-acl` (whose hash-named `lib/types-*.js` no longer builds STARTUPINFO: the ACL spawns now delegate to this package). `spawnJobProcess` is SHARED with ordinary current-token spawns from `dsh-subprocess-local`, so the flag is scoped by `createName === "CreateProcessAsUserW"`; the show state is inert without flag `1`. A mechanical port would hide ordinary children too — a behavior change. Target path is not hash-named. Covered by `package.spec.ts` ("starts restricted Windows shells…"). |
+| `pi-ai@0.85.1` (#60) | `dist/api/openai-completions.js` (upstream source `src/api/openai-completions.ts`, per the shipped sourcemap) | **provider wire** — a bare OpenRouter route must send no `reasoning` field when nothing selects an effort | **Not** harness-versioned, but not independent of the pin either: `@earendil-works/pi-ai` arrives TRANSITIVELY through `@deepseek-ai/dsh-llm-pi-ai`, so a harness bump can move it while the patch filename still names the old version — **which happened at 0.1.5-rc.2** (`^0.82.1` → `^0.85.1`; the fence below caught it, the patch applied at +95 lines, not absorbed). Its single selector is a caret; when the transitive range moves the selector matches nothing, the patch applies to nothing, and `yarn install` still succeeds. **It is therefore NOT in `upstream-watch.mjs`'s `revalidation` set** (that set is `version === runtimePackageVersion`), so nothing above puts it on the bump checklist by itself — the trigger is `check:layout`, which since #60 fails on a patch that has resolutions entries but no `patch:` locator in the lockfile, plus `dsh-plugin-desktop/tests/pi-ai-bare-route-reasoning.spec.ts`, which fails on the behavior. Re-validate it on every bump anyway. Target path is stable, not hash-named. Charter rule: a wire change is not resolved by a green gate — the issue stays open pending a live provider datum. |
+
+**Retired at 0.1.5-rc.2:** `dsh-llm-deepseek` (streamed tool-call identity across empty
+deltas). Upstream absorbed it in `a1271a4903` ("keep streamed tool-call identity across
+empty deltas") as `acceptIdentity()`, which ignores empty **and** `null` identities and has
+its own tests; `dsh-plugin-desktop/tests/deepseek-streaming-tool-call.spec.ts` still guards
+the behavior against the unpatched package. It was a provider-wire patch, so its retirement
+stays pending a live provider datum under the same charter rule.
 
 Windows ACL / sandbox / packaging changes are release-gated: run
 `yarn workspace dsh-plugin-desktop verify:closure` and
@@ -332,7 +345,7 @@ adapt vs hold-back. Explicitly **not** a recommendation dressed as a finding.
 
 ## Maintaining this document
 
-Parts of this file are stamped to `0.1.1-rc.2` and go stale the moment a pin moves.
+Parts of this file are stamped to `0.1.5-rc.2` and go stale the moment a pin moves.
 The pin-bump PR that moves the pin updates them in the same PR — that is the one
 exception to "a pin-bump PR changes nothing else", because leaving them behind makes
 this document lie about the tree it describes:
@@ -343,11 +356,11 @@ this document lie about the tree it describes:
   `scripts/verify-layout.mjs` need no edit for a version change — they hold names —
   but a real change to upstream's package set moves them, and the gate holds them
   against the **tree**, so a stale one fails `check:layout` loudly;
-- the **per-patch table**, including its "as of `0.1.1-rc.2`" heading and any patch
+- the **per-patch table**, including its "as of `0.1.5-rc.2`" heading and any patch
   whose target file or hunk count changed. A patch added or dropped also moves
   `patchedPackages` in `scripts/verify-layout.mjs`.
 
-**The 190-entry bump surface is not the whole version-shaped surface, and this document
+**The 200-entry bump surface is not the whole version-shaped surface, and this document
 used to read as though it were.** `check:layout` fences the manifests; roughly 220
 further literals live outside them and are covered by other gates or by nothing at all.
 At rc.8 they were: `dsh-plugin-desktop/THIRD_PARTY_NOTICES.md` (regenerate with

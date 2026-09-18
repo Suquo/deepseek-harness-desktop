@@ -10,7 +10,7 @@
 
 ## 决定
 
-本分支携带根级 Yarn 补丁 `patches/dsh-tool-fs@0.1.1-rc.2.patch`，把 `assertImageCapableRoute` 中的精确模态门槛改造成一个接缝：当调用路由未通过门槛后，工具发出 `fs/read-image-route` waterfall；若某监听者返回一个通过同一模态检查的图像能力候选路由，则仅在图像被持久化接纳之后才激活它。没有监听者时抛出原始拒绝，因此兼容模式组合保持惰性。
+本分支携带根级 Yarn 补丁 `patches/dsh-tool-fs@0.1.5-rc.2.patch`，把 `assertImageCapableRoute` 中的精确模态门槛改造成一个接缝：当调用路由未通过门槛后，工具发出 `fs/read-image-route` waterfall；若某监听者返回一个通过同一模态检查的图像能力候选路由，则仅在图像被持久化接纳之后才激活它。没有监听者时抛出原始拒绝，因此兼容模式组合保持惰性。
 
 桌面插件 `dsh-plugin-desktop/parametria-read-image-fallback` 仅在 Parametria 预设中应答该 waterfall：它指定与 `subagent_validator` 相同的路由和模型（由预设漂移围栏保持一致），让当前回合的其余请求留在该路由上，在下一回合恢复原路由时把历史中的图像块投影为稳定文本，并在 `agent/disposed` 时释放其按 agent 保存的状态。
 
