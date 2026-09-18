@@ -1,152 +1,132 @@
-# Trial report — harness pin `dsh-v0.1.1-rc.2` → `dsh-v0.1.5-rc.2`
+# Pin bump report — harness `dsh-v0.1.1-rc.2` → `dsh-v0.1.5-rc.2`
 
-**Artifact type:** Lane C trial hand-over (`upstream-watch.md` § "The eval decision tree").
-Evidence, not a ruling. **Date:** 2026-09-18, pearl (Windows 11).
-**Branch / worktree:** `up/harness-0.1.5-rc.2` at `~/.dsh-resolver-worktrees/up-harness-0.1.5-rc.2`
-(local only, not pushed). **Brief it executes:** `.engineering/plans/harness-pin-bump-0.1.5-rc.2.plan.md`
-(untracked in the primary checkout).
+**Artifact type:** Lane C trial + adapt report (`upstream-watch.md` § "The eval decision tree").
+**Date:** 2026-09-18, pearl (Windows 11). **Branch / worktree:** `up/harness-0.1.5-rc.2` at
+`~/.dsh-resolver-worktrees/up-harness-0.1.5-rc.2` (local only, not pushed).
+**Brief executed:** `.engineering/plans/harness-pin-bump-0.1.5-rc.2.plan.md` (untracked in the
+primary checkout). **Ruling:** the owner ruled **ADAPT** after the first trial pass stopped on
+the host/client API breaks.
 
-## Verdict for the RM
+## Outcome
 
-**Not a clean inherit.** The manifest surface, lockfile and every patch move cleanly, and
-`check:layout` is green — but the desktop's own host and client code does not typecheck
-against 0.1.5-rc.2. Upstream changed APIs the desktop integrates with (profiles, settings,
-agent presets, the client slot system, the conversation snapshot). The choice between
-**adapt**, **partial hold-back** and **skip** is the RM/owner ruling this report exists for.
+- Full headless gate **green**: `corepack yarn check` exit 0 (layout, electron, fabric/market
+  docs, market 272 tests, preset 162, desktop 887, `verify:closure` 247 nodes closed,
+  `verify:cli`, `verify:loader`, `verify:profile`, `verify:licenses` 521 packages).
+  Baseline on the unchanged tree was also green, so nothing red was inherited.
+- `check:win-package` green (11 files, 173 tests) — required because the Windows ACL patch moved.
+- Running-app validation in an isolated lane (`DSH_HOME` + `--user-data-dir` under
+  `~/.dsh-lane-c`), operator's `~/.dsh` and `%APPDATA%\DSH Desktop` verified byte-identical
+  afterwards:
+  - boots clean on the default profile (error log: only the expected "previous run did not
+    shut down cleanly" after a forced stop);
+  - the renderer authenticates (anonymous `GET /` → 401; the window loads the real UI, no
+    token in its history); Plugin Market loads; 55 client boot entries;
+  - branding holds: served `<title>` is `Parametria`; the hero headline's upstream text is
+    hidden and the `::before` override renders in its slot;
+  - the host's runtime catalog is `dsh-llm-deepseek@0.1.5-rc.2` with **`deepseek-flash`
+    (`DeepSeek-V41-Flash`, text + image, `systemPromptUpdate: in-history`) first**. The
+    Models page lists providers only until an API key exists; no key was put in the lane.
 
-Baseline (unchanged tree, same worktree, same toolchain): full `corepack yarn check` **green**
-(exit 0), so every red below is introduced by the bump.
-
-## Why this bump (the user-visible symptom)
-
-Confirmed from source at the tag, not inferred:
+## Why (the symptom)
 
 | Pin | `llm-deepseek` built-in catalog |
 |---|---|
-| `0.1.1-rc.2` (current) | `deepseek-v4-flash`, `deepseek-v4-pro`, `deepseek-v4-flash-vision-exp` |
-| `0.1.5-rc.2` | **`deepseek-flash`** (`[text, image]`, `systemPromptUpdate: in-history`) + the three above |
-| `0.1.6-alpha.2` | `deepseek-flash`, `deepseek-v4-pro` (legacy ids dropped; no new model) |
+| `0.1.1-rc.2` | `deepseek-v4-flash`, `deepseek-v4-pro`, `deepseek-v4-flash-vision-exp` |
+| `0.1.5-rc.2` | **`deepseek-flash`** (text + image) + the three above |
+| `0.1.6-alpha.2` | `deepseek-flash`, `deepseek-v4-pro` (no newer model) |
 
-`0.1.5-rc.2` is the smallest pin that ships the current model. The operator's machine already
-has it via the `~/.dsh/settings.yaml` catalog override (brief §2) — nothing here is urgent.
+## What moved, commit by commit (15 commits on the branch)
 
-## Done and verified in this trial
+1. **Pin surface** — gitlink `fb2c4b9e69`, `upstream.json`, 200-entry surface (was 190),
+   lockfile by Yarn 4.18.0; retired `dsh-client-runtime` / `dsh-host-apiproxy` removed and
+   their imports repointed (`cordis` `Context`, `ui-conversation/client`,
+   `api-workspace-controller/client`, `client-store`).
+2. **Patches** — see the table below.
+3. **Runtime graph** — 16 first-party packages joined desktop `dependencies` (split-out peers
+   and the peers `verify:closure` reported), `ui-chat` / `ui-renderer` (slot system),
+   `schemastery ^3.18.2`, `lexical` / `@types/mdast` type deps, market type-only devDeps.
+4. **cordis 4.0.1 → 4.0.2** (+ plugin-group/include/loader/timer): two cordis runtimes had
+   been installed (211 packages nested under `@deepseek-ai/dsh`); now one per workspace.
+5. **Host adaptation** — `settingsNamespace` → literals; `LocaleId` widened;
+   `ProfileTemplate` `{ bundles, patchReload }`; async module-fallback heal awaited before
+   profile prep; agent-preset `RemoteError` codes; `SubprocessHandle.pid` removed.
+6. **Client adaptation** — slot declarations moved to `ui-renderer` / `ui-chat`; the advanced
+   frame implements upstream's `ILayout` (`main` keyed panels + `rightbar`); the turn-cost
+   badge keeps its per-message placement (slot moved to `ui-chat`) and reads trajectory via
+   the hook that activates the lazily assembled target; folder drop uses
+   `ctx.uiWorkspace.startSession`; hero branding follows the new title group.
+7. **Parametria preset** — `dsh-persona` replaced `text` with a required `prefix`: without
+   the port the persona row is REJECTED (`$.prefix missing required value`, verified against
+   the real schema) and the run loses its instructions. Parity rows inherited from upstream
+   `standard`; drift fixture follows the moved shipped presets; default-model tripwire
+   re-read (see below).
+8. **Packaged CLI** — upstream `bin.js` now runs only as the process entry and exports
+   `runCli`; the desktop shim imported it and silently did nothing (built-in terminal `dsh`).
+   The shim now calls `runCli({ allowDesktopProfile: true })` and fails loudly otherwise.
+9. **Browser authentication** — 0.1.5-rc.2 requires a launch-token → signed-cookie exchange
+   for every index/RPC request. The shell now exchanges `ctx.connection.authenticatedUrl()`
+   in the window's own session before `loadURL`; without this the window opened on a 401.
+10. **Re-anchored specs**, capture-tool citations re-verified at the new lines, docs
+    restamped with their bilingual records, notices regenerated, `upstream-watch.md` tables.
 
-- Gitlink → `fb2c4b9e69` (tag `dsh-v0.1.5-rc.2`, submodule `package.json` reads `0.1.5-rc.2`);
-  `upstream.json` moved.
-- Bump surface moved: desktop deps 100 / devDeps 6, market devDeps 38 / peerDeps 28, preset
-  profile 3 — matching the step-3 table. No `0.1.1-rc.2` remains in any manifest or in
-  `yarn.lock`; lockfile regenerated by **Yarn 4.18.0** (`__metadata.version: 10`).
-- **Retired packages** (no version after `0.1.1-rc.2`; only archived notes mention them at the tag):
-  - `dsh-host-apiproxy` — removed from both manifests and `pinSurface`.
-  - `dsh-client-runtime` — removed from both manifests, **both `dsh.client.inject` lists**,
-    `pinSurface`, and both `tsdown` externals. Imports repointed (same symbols, new homes):
+## Patches
 
-    | Symbol(s) | New source |
-    |---|---|
-    | `ClientContext` | `Context` from `@deepseek-ai/cordis` (the old export was `type ClientContext = Context`) |
-    | `AssistantMessageNode`, `ConversationNode`, `ConversationSnapshot` | `@deepseek-ai/dsh-client-ui-conversation/client` |
-    | `WorkspaceId`, `WorkspaceView` | `@deepseek-ai/dsh-api-workspace-controller/client` (new desktop devDep) |
-    | `defineStore`, `EngineStoreHandle` (**runtime** import in the market) | `@deepseek-ai/dsh-client-store` (market devDep + bundler external; provided at runtime by the client module loader — the fork parent's `verify-client-loader.mjs` asserts the same) |
-
-  - `dsh-client-store` also added to desktop devDeps: upstream client packages' declarations
-    import it, and without it 15 TS2307 errors cascade.
-- `check:layout` green.
-
-## Patches — all ten, re-validated
-
-Offline dry-runs used GNU `patch -F 0` with the OLD version as control, then Yarn's own applier
-(install) and a marker check on **every** installed copy, including the new nested copies
-under `@deepseek-ai/dsh/node_modules` (all carry their patch).
-
-| Patch | Result at 0.1.5-rc.2 | Notes |
+| Patch | Result | Notes |
 |---|---|---|
-| `dsh-llm-deepseek` | **RETIRED — absorbed upstream** | Upstream `a1271a4903` "keep streamed tool-call identity across empty deltas" adds `acceptIdentity()` (ignores empty **and** `null`), with tests. Patch file, selector and `patchedPackages` row removed. Provider wire → **pending live confirmation**. |
-| `dsh-sandbox-windows-acl` | **MOVED → `dsh-win32-process`** — ⚠ decision | Upstream moved STARTUPINFO construction into `@deepseek-ai/dsh-win32-process`. One patched site (`spawnJobProcess`) is shared with ordinary current-token spawns (`dsh-subprocess-local`). Carried the **scoped** re-cut: `dwFlags: createName === "CreateProcessAsUserW" ? 257 : 256` (the show state is ignored without flag `1`), preserving "hide confined Windows shells" (`5d04e03391`) exactly. The mechanical port would also hide ordinary subprocesses — a behavior change, not carried. New selector `@deepseek-ai/dsh-win32-process@npm:^0.1.5-rc.2` (both dependents use caret). Package test re-anchored. |
-| `dsh-subagent` | re-cut, behavior-preserving | Hunks 2/3 context-only; hunk 5 re-applied by hand (notice moved to `createSettlementMessage`), indentation only; export list re-anchored. Diagnostic wording byte-identical with the driver. |
-| `dsh-subagent-in-process-driver` | re-cut, behavior-preserving | Barrel-import hunk re-anchored; `limitSubagentDiagnostic` pairing intact. |
-| `dsh-tool-fs` | re-cut, behavior-preserving | Two hunks re-anchored around upstream's new `assertDeploymentAccepts`; `assertImageCapableRoute` byte-identical to the old patched result. `fs/read-image-route` does not collide (upstream `fs/` events: `observed`, `edit-intent`, `write-intent`, `promises`). The hunk that failed on both versions was a hand-cut asymmetric-context artifact; the re-cut is a plain `git diff`. |
-| `dsh-client-ui-directory-picker-browse` | re-cut, behavior-preserving | CSS insertion re-anchored byte-identically (upstream moved borders 1px → .5px, breaking context); win32 bridge re-anchored (`ctx.workspaces` → `ctx.uiWorkspace` in context). **Follow-up (Lane D):** our button still uses `1px`. |
-| `dsh-app-boot` | rename only | Zero-context hunk lands at +359 inside `parsePatchList`; meaning verified. |
-| `dsh-client-ui-workspace` | rename only | Lands at +371 on `WorkspaceBrowser`'s root; upstream has no OS-drop handling there. |
-| `pi-ai` | **moved `0.82.1` → `0.85.1`** | `dsh-llm-pi-ai@0.1.5-rc.2` now pulls `^0.85.1`, so the `^0.82.1` selector matched nothing (caught by the #60 fence). Not absorbed upstream; both hunks apply (+95 lines). Renamed + selector moved. Provider wire → **pending live confirmation**. The unpatched `deepseek` thinking-format branch existed at 0.82.1 too — unchanged scope. |
-| `app-builder-lib@26.15.7` | untouched | Not harness-versioned. |
+| `dsh-llm-deepseek` | **RETIRED** | Absorbed upstream (`a1271a4903`, `acceptIdentity`). `deepseek-streaming-tool-call.spec.ts` passes unchanged against the unpatched package. Provider wire → pending live datum. |
+| `dsh-sandbox-windows-acl` → **`dsh-win32-process`** | moved, scoped | STARTUPINFO moved packages; the job spawner is shared with ordinary spawns, so the hidden show state is scoped to `CreateProcessAsUserW` (behavior-preserving). |
+| **`dsh`** | **new** | `runCli({ allowDesktopProfile })` — upstream reserved the `desktop` profile for its own Electron app (`19444907f0`). Ported from the fork parent, minus its unrelated `windowsHide` hunk. |
+| `dsh-subagent`, `-in-process-driver`, `dsh-tool-fs`, `directory-picker-browse` | re-cut | Behavior-preserving; no hunk absorbed upstream. |
+| `dsh-app-boot`, `dsh-client-ui-workspace` | rename | Meaning re-read at the new offsets. |
+| `pi-ai` | `0.82.1` → `0.85.1` | Transitive range moved (the #60 fence caught the dead selector); not absorbed. Spec re-anchored to a model still in the bug class; the incident model is now fixed upstream. Provider wire → pending live datum. |
+| `app-builder-lib` | untouched | Not harness-versioned. |
 
-## What breaks (the adapt surface)
+## Behavior changes inherited from upstream (not fixed here, by rule)
 
-`corepack yarn build` / `typecheck` fail. Distinct errors, deduplicated across tsconfigs:
+- **Default model** is now `deepseek-flash` (image-capable) in `dsh-base`. Issue #1's
+  "text-only main model" demonstration no longer happens by default; it needs an explicit
+  text-only selection (`deepseek-v4-pro`).
+- **Parametria parity rows:** `/goal` command, `present` tool, subagent
+  `modelSelectionSettings: true`, web `fetch: true`.
+- **Mis-routed delegation** fails in upstream's pre-creation route preflight (PR #2663) with
+  a clear provider error and no child session (was `NO_ADAPTER` from the child).
+- **Advanced mode right panel:** visibility per session (upstream's model), overhang/fullscreen
+  presentations, rail collapse on narrow windows. Our geometry (360 / 300–520 / centre 640) kept.
+- **Browser auth:** a copied Web URL opened in an external browser now needs the token.
 
-**Host (`dsh-plugin-desktop/src`, 6 files; market 1 file)**
-- `settingsNamespace` no longer exported by `@deepseek-ai/dsh-settings` — `index.ts`,
-  `notifications.ts`, market `host/routes.ts`.
-- `ProfileTemplate` is no longer iterable / a `string[]` — `desktop-plugins.ts:39`,
-  `profile-manager.ts:154`, `profile.ts:166,262`.
-- `Profile` now requires `patchReload` — `profile.ts:291`; an upstream call lost an argument —
-  `profile.ts:423`.
-- Locale getter widened to `string` — `index.ts:258,275`.
-- `PresetExistsError` / `UnknownPresetError` no longer named exports of `dsh-agent-presets` —
-  `windows-agent-presets.ts`.
+## Follow-ups to file before the PR opens
 
-**Client (`src/client`, 6 files) — desktop-owned UI mounted on upstream slots**
-- `ctx.slots` not on `Context` — `advanced-shell.ts`, `cost-surface.ts` (the fork parent still
-  uses `ctx.slots` at this pin, so this may be type plumbing rather than a removal).
-- Slot names `root` and `conversation.chat.assistant-actions` no longer exist; injected props
-  `messageId` / `useSession` gone — `AdvancedFrame.tsx`, **`TurnCostBadge.tsx`**.
-- `ConversationSnapshot.chat` gone — `turn-cost.ts`; `IWorkspaces.startSession` gone —
-  `client/index.ts` (workspace folder drop).
-- `lexical` types unresolved (a devDependency of `ui-conversation`).
+1. Live provider confirmation for the two wire patches (`dsh-llm-deepseek` retirement, `pi-ai`).
+2. Lane D: directory-picker button border `1px` vs upstream `.5px`; advanced right-panel
+   sizing (upstream 45% / 70% cap vs our 360px).
+3. Issue #1: decide how the text-only-main demonstration is exercised now.
+4. Parametria preset on a fresh home: its three profile packages are not installed by
+   `install-profile`, so the profile's plugin tree fails to load (**pre-existing** — reproduced
+   identically on the unchanged 0.1.1-rc.2 checkout).
+5. Unfenced upstream line citations in `preset/agent.cordis.yml` (e.g. `tool-subagent:372`)
+   were already stale at 0.1.1-rc.2; re-derive or fence them.
+6. Upstream reports: `dsh-subagent`'s `SessionProjectionStateMap` augmentation is unreachable
+   from its published types (shimmed in `tests/upstream-subagent-projection-shim.d.ts`, which
+   turns into TS2717 once fixed).
+7. Optional: profile-scoped module-fallback heal (new upstream behavior, deliberately not adopted).
 
-**Tests (~9 files):** `CallId` no longer exported by `dsh-llm` (upstream uses `brandString`),
-`Session.events` gone, agent creation now async, `ControlledSubprocess.pid` gone,
-agent-presets option shape changed.
+## Cross-platform notes
 
-**Tooling:** duplicate `@deepseek-ai/schemastery` copies raise TS6200 global-declaration
-conflicts.
+- The `dsh-win32-process` patch only executes on Windows; macOS/Linux are unaffected by it.
+- The browser-auth fix is platform-neutral (Electron `session.fetch`), but it was validated
+  in a running app on **Windows only**. macOS/Linux GUI behavior is unverified here; CI's
+  `desktop-macos` (`dist:mac-smoke`) and `check` (ubuntu) jobs are the next observers.
+- The lockfile was written by **Yarn 4.18.0 via Corepack on Node 24.19.0**. CI builds on Node
+  22.23.2 (#87); the lockfile format depends on the Yarn release, not Node.
+- **This machine's `~/.yarnrc.yml`** (`yarnPath: yarn-4.9.1`) silently replaced the pinned
+  Yarn for every checkout under the home folder, and a license-check child process dropped the
+  `YARN_IGNORE_PATH` workaround. The owner renamed it to `~/.yarnrc.yml.bak` on 2026-09-18.
+  Other fleet machines (Omarchy, macOS) may carry the same file — a #87-class audit item.
 
-**New split-out peers the desktop does not provide** (`YN0002`): `dsh-http-proxy`
-(← `dsh-subprocess`), `dsh-util-time` (← `dsh-subagent`), `dsh-util-values` (← `dsh-agent`),
-`dsh-workspace` and `dsh-host-directory-picker` (← `dsh-api-workspace-controller`). The first
-three are runtime peers of host packages — per rc.8 precedent they join desktop
-`dependencies` (and `pinSurface`).
+## Phase 2 (after merge) — operator's machine
 
-### Cost signal
-
-The fork parent (`anywhere-labs`) ships this exact commit as its stable channel. Its port of
-the same shared files is +1716/−1049 lines across 11 files, interleaved with its own feature
-work, and it **deleted** two features this fork keeps (`workspace-folder-drop.ts`,
-`windows-agent-presets.ts`) — usable as an API-mapping reference, not mergeable. Our side of
-those files is almost purely additive since the merge base (+1346/−4), and three affected
-client files (`cost-surface.ts`, `turn-cost.ts`, `TurnCostBadge.tsx`) exist only in this fork.
-
-## Rulings needed
-
-1. **Adapt vs hold-back vs skip** for the host/client API breaks above. The client-slot items
-   are behavior-bearing (where the turn-cost badge and the advanced frame mount).
-2. **The ACL patch move to `dsh-win32-process`** (scoped re-cut) — new patched package + selector.
-3. Whether the model-catalog symptom warrants a narrower interim — it is already mitigated on
-   the operator's machine by the settings override.
-
-## Not yet done (whatever the ruling)
-
-- Out-of-fence literals: `dsh-plugin-desktop` READMEs (+ i18n record), market docs
-  `install-and-uninstall` / `market-shell` (+ i18n records), `.agents` pinned-upstream and
-  read-image-route notes (+ i18n records), `docs/architecture*.md` (claim re-verified true at
-  the tag: `dsh-client-modules` still emits `{kind:'global', name:'__DSH_BOOT__'}`), both
-  preset `cordis.patch.yml` comments, `upstream-watch.md` step-3 and per-patch tables.
-  Done: market `DSH_RUNTIME_VERSION`, its install fixture and contract assertions,
-  `bug_report.yml`.
-- `THIRD_PARTY_NOTICES.md` regeneration (`verify:notices` writes it).
-- `package.spec.ts:912` still names `dsh-host-apiproxy` as a consumer carrying the caret edge on
-  `dsh-subagent`; it needs the 0.1.5-rc.2 consumer (derive from the lockfile).
-- Full foreground `corepack yarn check`, then `verify:closure` and `check:win-package`.
-- Live provider confirmation for the two wire patches (`dsh-llm-deepseek` retirement, `pi-ai`).
-- Phase 2 on the operator's machine, including removing the settings override.
-
-## Environment finding (this machine)
-
-`~/.yarnrc.yml` sets `yarnPath: .yarn/releases/yarn-4.9.1.cjs`; Yarn merges rc files up the
-tree, so in any checkout under the home directory `corepack yarn` silently runs **4.9.1**, not
-the pinned 4.18.0. `--immutable` then fails (`YN0028`, lockfile v10 → v8), and a plain
-`yarn install` would rewrite the lockfile in the wrong format — `check:layout` checks only the
-`packageManager` field and would not notice. Every command in this trial ran with
-`YARN_IGNORE_PATH=1`. Same class as #87.
+Stop the app → `git pull --ff-only` → `git submodule update --init --recursive` →
+`corepack yarn install --immutable` → `corepack yarn check` → relaunch. Then **remove the
+`llm-deepseek` section from `~/.dsh/settings.yaml`** (its replace-by-value `models` array would
+hide `systemPromptUpdate: in-history` on the built-in `deepseek-flash`), and confirm with an
+image round-trip on `deepseek-flash`.
