@@ -582,13 +582,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/cordis-plugin-group@npm:1.0.1":
-  version: 1.0.1
-  resolution: "@deepseek-ai/cordis-plugin-group@npm:1.0.1"
+"@deepseek-ai/cordis-plugin-group@npm:1.0.2":
+  version: 1.0.2
+  resolution: "@deepseek-ai/cordis-plugin-group@npm:1.0.2"
   peerDependencies:
-    "@deepseek-ai/cordis": ^4.0.1
-    "@deepseek-ai/cordis-plugin-loader": ^1.0.2
-  checksum: 10c0/70f4f0d85ec32b0799f2f77b7db287491dd369728713dcc36e05408a6db537595c8a081fd3209170ca251e538016b524800a9f9a2962b67af1c073014e99a3de
+    "@deepseek-ai/cordis": ^4.0.2
+    "@deepseek-ai/cordis-plugin-loader": ^1.0.3
+  checksum: 10c0/8aac9f07082fb3db984e000a07cd8d14306aabc02ab50623eaf0f90903516dd54a9a65c0fd92bcd0a70311cc2de59ffc5581b900486876effb8688ab96ced1c5
   languageName: node
   linkType: hard
 
@@ -608,20 +608,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/cordis-plugin-include@npm:1.0.6":
-  version: 1.0.6
-  resolution: "@deepseek-ai/cordis-plugin-include@npm:1.0.6"
-  dependencies:
-    "@deepseek-ai/cosmokit": "npm:^1.8.2"
-    js-yaml: "npm:^4.1.0"
-  peerDependencies:
-    "@deepseek-ai/cordis": ^4.0.1
-    "@deepseek-ai/cordis-plugin-loader": ^1.0.2
-  checksum: 10c0/ed498b978e59f0a1b8d49416fbeca506db13f7f653370a37b363ad5a43118c530ec0ea68eb4e03d35acce9892e080e56d5209991adf0cc029e9538e2b9d1b6de
-  languageName: node
-  linkType: hard
-
-"@deepseek-ai/cordis-plugin-include@npm:^1.0.7":
+"@deepseek-ai/cordis-plugin-include@npm:1.0.7, @deepseek-ai/cordis-plugin-include@npm:^1.0.7":
   version: 1.0.7
   resolution: "@deepseek-ai/cordis-plugin-include@npm:1.0.7"
   dependencies:
@@ -634,22 +621,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/cordis-plugin-loader@npm:1.0.2":
-  version: 1.0.2
-  resolution: "@deepseek-ai/cordis-plugin-loader@npm:1.0.2"
-  dependencies:
-    "@deepseek-ai/cosmokit": "npm:^1.8.2"
-  peerDependencies:
-    "@deepseek-ai/cordis": ^4.0.1
-    node-addon-require-builtin: ^0.1.4
-  peerDependenciesMeta:
-    node-addon-require-builtin:
-      optional: true
-  checksum: 10c0/f1ce201cb4e4346776fb10025cb8bb5196e97a50ab937e635e10c489624253977d625c9bb4a131e96c31e1c7ac544547dde7fdf17383156f286f5e14b042b771
-  languageName: node
-  linkType: hard
-
-"@deepseek-ai/cordis-plugin-loader@npm:^1.0.3":
+"@deepseek-ai/cordis-plugin-loader@npm:1.0.3, @deepseek-ai/cordis-plugin-loader@npm:^1.0.3":
   version: 1.0.3
   resolution: "@deepseek-ai/cordis-plugin-loader@npm:1.0.3"
   dependencies:
@@ -664,18 +636,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/cordis-plugin-timer@npm:1.1.3":
-  version: 1.1.3
-  resolution: "@deepseek-ai/cordis-plugin-timer@npm:1.1.3"
-  dependencies:
-    "@deepseek-ai/cosmokit": "npm:^1.8.2"
-  peerDependencies:
-    "@deepseek-ai/cordis": ^4.0.1
-  checksum: 10c0/7aa5aabd194d1aa76179a69a698387af2c81a473d03a1d800eb43c6013593e0c4b6f854dfc7a26819ee4e58ae1c503b8676e074b3f0c25136c69098df280b465
-  languageName: node
-  linkType: hard
-
-"@deepseek-ai/cordis-plugin-timer@npm:^1.1.4":
+"@deepseek-ai/cordis-plugin-timer@npm:1.1.4, @deepseek-ai/cordis-plugin-timer@npm:^1.1.4":
   version: 1.1.4
   resolution: "@deepseek-ai/cordis-plugin-timer@npm:1.1.4"
   dependencies:
@@ -686,27 +647,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@deepseek-ai/cordis@npm:4.0.1":
-  version: 4.0.1
-  resolution: "@deepseek-ai/cordis@npm:4.0.1"
-  dependencies:
-    "@deepseek-ai/cosmokit": "npm:^1.8.2"
-    "@standard-schema/spec": "npm:^1.1.0"
-  peerDependencies:
-    "@deepseek-ai/cordis-plugin-include": ^1.0.6
-    "@deepseek-ai/cordis-plugin-loader": ^1.0.2
-  peerDependenciesMeta:
-    "@deepseek-ai/cordis-plugin-include":
-      optional: true
-    "@deepseek-ai/cordis-plugin-loader":
-      optional: true
-  bin:
-    cordis: bin.js
-  checksum: 10c0/8939af6c352c63fccea2fe146998557ccdeb72fb06841e80e2e4e304e8a93a58ad63e3e8fc5eddbdf019150426e8cae5d4c35f3d87d6d5d7f17cf06bdf9fe5da
-  languageName: node
-  linkType: hard
-
-"@deepseek-ai/cordis@npm:^4.0.2":
+"@deepseek-ai/cordis@npm:4.0.2, @deepseek-ai/cordis@npm:^4.0.2":
   version: 4.0.2
   resolution: "@deepseek-ai/cordis@npm:4.0.2"
   dependencies:
@@ -723,13 +664,6 @@ __metadata:
   bin:
     cordis: bin.js
   checksum: 10c0/62b7a84f591ecf7399651e577b68c7f0336e1ffa94692b202bac7994604fabe818db53660c4945a6da692bf8ce0ec43d09c07222b7b5c3ce5a1b5993e4708c50
-  languageName: node
-  linkType: hard
-
-"@deepseek-ai/cosmokit@npm:^1.8.2":
-  version: 1.8.2
-  resolution: "@deepseek-ai/cosmokit@npm:1.8.2"
-  checksum: 10c0/2e15902445b984f2d245687f6c3590cc0251eaeec5fd5173138fc61f791a0af0c77e56b27f060ee6868213996578afd36efd52ef18d115aa0ca57fca89c6a2cb
   languageName: node
   linkType: hard
 
@@ -7399,7 +7333,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "dsh-community-market@workspace:dsh-community-market"
   dependencies:
-    "@deepseek-ai/cordis": "npm:4.0.1"
+    "@deepseek-ai/cordis": "npm:4.0.2"
     "@deepseek-ai/dsh-agent": "npm:0.1.5-rc.2"
     "@deepseek-ai/dsh-agent-presets": "npm:0.1.5-rc.2"
     "@deepseek-ai/dsh-api-gateway": "npm:0.1.5-rc.2"
@@ -7457,7 +7391,7 @@ __metadata:
     vitest: "npm:4.1.8"
     yaml: "npm:^2.9.0"
   peerDependencies:
-    "@deepseek-ai/cordis": 4.0.1
+    "@deepseek-ai/cordis": 4.0.2
     "@deepseek-ai/dsh-agent": 0.1.5-rc.2
     "@deepseek-ai/dsh-agent-presets": 0.1.5-rc.2
     "@deepseek-ai/dsh-api-gateway": 0.1.5-rc.2
@@ -7533,11 +7467,11 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "dsh-plugin-desktop@workspace:dsh-plugin-desktop"
   dependencies:
-    "@deepseek-ai/cordis": "npm:4.0.1"
-    "@deepseek-ai/cordis-plugin-group": "npm:1.0.1"
-    "@deepseek-ai/cordis-plugin-include": "npm:1.0.6"
-    "@deepseek-ai/cordis-plugin-loader": "npm:1.0.2"
-    "@deepseek-ai/cordis-plugin-timer": "npm:1.1.3"
+    "@deepseek-ai/cordis": "npm:4.0.2"
+    "@deepseek-ai/cordis-plugin-group": "npm:1.0.2"
+    "@deepseek-ai/cordis-plugin-include": "npm:1.0.7"
+    "@deepseek-ai/cordis-plugin-loader": "npm:1.0.3"
+    "@deepseek-ai/cordis-plugin-timer": "npm:1.1.4"
     "@deepseek-ai/dsh": "npm:0.1.5-rc.2"
     "@deepseek-ai/dsh-agent": "npm:0.1.5-rc.2"
     "@deepseek-ai/dsh-agent-default-model": "npm:0.1.5-rc.2"
