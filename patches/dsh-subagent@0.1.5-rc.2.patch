@@ -1,8 +1,8 @@
 diff --git a/lib/index.js b/lib/index.js
-index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd23432903 100644
+index 8be6ef7003ffb6dbb6838b47274b752f15685677..183f8c78cb55dd0618316bb240e6101fa461cee2 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -199,6 +199,7 @@ function observeRun(emit, provider, parent, run) {
+@@ -301,6 +301,7 @@ function observeRun(emit, provider, parent, run) {
  		emit("subagent/end", {
  			...identity,
  			stopReason: result.stopReason,
@@ -10,9 +10,9 @@ index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd
  			...result.output.length === 0 ? {} : { lastAssistantMessage: result.output }
  		}, parent);
  	}, () => {
-@@ -230,7 +231,10 @@ function createActivationObserver(emit, provider, childId, parent) {
+@@ -332,7 +333,10 @@ function createActivationObserver(emit, provider, childId, parent) {
  	};
- 	let boundary = 0;
+ 	let boundary = SessionLogOffset(0);
  	let captured = { stopReason: "completed" };
 -	const terminal = (failure) => failure === void 0 ? captured : { stopReason: "error" };
 +	const terminal = (failure) => failure === void 0 ? captured : {
@@ -21,9 +21,9 @@ index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd
 +	};
  	return {
  		start: (child) => {
- 			boundary = child.session.events.length;
-@@ -240,16 +244,17 @@ function createActivationObserver(emit, provider, childId, parent) {
- 			const own = child.session.events.slice(boundary);
+ 			boundary = child.session.seq;
+@@ -342,16 +346,17 @@ function createActivationObserver(emit, provider, childId, parent) {
+ 			const own = child.session.snapshotEvents(boundary);
  			const output = finalAssistantOutput(own);
  			captured = {
 -				stopReason: epochStopReason(own),
@@ -42,7 +42,7 @@ index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd
  				...output === void 0 ? {} : { lastAssistantMessage: output }
  			}, parent);
  		}
-@@ -268,25 +273,35 @@ function createActivationObserver(emit, provider, childId, parent) {
+@@ -370,25 +375,35 @@ function createActivationObserver(emit, provider, childId, parent) {
  * failure still wins over a cancellation — stopping a child that had already
  * failed does not turn its failure into a cancellation.
  * @param events - this epoch's own event suffix.
@@ -87,26 +87,26 @@ index bd9741ed440979753359abc5c479550ee5827167..fb3d31e3a89ec9aea55415c2854799dd
  /** Render any listener-thrown value without letting coercion escape containment. */
  function renderThrown(value) {
  	try {
-@@ -1495,7 +1510,10 @@ var SubagentContinuationManager = class {
- 				content: [{
- 					type: "text",
- 					text: summary
--				}, ...terminal.output === void 0 ? [{
-+				}, ...terminal.diagnostic === void 0 ? [] : [{
-+					type: "text",
-+					text: `Diagnostic: ${terminal.diagnostic}`
-+				}], ...terminal.output === void 0 ? [{
- 					type: "text",
- 					text: "It left no closing message."
- 				}] : [{
-@@ -2672,4 +2690,4 @@ var SubagentRuntime = class extends Service {
- 	}
- };
+@@ -664,7 +679,10 @@ function createSettlementMessage(childId, terminal) {
+ 		content: [{
+ 			type: "text",
+ 			text: summary
+-		}, ...terminal.output === void 0 ? [{
++		}, ...terminal.diagnostic === void 0 ? [] : [{
++			type: "text",
++			text: `Diagnostic: ${terminal.diagnostic}`
++		}], ...terminal.output === void 0 ? [{
+ 			type: "text",
+ 			text: "It left no closing message."
+ 		}] : [{
+@@ -3228,4 +3246,4 @@ let SubagentRuntime = (() => {
+ 	};
+ })();
  //#endregion
--export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
-+export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, seedDescriptorTurn, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
+-export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, parentAgentOptionsForDelegation, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
++export { AssistantOutputFold, NO_START_CAPABILITIES, SUBAGENT_DESCRIPTOR_VERSION, SubagentDepthError, SubagentError, SubagentRunId, SubagentRuntime, SubagentRuntime as default, appendDelegatedPolicyOverrides, applyChildComposition, assertPositiveFinite, assertSubagentMaxDepth, assertUsableCwd, captureDelegatedPolicyOverrides, childSessionMeta, delegationDepthOf, finalAssistantOutput, foldSubagentDescriptor, limitSubagentDiagnostic, parentAgentOptionsForDelegation, resolveChildAgentOptions, resolveChildCwd, resolveChildDepth, settleRun, settleRunResult, snapshotSubagentDescriptor, subprocessRunHandle, validateConfiguredCwd };
 diff --git a/lib/types/lifecycle.d.ts b/lib/types/lifecycle.d.ts
-index 9d63a61b2497011fd4aba679ee480f2aacb3d245..e015086482987ed4b1d2c015692d2e9b6549c63c 100644
+index 9d63a61b2497011fd4aba679ee480f2aacb3d245..a1b63f342762f55f9d659eade481158c29e9218b 100644
 --- a/lib/types/lifecycle.d.ts
 +++ b/lib/types/lifecycle.d.ts
 @@ -25,6 +25,8 @@ import type { SubagentResult, SubagentRun, SubagentRunEndInfo, SubagentRunInfo }
@@ -119,7 +119,7 @@ index 9d63a61b2497011fd4aba679ee480f2aacb3d245..e015086482987ed4b1d2c015692d2e9b
      readonly output?: ContentBlock[];
  }
 diff --git a/lib/types/out-of-process.d.ts b/lib/types/out-of-process.d.ts
-index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..32cbb86e09c3f0826cf1299d1f705dc9cd2ff02b 100644
+index 5fcf4585783053fdd224d200fb31e3acd09eee1f..14a9673432061fed9a9f4f486eb3c131138f5d84 100644
 --- a/lib/types/out-of-process.d.ts
 +++ b/lib/types/out-of-process.d.ts
 @@ -19,6 +19,15 @@ import type { SubagentCapabilities, SubagentResult, SubagentRun, SubagentStopRea
@@ -139,10 +139,10 @@ index 6c5440ac5a2103b7875f20bf9447d1037e472fa0..32cbb86e09c3f0826cf1299d1f705dc9
   * Assert a configured timing bound is a positive finite number (it bounds a
   * teardown or shutdown wait; zero, negative, or NaN would skip or wedge it).
 diff --git a/lib/types/types.d.ts b/lib/types/types.d.ts
-index 4c2adb0e30fa20ab7ad4ba4600c3da2ae8498d0b..689904defeba9ad9c281bafa3ca988564369be75 100644
+index 77d6a72ed34eeee4260381cec61771bf969922e5..023e70fd23284cf4028be93b315a4d0b68afa635 100644
 --- a/lib/types/types.d.ts
 +++ b/lib/types/types.d.ts
-@@ -57,6 +57,8 @@ export interface SubagentRunEndInfo {
+@@ -101,6 +101,8 @@ export interface SubagentRunEndInfo {
      readonly local: boolean;
      /** The terminal stop reason. */
      readonly stopReason: SubagentResult['stopReason'];

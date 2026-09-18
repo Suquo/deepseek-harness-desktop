@@ -1,8 +1,10 @@
 diff --git a/lib/index.js b/lib/index.js
-index e720306..2197922 100644
+index 9ca09eb..cd57de9 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -926,7 +926,7 @@ function imageMediaTypeForPath(filePath) {
+@@ -955,9 +955,9 @@ function imageMediaTypeForPath(filePath) {
+ 	return IMAGE_EXTENSIONS[extname(filePath).toLowerCase()];
+ }
  /**
 -* Enforce the strict image-capability gate for the calling route. Resolves the
 -* session's latest routed provider/model (request header config, then agent
@@ -13,7 +15,7 @@ index e720306..2197922 100644
  * @param ctx - the plugin context used to resolve the optional `llm` service.
  * @param exec - the tool-execution context supplying the calling agent.
  * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
-@@ -938,7 +938,45 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
+@@ -969,7 +969,45 @@ async function assertImageCapableRoute(ctx, exec, requestedPath) {
  	const llm = ctx.get("llm");
  	if (provider === void 0 || model === void 0 || llm === void 0) throw new Error(`cannot read "${requestedPath}" as an image: the current model route could not be resolved`);
  	const active = await llm.resolveModelInfo(provider, model, exec.signal);
@@ -58,18 +60,18 @@ index e720306..2197922 100644
 +		}
 +	};
  }
- /**
- * Re-brand a structured image outcome into the durable attachment reference an
-@@ -1033,7 +1071,7 @@ function applyReadImageTool(ctx) {
+ /** Refuse a media type outside the deployment's accepted set, naming the offending path. */
+ function assertDeploymentAccepts(attachments, mediaType, displayPath) {
+@@ -1070,7 +1108,7 @@ function applyReadImageTool(ctx) {
  			const attachments = ctx.get("attachments");
  			if (attachments === void 0) throw new Error(`cannot read "${args.file_path}" as an image: no attachment service is mounted`);
- 			if (!attachments.imageLimits.mediaTypes.includes(mediaType)) throw new Error(`cannot read "${args.file_path}": ${mediaType} images are not accepted by this deployment`);
+ 			if (declared !== void 0) assertDeploymentAccepts(attachments, declared, args.file_path);
 -			await assertImageCapableRoute(ctx, exec, args.file_path);
 +			const activateFallback = await assertImageCapableRoute(ctx, exec, args.file_path);
  			const { target, info } = await resolveRegularReadTarget(ctx, exec, args.file_path);
  			const byteCap = Math.min(attachments.imageLimits.maxImageBytes, attachments.imageLimits.maxMessageImageBytes);
  			const data = await ctx.fs.readBytes(target, exec.signal, byteCap);
-@@ -1058,6 +1096,7 @@ function applyReadImageTool(ctx) {
+@@ -1099,6 +1137,7 @@ function applyReadImageTool(ctx) {
  				kind: "present",
  				version: info.version
  			}, exec);
@@ -90,13 +92,10 @@ index 3a24668..4cf1549 100644
  export declare const name = "tool-fs";
  /** Services required by the filesystem tool suite. */
 diff --git a/lib/types/read-image.d.ts b/lib/types/read-image.d.ts
-index 6528a13..de670dd 100644
+index 82cf670..b71ce9a 100644
 --- a/lib/types/read-image.d.ts
 +++ b/lib/types/read-image.d.ts
-@@ -7,8 +7,28 @@
-  * failure after filesystem and attachment work.
-  * @module @deepseek-ai/dsh-tool-fs/src/read-image
-  */
+@@ -13,6 +13,26 @@
  import type { Context } from '@deepseek-ai/cordis';
  import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment';
  import type { ToolExecution } from '@deepseek-ai/dsh-tools';
@@ -120,9 +119,12 @@ index 6528a13..de670dd 100644
 +        }, next: () => Promise<ImageRouteFallback | undefined>): Promise<ImageRouteFallback | undefined>;
 +    }
 +}
- /** The structured outcome declared by the `read_image` output schema. */
- export interface ImageReadValue {
-@@ -56,7 +76,7 @@ export declare function imageMediaTypeForPath(filePath: string): ImageMediaType
+ /**
+  * Identify the media type declared by a supported image file signature.
+  * @param data - file bytes read through the current filesystem backend.
+@@ -43,14 +63,14 @@ export interface ImageReadValue {
+  */
+ export declare function imageMediaTypeForPath(filePath: string): ImageMediaType | undefined;
  /**
 - * Enforce the strict image-capability gate for the calling route. Resolves the
 - * session's latest routed provider/model (request header config, then agent
@@ -133,7 +135,6 @@ index 6528a13..de670dd 100644
   * @param ctx - the plugin context used to resolve the optional `llm` service.
   * @param exec - the tool-execution context supplying the calling agent.
   * @param requestedPath - the raw, not-yet-resolved path rendered in refusal messages.
-@@ -63,5 +83,5 @@ export declare function imageMediaTypeForPath(filePath: string): ImageMediaType
   */
 -export declare function assertImageCapableRoute(ctx: Context, exec: ToolExecution, requestedPath: string): Promise<void>;
 +export declare function assertImageCapableRoute(ctx: Context, exec: ToolExecution, requestedPath: string): Promise<void | (() => void)>;

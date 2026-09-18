@@ -232,7 +232,6 @@ const pinSurface = [
     '@deepseek-ai/dsh-client-connection',
     '@deepseek-ai/dsh-client-locale',
     '@deepseek-ai/dsh-client-modules',
-    '@deepseek-ai/dsh-client-runtime',
     '@deepseek-ai/dsh-client-ui-attachment',
     '@deepseek-ai/dsh-client-ui-commands',
     '@deepseek-ai/dsh-client-ui-conversation',
@@ -260,7 +259,6 @@ const pinSurface = [
     '@deepseek-ai/dsh-fs-local',
     '@deepseek-ai/dsh-goal',
     '@deepseek-ai/dsh-home-paths',
-    '@deepseek-ai/dsh-host-apiproxy',
     '@deepseek-ai/dsh-host-directory-picker-browse',
     '@deepseek-ai/dsh-host-directory-picker-native',
     '@deepseek-ai/dsh-host-plugin-inventory',
@@ -316,13 +314,19 @@ const pinSurface = [
     '@deepseek-ai/dsh-web-app',
     '@deepseek-ai/dsh-workflow',
   ]],
-  // Test-only pins. These six are NOT product dependencies: they exist so
+  // Build-only pins. None of these eight is a product dependency. Six exist so
   // focused integration tests can mount the real host services for delegation
   // (issues #40 and #58) and image admission (issue #54) instead of doubling
-  // them. They still move with the pin, so they belong on the recorded surface.
+  // them; `dsh-api-workspace-controller` and `dsh-client-store` are type-only
+  // needs of the Client (`WorkspaceId`/`WorkspaceView`, and the store types the
+  // upstream client packages' declarations import), which `dsh-client-runtime`
+  // provided until 0.1.5-rc.2 retired it. They still move with the pin, so they
+  // belong on the recorded surface.
   ['dsh-plugin-desktop/package.json', 'devDependencies', [
     '@deepseek-ai/dsh-agent-loop',
+    '@deepseek-ai/dsh-api-workspace-controller',
     '@deepseek-ai/dsh-attachment-local',
+    '@deepseek-ai/dsh-client-store',
     '@deepseek-ai/dsh-fs-observation-policy',
     '@deepseek-ai/dsh-session-persistence-jsonl',
     '@deepseek-ai/dsh-subagent-spawn-in-process',
@@ -338,7 +342,7 @@ const pinSurface = [
     '@deepseek-ai/dsh-brand',
     '@deepseek-ai/dsh-client-connection',
     '@deepseek-ai/dsh-client-locale',
-    '@deepseek-ai/dsh-client-runtime',
+    '@deepseek-ai/dsh-client-store',
     '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-primitives',
     '@deepseek-ai/dsh-client-ui-settings',
@@ -351,7 +355,6 @@ const pinSurface = [
     '@deepseek-ai/dsh-file-reference',
     '@deepseek-ai/dsh-goal',
     '@deepseek-ai/dsh-home-paths',
-    '@deepseek-ai/dsh-host-apiproxy',
     '@deepseek-ai/dsh-host-plugin-inventory',
     '@deepseek-ai/dsh-host-webserver',
     '@deepseek-ai/dsh-invariants',
@@ -376,7 +379,6 @@ const pinSurface = [
     '@deepseek-ai/dsh-brand',
     '@deepseek-ai/dsh-client-connection',
     '@deepseek-ai/dsh-client-locale',
-    '@deepseek-ai/dsh-client-runtime',
     '@deepseek-ai/dsh-client-ui-layout',
     '@deepseek-ai/dsh-client-ui-primitives',
     '@deepseek-ai/dsh-client-ui-settings',
@@ -513,11 +515,10 @@ const patchedPackages = [
   ['@deepseek-ai/dsh-app-boot', ['caret', 'exact']],
   ['@deepseek-ai/dsh-client-ui-directory-picker-browse', ['caret', 'exact']],
   ['@deepseek-ai/dsh-client-ui-workspace', ['caret', 'exact']],
-  ['@deepseek-ai/dsh-llm-deepseek', ['caret']],
-  ['@deepseek-ai/dsh-sandbox-windows-acl', ['caret', 'exact']],
   ['@deepseek-ai/dsh-subagent', ['caret', 'exact']],
   ['@deepseek-ai/dsh-subagent-in-process-driver', ['caret', 'exact']],
   ['@deepseek-ai/dsh-tool-fs', ['caret', 'exact']],
+  ['@deepseek-ai/dsh-win32-process', ['caret']],
 ]
 const observedPatched = [...patchedShapes].sort(([left], [right]) => left.localeCompare(right))
 if (JSON.stringify(observedPatched) !== JSON.stringify(patchedPackages)) {

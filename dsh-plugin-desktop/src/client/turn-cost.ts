@@ -20,7 +20,7 @@
  * says so rather than presenting a partial total as a complete one.
  */
 
-import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { CostLine, RateTable, TokenBuckets } from './cost-model.ts'
 import { NO_TOKENS, addTokens, formatCost, priceTokens, ratesFor, readTokenBuckets } from './cost-model.ts'
 

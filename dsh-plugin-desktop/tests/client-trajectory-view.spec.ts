@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AssistantMessageNode, ConversationNode, ConversationSnapshot } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { TRAJECTORY_VIEW_TARGET, readTrajectoryNodes, selectCostNodes } from '../src/client/turn-cost.ts'
 

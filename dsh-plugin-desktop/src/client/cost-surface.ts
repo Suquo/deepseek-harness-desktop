@@ -45,7 +45,7 @@
  * out of compatibility mode, and this one must reach it.
  */
 
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { RateSource } from './cost-rates.ts'
 import { TurnCostBadge } from './TurnCostBadge.tsx'

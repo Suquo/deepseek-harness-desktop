@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AssistantMessageNode, ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AssistantMessageNode, ConversationNode } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { RateTable } from '../src/client/cost-model.ts'
 import { costHeadline, foldGeneration, foldTurnCost, rateProvenance, turnOfMessage } from '../src/client/turn-cost.ts'

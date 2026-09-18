@@ -7,7 +7,7 @@
  * and the bare half is the larger one: a route that declares no `models:` at
  * all inherits pi-ai's own catalog entries, and 163 of those entries carry
  * `reasoning: true` with NO `thinkingLevelMap` whatsoever. At the pinned
- * `@earendil-works/pi-ai@0.82.1` the `openrouter` branch of
+ * `@earendil-works/pi-ai@0.82.1` (unchanged through 0.85.1) the `openrouter` branch of
  * `dist/api/openai-completions.js` read that absence as a declaration:
  *
  *   else if (model.thinkingLevelMap?.off !== null) {
@@ -21,7 +21,7 @@
  * 2026-08-20 and, through the operator's bare `openrouter` route, 26 requests
  * across five sessions.
  *
- * `patches/pi-ai@0.82.1.patch` replaces that test in the `openrouter` and
+ * `patches/pi-ai@0.85.1.patch` replaces that test in the `openrouter` and
  * `string-thinking` branches — the two whose payload is `map?.off ?? "none"` —
  * with the guard the plain OpenAI-style branch of the same function already
  * uses (pre-patch `:636-641`, `:652-657` in the patched file),
@@ -323,7 +323,7 @@ describe('a bare OpenRouter route on the wire', {
   })
 
   it('sends no reasoning field at all when no effort is selected — the bare-route fix', async () => {
-    // THE FIX. Before `patches/pi-ai@0.82.1.patch` this body carried
+    // THE FIX. Before `patches/pi-ai@0.85.1.patch` this body carried
     // `reasoning: { effort: "none" }`, invented from an absent declaration.
     const body = await wireBody(bareRoute())
     expectRealRequest(body)

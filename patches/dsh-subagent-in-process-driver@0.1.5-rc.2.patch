@@ -1,17 +1,17 @@
 diff --git a/lib/index.js b/lib/index.js
-index 6266e34478ba8ef00629f52473b8e0adc6bec1e3..888ccbe4db1c83b332992b48fb8620dec16c9dd7 100644
+index 13cb0a84b10c6f69c5dda35df926b6166db9b060..ddd2aaa4ce01eb7fac965f347f07acd2f58f3160 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
+@@ -3,7 +3,7 @@ import { brandString } from "@deepseek-ai/dsh-brand";
  import { foldConsumedWork } from "@deepseek-ai/dsh-agent";
- import { SessionId } from "@deepseek-ai/dsh-session";
+ import { SessionLogOffset } from "@deepseek-ai/dsh-session";
  import { createUserMessage } from "@deepseek-ai/dsh-llm";
 -import { appendDelegatedPolicyOverrides, applyChildComposition, assertSubagentMaxDepth, captureDelegatedPolicyOverrides, childSessionMeta, finalAssistantOutput, resolveChildAgentOptions, resolveChildDepth } from "@deepseek-ai/dsh-subagent";
 +import { appendDelegatedPolicyOverrides, applyChildComposition, assertSubagentMaxDepth, captureDelegatedPolicyOverrides, childSessionMeta, finalAssistantOutput, limitSubagentDiagnostic, resolveChildAgentOptions, resolveChildDepth } from "@deepseek-ai/dsh-subagent";
  import { ToolArgsError, validateJsonSchemaValue } from "@deepseek-ai/dsh-tools";
  //#region lib/types/structured.js
  /**
-@@ -130,6 +130,26 @@ function toStopReason(reason) {
+@@ -131,6 +131,26 @@ function toStopReason(reason) {
  		default: return "error";
  	}
  }
@@ -38,7 +38,7 @@ index 6266e34478ba8ef00629f52473b8e0adc6bec1e3..888ccbe4db1c83b332992b48fb8620de
  /** Error used when cancellation wins before the child publication boundary. */
  function prePublicationAbort() {
  	return /* @__PURE__ */ new Error("subagent request was aborted before child publication");
-@@ -231,10 +251,13 @@ function readResult(child, boundary, cancelled, structured) {
+@@ -234,10 +254,13 @@ function readResult(child, boundary, cancelled, structured) {
  	const output = finalAssistantOutput(own) ?? [];
  	const recorded = toStopReason(lastEnd?.data.reason);
  	const stopReason = cancelled && recorded !== "completed" ? "aborted" : recorded;
@@ -52,7 +52,7 @@ index 6266e34478ba8ef00629f52473b8e0adc6bec1e3..888ccbe4db1c83b332992b48fb8620de
  			stopReason
  		};
  		if (stopReason === "completed") return {
-@@ -244,6 +267,7 @@ function readResult(child, boundary, cancelled, structured) {
+@@ -247,6 +270,7 @@ function readResult(child, boundary, cancelled, structured) {
  	}
  	return {
  		output,

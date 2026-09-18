@@ -27,7 +27,7 @@
  *      branch at `:636-641` guards on `typeof offValue === 'string'` and really
  *      does send nothing, which is why the upstream comment reads true.
  *
- * STEP 3 IS NOW PATCHED (issue #60, `patches/pi-ai@0.82.1.patch`): the
+ * STEP 3 IS NOW PATCHED (issue #60, `patches/pi-ai@0.85.1.patch`): the
  * `openrouter` branch takes the same `typeof offValue === 'string'` guard, so
  * an absent `off` no longer manufactures `"none"`. The last test in this file
  * changed direction because of it and carries the full account; the route's own
@@ -368,7 +368,7 @@ describe('the parametria-vision route on the wire', {
     // for an `off` key that is ABSENT from `thinkingLevelMap` — which is what a
     // valueless `off:` produces (`llm-pi-ai/src/catalog.ts:711-719`).
     //
-    // `patches/pi-ai@0.82.1.patch` removes the invention: that branch now
+    // `patches/pi-ai@0.85.1.patch` removes the invention: that branch now
     // requires a declared STRING before it emits a disable, matching the plain
     // OpenAI-style branch of the same function. So the valueless spelling
     // finally means what upstream documents it to mean (`catalog.ts:657-661`,
