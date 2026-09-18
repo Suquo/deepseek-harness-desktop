@@ -1,8 +1,80 @@
+diff --git a/dist/api/azure-openai-responses.js b/dist/api/azure-openai-responses.js
+index 6bd89242223d6c482d853e750048baea4920c928..152428ba74511b751815bdcba943838ac8d75df4 100644
+--- a/dist/api/azure-openai-responses.js
++++ b/dist/api/azure-openai-responses.js
+@@ -223,10 +223,11 @@ function buildParams(model, context, options, deploymentName, grammarToolInputPr
+             };
+             params.include = ["reasoning.encrypted_content"];
+         }
+-        else if (model.thinkingLevelMap?.off !== null) {
+-            params.reasoning = {
+-                effort: (model.thinkingLevelMap?.off ?? "none"),
+-            };
++        else {
++            const offValue = model.thinkingLevelMap?.off;
++            if (typeof offValue === "string") {
++                params.reasoning = { effort: offValue };
++            }
+         }
+     }
+     return params;
+diff --git a/dist/api/openai-completions.d.ts b/dist/api/openai-completions.d.ts
+index bcc10b4b7d0d81567cba77a1c1480cce313af582..3b8760b13ad26f30225d19709f133ef82f67dd36 100644
+--- a/dist/api/openai-completions.d.ts
++++ b/dist/api/openai-completions.d.ts
+@@ -8,6 +8,7 @@ export interface OpenAICompletionsOptions extends StreamOptions {
+ export interface ConvertCompletionsMessagesOptions {
+     grammarToolInputProperties?: ReadonlyMap<string, string>;
+ }
++export declare const DEEPSEEK_THINKING_DISABLE_MODEL_SOURCES: Readonly<Record<string, string>>;
+ type ResolvedOpenAICompletionsCompat = Omit<Required<OpenAICompletionsCompat>, "cacheControlFormat" | "deferredToolsMode"> & {
+     cacheControlFormat?: OpenAICompletionsCompat["cacheControlFormat"];
+     deferredToolsMode?: OpenAICompletionsCompat["deferredToolsMode"];
 diff --git a/dist/api/openai-completions.js b/dist/api/openai-completions.js
-index ed81baa3860fa20cf9d38885f9dd4b6b2f639045..7a90f0671cd4cfde07e01fc71b6758937ce24659 100644
+index ed81baa3860fa20cf9d38885f9dd4b6b2f639045..107b42bc57dfa5e3b591c1d327a2018510ae2ca8 100644
 --- a/dist/api/openai-completions.js
 +++ b/dist/api/openai-completions.js
-@@ -603,8 +603,18 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
+@@ -13,6 +13,22 @@ import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copi
+ import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.js";
+ import { buildBaseOptions } from "./simple-options.js";
+ import { transformMessages } from "./transform-messages.js";
++/**
++ * DeepSeek-format model IDs whose provider documents the fixed
++ * `thinking.type: "disabled"` spelling. Unknown models deliberately omit Off.
++ */
++export const DEEPSEEK_THINKING_DISABLE_MODEL_SOURCES = Object.freeze({
++    "deepseek-v4-flash": "DeepSeek API: https://api-docs.deepseek.com/api/create-chat-completion/",
++    "deepseek-v4-pro": "DeepSeek API: https://api-docs.deepseek.com/api/create-chat-completion/",
++    "kimi-k2.5": "Moonshot thinking guide: https://platform.kimi.com/docs/guide/use-thinking-models",
++    "kimi-k2.6": "Moonshot thinking guide: https://platform.kimi.com/docs/guide/use-thinking-models",
++    "mimo-v2-flash": "MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate",
++    "mimo-v2-omni": "MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate",
++    "mimo-v2-pro": "MiMo legacy alias adaptation: https://mimo.mi.com/docs/en-US/updates/deprecate",
++    "mimo-v2.5": "MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api",
++    "mimo-v2.5-pro": "MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api",
++    "mimo-v2.5-pro-ultraspeed": "MiMo API: https://mimo.mi.com/docs/en-US/api/chat/openai-api",
++});
+ /**
+  * Check if conversation messages contain tool calls or tool results.
+  * This is needed because Anthropic (via proxy) requires the tools param
+@@ -587,8 +603,14 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
+         if (options?.reasoningEffort) {
+             params.thinking = { type: "enabled" };
+         }
+-        else if (model.thinkingLevelMap?.off !== null) {
+-            params.thinking = { type: "disabled" };
++        else {
++            const offValue = model.thinkingLevelMap?.off;
++            if (typeof offValue === "string") {
++                params.thinking = { type: offValue };
++            }
++            else if (offValue === undefined && Object.hasOwn(DEEPSEEK_THINKING_DISABLE_MODEL_SOURCES, model.id)) {
++                params.thinking = { type: "disabled" };
++            }
+         }
+         if (options?.reasoningEffort && compat.supportsReasoningEffort) {
+             params.reasoning_effort =
+@@ -603,8 +625,18 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
                  effort: model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort,
              };
          }
@@ -23,7 +95,7 @@ index ed81baa3860fa20cf9d38885f9dd4b6b2f639045..7a90f0671cd4cfde07e01fc71b675893
          }
      }
      else if (compat.thinkingFormat === "ant-ling" && model.reasoning && options?.reasoningEffort) {
-@@ -625,8 +635,14 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
+@@ -625,8 +657,14 @@ function buildParams(model, context, options, compat = getCompat(model), cacheRe
          if (options?.reasoningEffort) {
              stringThinkingParams.thinking = model.thinkingLevelMap?.[options.reasoningEffort] ?? options.reasoningEffort;
          }
